@@ -509,26 +509,22 @@ app.post('/api/totp/verify-setup', (req, res) => {
 const UPLOAD_DIR = path.join(os.tmpdir(), 'claude-mobile-uploads');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-app.post('/api/upload', (req, res) => {
+app.post('/api/upload', express.raw({ type: '*/*', limit: '10mb' }), (req, res) => {
   const token = req.headers['x-session-token'];
   if (!validateSessionToken(token)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
-  const chunks = [];
-  req.on('data', chunk => chunks.push(chunk));
-  req.on('end', () => {
-    const buf = Buffer.concat(chunks);
-    if (buf.length > 10 * 1024 * 1024) {
-      return res.status(413).json({ error: 'File too large (max 10MB)' });
-    }
-    const ct = req.headers['content-type'] || '';
-    const ext = ct.includes('png') ? '.png' : ct.includes('jpeg') || ct.includes('jpg') ? '.jpg' : ct.includes('webp') ? '.webp' : '.png';
-    const filename = `screenshot-${Date.now()}${ext}`;
-    const filepath = path.join(UPLOAD_DIR, filename);
-    fs.writeFileSync(filepath, buf);
-    audit('UPLOAD', `Image uploaded: ${filename}`, req.ip);
-    res.json({ path: filepath, filename });
-  });
+  const buf = req.body;
+  if (!buf || !buf.length) {
+    return res.status(400).json({ error: 'No file data received' });
+  }
+  const ct = req.headers['content-type'] || '';
+  const ext = ct.includes('png') ? '.png' : ct.includes('jpeg') || ct.includes('jpg') ? '.jpg' : ct.includes('webp') ? '.webp' : '.png';
+  const filename = `screenshot-${Date.now()}${ext}`;
+  const filepath = path.join(UPLOAD_DIR, filename);
+  fs.writeFileSync(filepath, buf);
+  audit('UPLOAD', `Image uploaded: ${filename}`, req.ip);
+  res.json({ path: filepath, filename });
 });
 
 const server = http.createServer(app);
