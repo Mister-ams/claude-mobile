@@ -355,6 +355,19 @@ let ws = null, sessions = [], activeSession = null;
 let terms = {}, fits = {}, projects = [];
 let reconnectDelay = 1000;
 let sessionToken = null;
+let refreshTimer = null;
+
+// Silent token rotation: refresh at 75% of TTL so the token
+// is always fresh. Old token invalidated immediately on rotation.
+function scheduleTokenRefresh(ttl) {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  const interval = (ttl || 30 * 60 * 1000) * 0.75; // 75% of TTL
+  refreshTimer = setTimeout(() => {
+    if (ws && ws.readyState === 1 && sessionToken) {
+      ws.send(JSON.stringify({ type: 'refresh' }));
+    }
+  }, interval);
+}
 
 const $ = id => document.getElementById(id);
 const pinScreen = $('pin-screen');
@@ -589,6 +602,7 @@ function handle(m) {
         if (m.sessionToken) sessionToken = m.sessionToken;
         pinScreen.style.display = 'none'; appEl.style.display = 'flex';
         loadProjects();
+        scheduleTokenRefresh();
         if (activeSession !== null) ws.send(JSON.stringify({ type: 'connect', session: activeSession }));
         if (m.hasTotp && !m.hasPasskey && window.PublicKeyCredential && !localStorage.getItem('passkey-dismissed')) {
           setTimeout(async () => {
@@ -612,6 +626,12 @@ function handle(m) {
       sessionToken = null;
       showStatus('Session expired. Re-authenticate.', 'var(--red)');
       checkAuthStatus();
+      break;
+    case 'refreshed':
+      if (m.sessionToken) {
+        sessionToken = m.sessionToken;
+        scheduleTokenRefresh(m.ttl);
+      }
       break;
     case 'warning':
       console.warn('Server warning:', m.message);

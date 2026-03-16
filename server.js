@@ -72,8 +72,8 @@ function getTotpUri() {
 
 loadTotpSecret();
 
-// Session tokens: issued after auth, 4-hour TTL
-const SESSION_TTL_MS = 4 * 60 * 60 * 1000;
+// Session tokens: issued after auth, 30-min TTL, auto-rotated
+const SESSION_TTL_MS = 30 * 60 * 1000; // 30 min (short-lived, auto-refreshed)
 const sessionTokens = new Map(); // token -> { expires, ip }
 
 function issueSessionToken(ip) {
@@ -87,6 +87,15 @@ function validateSessionToken(token) {
   if (!entry) return false;
   if (Date.now() > entry.expires) { sessionTokens.delete(token); return false; }
   return true;
+}
+
+function rotateSessionToken(oldToken, ip) {
+  const entry = sessionTokens.get(oldToken);
+  if (!entry) return null;
+  sessionTokens.delete(oldToken); // invalidate old token immediately
+  const newToken = issueSessionToken(ip);
+  audit('AUTH', `Token rotated`, ip);
+  return newToken;
 }
 
 // Cleanup expired session tokens every 5 minutes
@@ -438,6 +447,20 @@ app.post('/api/passkey/auth-verify', async (req, res) => {
   }
 });
 
+// Token refresh (silent rotation)
+app.post('/api/auth/refresh', (req, res) => {
+  const oldToken = req.body.sessionToken;
+  if (!validateSessionToken(oldToken)) {
+    return res.status(401).json({ error: 'Token expired or invalid' });
+  }
+  const newToken = rotateSessionToken(oldToken, req.ip);
+  if (newToken) {
+    res.json({ sessionToken: newToken, ttl: SESSION_TTL_MS });
+  } else {
+    res.status(401).json({ error: 'Rotation failed' });
+  }
+});
+
 // Kill switch
 app.post('/api/kill', (req, res) => {
   if (!validateSessionToken(req.body.sessionToken)) {
@@ -652,6 +675,18 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({ type: 'sessions', sessions: getSessionList() }));
       } else {
         ws.send(JSON.stringify({ type: 'auth', success: false }));
+      }
+      return;
+    }
+
+    // ── Token refresh over WebSocket ──
+    if (msg.type === 'refresh') {
+      if (ws.authenticated && ws._sessionToken && validateSessionToken(ws._sessionToken)) {
+        const newToken = rotateSessionToken(ws._sessionToken, ws._ip);
+        if (newToken) {
+          ws._sessionToken = newToken;
+          ws.send(JSON.stringify({ type: 'refreshed', sessionToken: newToken, ttl: SESSION_TTL_MS }));
+        }
       }
       return;
     }
