@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Claude">
+  <title>Claude Mobile</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
+  <style>
+    /* ── Palantir/Blueprint Dark Theme ── */
+    :root {
+      --bg:            #111418;
+      --surface:       #1c2127;
+      --surface-alt:   #252a31;
+      --surface-hover: #2f343c;
+      --border:        #404854;
+      --text:          #f6f7f9;
+      --text-sec:      #abb3bf;
+      --dim:           #738091;
+      --accent:        #2d72d2;
+      --accent-light:  #4c90f0;
+      --accent-muted:  #184a90;
+      --red:           #cd4246;
+      --green:         #238551;
+      --orange:        #c87619;
+      --cerulean:      #147eb3;
+      --radius:        4px;
+      --shadow-inset:  inset 0 0 0 1px rgba(255,255,255,0.05);
+      --shadow-1:      inset 0 0 0 1px rgba(255,255,255,0.05), 0 1px 2px rgba(0,0,0,0.4);
+      --transition:    cubic-bezier(0.4, 1, 0.75, 0.9);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px; line-height: 1.286;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #app { display: none; flex-direction: column; height: 100vh; }
+
+    /* ── Auth Screen ── */
+    #pin-screen {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; height: 100vh; gap: 24px;
+      animation: fadeIn 0.4s var(--transition);
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    #pin-screen h1 {
+      font-size: 20px; font-weight: 600; letter-spacing: 2px;
+      color: var(--text); text-transform: uppercase;
+    }
+    #pin-screen .sub { color: var(--dim); font-size: 13px; text-align: center; max-width: 280px; }
+    .auth-primary {
+      display: none; width: 280px; padding: 16px; font-size: 16px; font-weight: 600;
+      background: var(--green); color: #fff; border: none;
+      border-radius: var(--radius); cursor: pointer;
+      box-shadow: var(--shadow-1);
+      transition: all 0.1s var(--transition);
+    }
+    .auth-primary:active { transform: scale(0.97); opacity: 0.9; }
+    #totp-section { display: none; text-align: center; }
+    #totp-section .sub { margin-bottom: 12px; }
+    .totp-input {
+      width: 220px; padding: 14px; text-align: center; font-size: 22px;
+      letter-spacing: 6px; background: rgba(17,20,24,0.5);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      color: var(--text); outline: none;
+      box-shadow: inset 0 1px 1px rgba(0,0,0,0.4);
+    }
+    .totp-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(45,114,210,0.3); }
+    .auth-btn {
+      width: 220px; padding: 12px; margin-top: 12px; font-size: 14px; font-weight: 600;
+      background: var(--accent); color: #fff; border: none;
+      border-radius: var(--radius); cursor: pointer;
+      box-shadow: var(--shadow-1);
+      transition: all 0.1s var(--transition);
+    }
+    .auth-btn:active { background: var(--accent-muted); transform: scale(0.97); }
+    #pin-error { color: var(--red); font-size: 13px; display: none; }
+    #pin-status { color: var(--dim); font-size: 12px; display: none; }
+    #setup-msg { display: none; text-align: center; }
+    #setup-msg .sub { color: var(--orange); }
+
+    /* ── Header ── */
+    #header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 12px; background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow-inset);
+      padding-top: max(8px, env(safe-area-inset-top));
+    }
+    .sess-name {
+      font-size: 14px; font-weight: 600;
+      background: none; border: none; border-bottom: 1px dashed var(--dim);
+      color: var(--text); outline: none;
+      width: auto; max-width: 200px; min-width: 80px;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      padding: 4px 0;
+    }
+    .sess-name:focus { border-bottom: 1px solid var(--accent); }
+    .sess-dir { font-size: 12px; color: var(--dim); margin-top: 2px; }
+    .close-btn {
+      background: rgba(205,66,70,0.12); border: 1px solid var(--red);
+      border-radius: var(--radius); color: var(--red); font-size: 12px;
+      font-weight: 600; padding: 8px 12px; cursor: pointer; display: none;
+      min-height: 44px; min-width: 44px;
+      transition: all 0.1s var(--transition);
+    }
+    .close-btn:active { background: var(--red); color: #fff; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+    .dot.on { background: var(--green); } .dot.off { background: var(--red); }
+
+    /* ── Terminal ── */
+    #term-area {
+      flex: 1; min-height: 0; overflow: hidden; position: relative;
+      background: var(--bg);
+      border-top: 1px solid rgba(255,255,255,0.03);
+    }
+    #scroll-zones {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      z-index: 10; display: none; pointer-events: none;
+    }
+    #term-area:has(.term-wrap.active) #scroll-zones { display: block; pointer-events: auto; }
+    .scroll-zone { position: absolute; left: 0; right: 0; }
+    .scroll-zone-up { top: 0; height: 50%; }
+    .scroll-zone-down { bottom: 0; height: 50%; }
+    /* T15: scroll zone divider affordance */
+    .scroll-divider {
+      position: absolute; left: 16px; right: 16px; top: 50%;
+      height: 1px; background: var(--border); opacity: 0.3;
+      pointer-events: none;
+    }
+    .scroll-flash {
+      position: absolute; left: 0; right: 0; height: 6px;
+      background: var(--accent); opacity: 0;
+      transition: opacity 0.15s var(--transition);
+    }
+    .scroll-zone-up .scroll-flash { top: 0; }
+    .scroll-zone-down .scroll-flash { bottom: 0; }
+    .term-wrap {
+      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+      display: none; overflow: hidden;
+    }
+    .term-wrap.active { display: block; }
+    .term-wrap .xterm { height: 100% !important; }
+    .term-wrap .xterm-viewport {
+      overflow-y: scroll !important;
+      -webkit-overflow-scrolling: touch !important;
+      scrollbar-width: none;
+    }
+    .term-wrap .xterm-viewport::-webkit-scrollbar { display: none; }
+    #empty-state {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; height: 100%; gap: 16px;
+      color: var(--dim); font-size: 14px;
+    }
+    #empty-state .empty-icon {
+      width: 48px; height: 48px; border: 2px solid var(--border);
+      border-radius: var(--radius); display: flex; align-items: center;
+      justify-content: center; font-size: 24px; color: var(--accent);
+    }
+
+    /* ── Quick Actions ── */
+    #qbar {
+      display: flex; gap: 8px; padding: 8px 12px; overflow-x: auto;
+      background: var(--surface); border-top: 1px solid var(--border);
+      -webkit-overflow-scrolling: touch;
+    }
+    #qbar::-webkit-scrollbar { display: none; }
+    .qb {
+      flex-shrink: 0; padding: 12px 14px; font-size: 12px;
+      min-height: 44px; min-width: 44px;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: var(--radius); color: var(--text-sec); cursor: pointer;
+      font-family: 'SF Mono', 'Menlo', monospace;
+      box-shadow: var(--shadow-inset);
+      transition: all 0.1s var(--transition);
+    }
+    .qb:active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    /* ── Input ── */
+    #input-bar {
+      display: flex; gap: 8px; padding: 8px 12px;
+      background: var(--surface); border-top: 1px solid var(--border);
+    }
+    #msg {
+      flex: 1; padding: 10px 12px; font-size: 15px;
+      background: rgba(17,20,24,0.5); border: 1px solid var(--border);
+      border-radius: var(--radius); color: var(--text); outline: none;
+      font-family: 'SF Mono', 'Menlo', monospace;
+      resize: none; min-height: 44px; max-height: 120px;
+      line-height: 1.3; overflow-y: auto;
+      box-shadow: inset 0 1px 1px rgba(0,0,0,0.4);
+    }
+    #msg:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(45,114,210,0.3); }
+    #send {
+      padding: 12px 16px; min-height: 44px;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: var(--radius); font-weight: 600; font-size: 14px;
+      cursor: pointer; align-self: flex-end; white-space: nowrap;
+      box-shadow: var(--shadow-1);
+      transition: all 0.1s var(--transition);
+    }
+    #send:active { background: var(--accent-muted); transform: scale(0.97); }
+
+    /* ── Autocomplete ── */
+    #autocomplete {
+      display: none; position: absolute; bottom: 100%; left: 0; right: 0;
+      max-height: 200px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+      background: var(--surface-alt); border: 1px solid var(--border);
+      border-bottom: none; border-radius: var(--radius) var(--radius) 0 0; z-index: 50;
+      box-shadow: 0 -4px 12px rgba(0,0,0,0.3);
+    }
+    #autocomplete.show { display: block; }
+    .ac-item {
+      display: block; width: 100%; padding: 14px 12px; border: none;
+      background: none; color: var(--text); font-size: 13px; text-align: left;
+      cursor: pointer; border-bottom: 1px solid var(--border);
+      font-family: 'SF Mono', 'Menlo', monospace;
+      min-height: 44px;
+      transition: background 0.1s;
+    }
+    .ac-item:active { background: var(--accent-muted); }
+    .ac-item .ac-cmd { font-weight: 600; color: var(--accent-light); }
+    .ac-item .ac-desc { color: var(--dim); font-size: 12px; margin-left: 8px; }
+
+    /* ── Tabs ── */
+    #tabs {
+      display: flex; background: var(--surface);
+      border-top: 1px solid var(--border);
+      padding-bottom: max(4px, env(safe-area-inset-bottom));
+    }
+    .tab {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      padding: 10px 4px; cursor: pointer; position: relative;
+      border: none; background: none; color: var(--dim); font-size: 12px;
+      min-height: 44px;
+      border-top: 2px solid transparent;
+      transition: all 0.15s var(--transition);
+    }
+    .tab:active { background: var(--surface-hover); }
+    .tab.on { color: var(--accent-light); border-top-color: var(--accent); }
+    .tab .ticon { font-size: 16px; margin-bottom: 2px; }
+    .tab .tname {
+      max-width: 72px; overflow: hidden; text-overflow: ellipsis;
+      white-space: nowrap; font-size: 12px;
+    }
+    .tab .badge {
+      position: absolute; top: 4px; right: calc(50% - 16px);
+      width: 10px; height: 10px; border-radius: 50%;
+      background: var(--red); display: none; animation: pulse 1.5s infinite;
+    }
+    .tab .badge.show { display: block; }
+    @keyframes pulse {
+      0%,100% { opacity:1; transform:scale(1); }
+      50% { opacity:0.6; transform:scale(0.8); }
+    }
+    .tab-add {
+      flex: 0 0 56px; display: flex; align-items: center; justify-content: center;
+      border: none; background: none; color: var(--accent); font-size: 22px;
+      cursor: pointer; min-height: 44px;
+      transition: all 0.1s var(--transition);
+    }
+    .tab-add:active { color: var(--accent-light); }
+  </style>
+</head>
+<body>
+
+<div id="pin-screen">
+  <h1>CLAUDE MOBILE</h1>
+  <p class="sub" id="auth-label">Authenticate to connect</p>
+
+  <button class="auth-primary" id="passkey-btn" onclick="loginPasskey()"
+          aria-label="Login with Face ID">Login with Face ID</button>
+
+  <div id="totp-section">
+    <p class="sub">Enter verification code</p>
+    <input type="tel" id="totp-input" class="totp-input" maxlength="6" placeholder="000000"
+           autocapitalize="off" autocomplete="one-time-code" aria-label="TOTP verification code">
+    <br><button class="auth-btn" onclick="submitTotp()">Verify</button>
+  </div>
+
+  <div id="setup-msg">
+    <p class="sub">Setup required. Open the setup page on your laptop first.</p>
+  </div>
+
+  <p id="pin-error">Authentication failed</p>
+  <p id="pin-status"></p>
+</div>
+
+<div id="app">
+  <div id="header">
+    <div>
+      <div style="display:flex;align-items:center">
+        <span class="dot" id="dot"></span>
+        <input type="text" class="sess-name" id="sname" value="No session"
+               onfocus="this.select()" onblur="commitRename()" onkeydown="if(event.key==='Enter'){this.blur()}"
+               autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
+               aria-label="Session name">
+      </div>
+      <div class="sess-dir" id="sdir"></div>
+    </div>
+    <button class="close-btn" id="cbtn" onclick="closeCurrent()" aria-label="Close session">Close</button>
+  </div>
+
+  <div id="term-area">
+    <div id="scroll-zones">
+      <div class="scroll-zone scroll-zone-up" id="sz-up"><div class="scroll-flash" id="sf-up"></div></div>
+      <div class="scroll-divider"></div>
+      <div class="scroll-zone scroll-zone-down" id="sz-down"><div class="scroll-flash" id="sf-down"></div></div>
+    </div>
+    <div id="empty-state">
+      <div class="empty-icon">+</div>
+      <p>Tap + to start a Claude session</p>
+    </div>
+  </div>
+
+  <div id="qbar">
+    <button class="qb" onclick="scrollBottom()" aria-label="Scroll to bottom">&#8600;</button>
+    <button class="qb" onclick="qsend('\x7f')" aria-label="Backspace">Bksp</button>
+    <button class="qb" onclick="clearPrompt()" aria-label="Clear prompt">Clear</button>
+    <button class="qb" onclick="editLast()" aria-label="Edit last message">Edit</button>
+    <button class="qb" onclick="qsend('\x1b')" aria-label="Escape">Esc</button>
+    <button class="qb" onclick="qsend('\t')" aria-label="Tab key">Tab</button>
+    <button class="qb" onclick="qsend('\x1b[A')" aria-label="Arrow up">&#9650;</button>
+    <button class="qb" onclick="qsend('\x1b[B')" aria-label="Arrow down">&#9660;</button>
+  </div>
+
+  <div style="position:relative">
+    <div id="autocomplete"></div>
+    <div id="input-bar">
+      <textarea id="msg" rows="1" placeholder="Type a message..."
+                autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
+                aria-label="Message input"></textarea>
+      <button id="send" onclick="sendMsg()" aria-label="Send message">Enter</button>
+    </div>
+  </div>
+
+  <div id="tabs">
+    <button class="tab-add" onclick="newSession()" aria-label="New session">+</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script>
+let ws = null, sessions = [], activeSession = null;
+let terms = {}, fits = {}, projects = [];
+let reconnectDelay = 1000;
+let sessionToken = null;
+
+const $ = id => document.getElementById(id);
+const pinScreen = $('pin-screen');
+const pinError = $('pin-error'), pinStatus = $('pin-status');
+const appEl = $('app'), termArea = $('term-area'), emptyState = $('empty-state');
+const dot = $('dot'), sname = $('sname'), sdir = $('sdir'), cbtn = $('cbtn');
+const msgInput = $('msg'), tabsEl = $('tabs');
+
+function showStatus(t, c) {
+  pinStatus.textContent = t;
+  pinStatus.style.color = c || 'var(--dim)';
+  pinStatus.style.display = 'block';
+}
+
+function submitTotp() {
+  const code = $('totp-input').value.trim();
+  if (!code || code.length !== 6) return;
+  pinError.style.display = 'none';
+  showStatus('Verifying code...', 'var(--accent)');
+  doConnect('totp', code);
+}
+
+async function checkAuthStatus() {
+  try {
+    const res = await fetch('/api/auth/status');
+    const data = await res.json();
+    if (data.setupDone) {
+      if (data.hasPasskey) {
+        $('passkey-btn').style.display = 'block';
+        $('auth-label').textContent = 'Authenticate to connect';
+      }
+      if (data.hasTotp) {
+        $('totp-section').style.display = 'block';
+        if (!data.hasPasskey) $('auth-label').textContent = 'Enter verification code';
+      }
+      $('setup-msg').style.display = 'none';
+    } else {
+      $('setup-msg').style.display = 'block';
+      $('passkey-btn').style.display = 'none';
+      $('totp-section').style.display = 'none';
+    }
+  } catch {}
+}
+
+async function loginPasskey() {
+  showStatus('Requesting passkey...', 'var(--accent)');
+  try {
+    const optRes = await fetch('/api/passkey/auth-options', { method: 'POST' });
+    if (!optRes.ok) { showStatus('No passkeys registered', 'var(--red)'); return; }
+    const options = await optRes.json();
+    options.challenge = base64urlToBuffer(options.challenge);
+    if (options.allowCredentials) {
+      options.allowCredentials = options.allowCredentials.map(c => ({
+        ...c, id: base64urlToBuffer(c.id)
+      }));
+    }
+    const credential = await navigator.credentials.get({ publicKey: options });
+    const authRes = await fetch('/api/passkey/auth-verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        expectedChallenge: bufferToBase64url(options.challenge),
+        response: {
+          id: credential.id,
+          rawId: bufferToBase64url(credential.rawId),
+          response: {
+            authenticatorData: bufferToBase64url(credential.response.authenticatorData),
+            clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
+            signature: bufferToBase64url(credential.response.signature),
+          },
+          type: credential.type,
+          clientExtensionResults: credential.getClientExtensionResults(),
+          authenticatorAttachment: credential.authenticatorAttachment,
+        }
+      })
+    });
+    const result = await authRes.json();
+    if (result.verified && result.sessionToken) {
+      sessionToken = result.sessionToken;
+      showStatus('Authenticated via passkey', 'var(--green)');
+      doConnect('passkey');
+    } else {
+      showStatus('Passkey verification failed', 'var(--red)');
+    }
+  } catch (e) {
+    showStatus('Passkey error: ' + e.message, 'var(--red)');
+  }
+}
+
+async function registerPasskey() {
+  if (!sessionToken) return;
+  try {
+    const optRes = await fetch('/api/passkey/register-options', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionToken })
+    });
+    const options = await optRes.json();
+    options.challenge = base64urlToBuffer(options.challenge);
+    options.user.id = base64urlToBuffer(options.user.id);
+    if (options.excludeCredentials) {
+      options.excludeCredentials = options.excludeCredentials.map(c => ({
+        ...c, id: base64urlToBuffer(c.id)
+      }));
+    }
+    const credential = await navigator.credentials.create({ publicKey: options });
+    const verRes = await fetch('/api/passkey/register-verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionToken,
+        expectedChallenge: bufferToBase64url(options.challenge),
+        response: {
+          id: credential.id,
+          rawId: bufferToBase64url(credential.rawId),
+          response: {
+            attestationObject: bufferToBase64url(credential.response.attestationObject),
+            clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
+          },
+          type: credential.type,
+          clientExtensionResults: credential.getClientExtensionResults(),
+          authenticatorAttachment: credential.authenticatorAttachment,
+        }
+      })
+    });
+    const result = await verRes.json();
+    if (result.verified) {
+      alert('Passkey registered. Next time you can login with Face ID.');
+      $('passkey-btn').style.display = 'block';
+    }
+  } catch (e) {
+    console.error('Passkey registration failed:', e);
+  }
+}
+
+async function setupTotp() {
+  if (!sessionToken) return;
+  try {
+    const res = await fetch('/api/totp/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionToken })
+    });
+    const data = await res.json();
+    if (data.uri) {
+      const secret = data.secret || data.uri.match(/secret=([^&]+)/)?.[1] || '';
+      alert(
+        'TOTP Setup\n\n' +
+        '1. Open Settings > Passwords on your iPhone\n' +
+        '2. Find or create an entry for "claude-mobile"\n' +
+        '3. Tap "Set Up Verification Code"\n' +
+        '4. Tap "Enter Setup Key" and paste this:\n\n' +
+        secret + '\n\n' +
+        'Then enter the 6-digit code to verify.'
+      );
+      try { await navigator.clipboard.writeText(secret); } catch {}
+      const verifyCode = async () => {
+        const code = prompt('Enter the 6-digit code from Apple Passwords:');
+        if (!code) return;
+        const vRes = await fetch('/api/totp/verify-setup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionToken, code: code.trim() })
+        });
+        const vData = await vRes.json();
+        if (vData.verified) {
+          alert('TOTP verified. Backup authentication is ready.');
+          checkAuthStatus();
+        } else {
+          if (confirm('Code incorrect. Try again?')) verifyCode();
+        }
+      };
+      await verifyCode();
+    }
+  } catch (e) {
+    console.error('TOTP setup failed:', e);
+  }
+}
+
+function base64urlToBuffer(b64) {
+  const str = b64.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = str.length % 4 === 0 ? '' : '='.repeat(4 - (str.length % 4));
+  const binary = atob(str + pad);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+function bufferToBase64url(buf) {
+  const bytes = new Uint8Array(buf instanceof ArrayBuffer ? buf : buf.buffer || buf);
+  let str = '';
+  for (const b of bytes) str += String.fromCharCode(b);
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+checkAuthStatus();
+
+$('totp-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitTotp(); } });
+
+function doConnect(method, totpCode) {
+  if (ws) try { ws.close(); } catch {}
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}`);
+  ws.onopen = () => {
+    reconnectDelay = 1000; dot.className = 'dot on';
+    showStatus('Authenticating...', 'var(--green)');
+    if (method === 'passkey' && sessionToken) {
+      ws.send(JSON.stringify({ type: 'auth-passkey', sessionToken }));
+    } else if (method === 'totp' && totpCode) {
+      ws.send(JSON.stringify({ type: 'auth', totp: totpCode }));
+    } else if (sessionToken) {
+      ws.send(JSON.stringify({ type: 'auth', sessionToken }));
+    } else {
+      showStatus('Please authenticate', 'var(--dim)');
+    }
+  };
+  ws.onclose = () => {
+    dot.className = 'dot off';
+    if (sessionToken) { showStatus('Reconnecting...', 'var(--red)'); setTimeout(doConnect, reconnectDelay); }
+    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+  };
+  ws.onerror = () => {
+    showStatus('Cannot reach server.', 'var(--red)');
+  };
+  ws.onmessage = e => handle(JSON.parse(e.data));
+}
+
+function handle(m) {
+  switch (m.type) {
+    case 'auth':
+      if (m.success) {
+        if (m.sessionToken) sessionToken = m.sessionToken;
+        pinScreen.style.display = 'none'; appEl.style.display = 'flex';
+        loadProjects();
+        if (activeSession !== null) ws.send(JSON.stringify({ type: 'connect', session: activeSession }));
+        if (m.hasTotp && !m.hasPasskey && window.PublicKeyCredential && !localStorage.getItem('passkey-dismissed')) {
+          setTimeout(async () => {
+            if (confirm('Register Face ID for instant login next time?')) {
+              await registerPasskey();
+            } else {
+              localStorage.setItem('passkey-dismissed', '1');
+            }
+          }, 2000);
+        }
+      } else {
+        pinScreen.style.display = 'flex'; appEl.style.display = 'none';
+        pinError.style.display = 'block'; sessionToken = null;
+        if (m.locked) showStatus('Too many attempts. Locked out.', 'var(--red)');
+        if (m.reason) showStatus(m.reason, 'var(--red)');
+        checkAuthStatus();
+      }
+      break;
+    case 'expired':
+      pinScreen.style.display = 'flex'; appEl.style.display = 'none';
+      sessionToken = null;
+      showStatus('Session expired. Re-authenticate.', 'var(--red)');
+      checkAuthStatus();
+      break;
+    case 'warning':
+      console.warn('Server warning:', m.message);
+      break;
+    case 'sessions':
+      sessions = m.sessions; renderTabs(); updateHdr();
+      if (!sessions.length) { activeSession = null; emptyState.style.display = 'flex'; }
+      else if (activeSession === null) switchTo(sessions[0].id);
+      break;
+    case 'created':
+      switchTo(m.session); break;
+    case 'output':
+    case 'scrollback':
+      if (terms[m.session]) terms[m.session].write(m.data);
+      break;
+    case 'attention':
+      const s = sessions.find(x => x.id === m.session);
+      if (s) { s.attention = m.reason; renderTabs(); }
+      if (m.session !== activeSession && navigator.vibrate) navigator.vibrate(200);
+      break;
+    case 'error':
+      alert(m.message); break;
+  }
+}
+
+async function loadProjects() {
+  try { projects = (await (await fetch('/api/config?st=' + encodeURIComponent(sessionToken))).json()).projects; } catch {}
+}
+
+function makeTerm() {
+  // Palantir/Blueprint terminal theme
+  const term = new Terminal({
+    fontSize: 13,
+    fontFamily: "'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace",
+    lineHeight: 1.286,
+    theme: {
+      background: '#111418',    // $black
+      foreground: '#f6f7f9',    // $light-gray5
+      cursor: '#2d72d2',        // $blue3 (accent)
+      selectionBackground: '#184a90',  // $blue1
+      black: '#404854',         // $dark-gray5
+      red: '#cd4246',           // $red3
+      green: '#238551',         // $green3
+      yellow: '#c87619',        // $orange3
+      blue: '#2d72d2',          // $blue3
+      magenta: '#9d3f9d',       // $violet3
+      cyan: '#147eb3',          // $cerulean3
+      white: '#abb3bf',         // $gray4
+      brightBlack: '#5f6b7c',   // $gray1
+      brightRed: '#e76a6e',     // $red4
+      brightGreen: '#32a467',   // $green4
+      brightYellow: '#ec9a3c',  // $orange4
+      brightBlue: '#4c90f0',    // $blue4
+      brightMagenta: '#bd6bbd', // $violet4
+      brightCyan: '#3fa6da',    // $cerulean4
+      brightWhite: '#f6f7f9'    // $light-gray5
+    },
+    scrollback: 5000,
+    convertEol: true,
+    disableStdin: true,
+    cursorBlink: false,
+    cursorStyle: 'bar',
+    allowProposedApi: true
+  });
+  return term;
+}
+
+function switchTo(id) {
+  activeSession = id;
+  document.querySelectorAll('.term-wrap').forEach(el => el.classList.remove('active'));
+
+  if (!terms[id]) {
+    const wrap = document.createElement('div');
+    wrap.className = 'term-wrap';
+    wrap.id = `tw-${id}`;
+    termArea.appendChild(wrap);
+
+    const term = makeTerm();
+    const fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(wrap);
+    terms[id] = term;
+    fits[id] = fitAddon;
+
+    setTimeout(() => {
+      try {
+        fitAddon.fit();
+        const dims = fitAddon.proposeDimensions();
+        if (dims && ws && ws.readyState === 1) {
+          const rows = Math.max(dims.rows, 40);
+          ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: rows }));
+        }
+        wrap.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); }, true);
+        wrap.addEventListener('touchmove', e => { e.stopPropagation(); e.preventDefault(); }, true);
+      } catch {}
+    }, 100);
+  }
+
+  const wrap = document.getElementById(`tw-${id}`);
+  if (wrap) {
+    wrap.classList.add('active');
+    setTimeout(() => { try { fits[id]?.fit(); } catch {} }, 50);
+  }
+
+  emptyState.style.display = 'none';
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'connect', session: id }));
+  updateHdr(); renderTabs();
+}
+
+function closeSession(id) {
+  const s = sessions.find(x => x.id === id);
+  if (!confirm(`Close ${s ? s.name : 'session'}?`)) return;
+  if (terms[id]) { terms[id].dispose(); delete terms[id]; delete fits[id]; }
+  const w = document.getElementById(`tw-${id}`);
+  if (w) w.remove();
+  ws.send(JSON.stringify({ type: 'close', session: id }));
+  if (activeSession === id) {
+    activeSession = null;
+    const rest = sessions.filter(x => x.id !== id);
+    if (rest.length) switchTo(rest[0].id); else { emptyState.style.display = 'flex'; updateHdr(); }
+  }
+}
+
+function closeCurrent() { if (activeSession !== null) closeSession(activeSession); }
+
+function updateHdr() {
+  const s = sessions.find(x => x.id === activeSession);
+  if (!document.activeElement || document.activeElement !== sname) {
+    sname.value = s ? s.name : 'No session';
+  }
+  sdir.textContent = s ? s.dir : '';
+  cbtn.style.display = s ? 'block' : 'none';
+  sname.disabled = !s;
+}
+
+function commitRename() {
+  if (activeSession === null) return;
+  const name = sname.value.trim();
+  if (!name) return;
+  const s = sessions.find(x => x.id === activeSession);
+  if (s && name !== s.name) {
+    s.name = name;
+    ws.send(JSON.stringify({ type: 'rename', session: activeSession, name }));
+    renderTabs();
+  }
+}
+
+function renderTabs() {
+  const addBtn = tabsEl.querySelector('.tab-add');
+  tabsEl.innerHTML = '';
+  sessions.forEach(s => {
+    const t = document.createElement('button');
+    t.className = 'tab' + (s.id === activeSession ? ' on' : '');
+    t.onclick = () => switchTo(s.id);
+    t.setAttribute('aria-label', s.name);
+    let hold = null;
+    t.addEventListener('touchstart', () => { hold = setTimeout(() => { hold = null; closeSession(s.id); }, 800); }, { passive: true });
+    t.addEventListener('touchend', () => { if (hold) clearTimeout(hold); });
+    t.addEventListener('touchmove', () => { if (hold) clearTimeout(hold); });
+    const badge = document.createElement('span');
+    badge.className = 'badge' + (s.attention ? ' show' : '');
+    const icon = document.createElement('span');
+    icon.className = 'ticon'; icon.textContent = s.attention ? '!' : '>';
+    const label = document.createElement('span');
+    label.className = 'tname'; label.textContent = s.name;
+    t.append(badge, icon, label);
+    tabsEl.appendChild(t);
+  });
+  const ab = addBtn || document.createElement('button');
+  ab.className = 'tab-add'; ab.textContent = '+'; ab.onclick = () => newSession();
+  ab.setAttribute('aria-label', 'New session');
+  tabsEl.appendChild(ab);
+}
+
+function newSession() {
+  if (!ws || ws.readyState !== 1) return;
+  const num = sessions.length + 1;
+  const defaultDir = 'C:\\Users\\MRAL-\\Projects\\loomi-os';
+  ws.send(JSON.stringify({ type: 'create', name: 'Session ' + num, dir: defaultDir }));
+}
+
+let lastSent = '';
+
+function clearPrompt() {
+  qsend('\x1b[F');
+  setTimeout(() => { qsend('\x7f'.repeat(500)); }, 30);
+}
+
+function sendMsg() {
+  const t = msgInput.value;
+  if (activeSession === null) return;
+  if (!t) { qsend('\r'); return; }
+  lastSent = t;
+  clearPrompt();
+  setTimeout(() => {
+    qsend(t);
+    setTimeout(() => qsend('\r'), 50);
+  }, 80);
+  msgInput.value = '';
+  autoGrow();
+  updateSendBtn();
+  msgInput.style.borderColor = 'var(--green)';
+  setTimeout(() => { msgInput.style.borderColor = ''; }, 300);
+}
+
+function editLast() {
+  if (!lastSent) return;
+  msgInput.value = lastSent;
+  autoGrow();
+  updateSendBtn();
+  msgInput.focus();
+  clearPrompt();
+}
+
+function updateSendBtn() {
+  $('send').textContent = msgInput.value.trim() ? 'Send' : 'Enter';
+}
+
+function autoGrow() {
+  msgInput.style.height = 'auto';
+  msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
+}
+
+function qsend(k) {
+  if (!ws || ws.readyState !== 1 || activeSession === null) return;
+  ws.send(JSON.stringify({ type: 'input', data: k }));
+}
+
+function scrollTerm(lines) {
+  if (activeSession !== null && terms[activeSession]) {
+    terms[activeSession].scrollLines(lines);
+  }
+}
+
+function scrollBottom() {
+  if (activeSession !== null && terms[activeSession]) {
+    terms[activeSession].scrollToBottom();
+  }
+}
+
+function setupScrollZones() {
+  const zones = [
+    { el: $('sz-up'), lines: -10, flash: $('sf-up') },
+    { el: $('sz-down'), lines: 10, flash: $('sf-down') }
+  ];
+  zones.forEach(z => {
+    let interval = null;
+    const doScroll = () => {
+      scrollTerm(z.lines);
+      z.flash.style.opacity = '1';
+      setTimeout(() => { z.flash.style.opacity = '0'; }, 100);
+    };
+    z.el.addEventListener('touchstart', e => {
+      e.preventDefault();
+      doScroll();
+      interval = setInterval(doScroll, 200);
+    }, { passive: false });
+    z.el.addEventListener('touchend', () => { if (interval) { clearInterval(interval); interval = null; } });
+    z.el.addEventListener('touchcancel', () => { if (interval) { clearInterval(interval); interval = null; } });
+  });
+}
+setupScrollZones();
+
+function qcmd(text) {
+  qsend(text);
+  setTimeout(() => qsend('\r'), 50);
+}
+
+const COMMANDS = [
+  { cmd: '/dt.restart', desc: 'Resume session' },
+  { cmd: '/dt.orchestrate', desc: 'Auto-chain pipeline' },
+  { cmd: '/dt.discovery', desc: 'Scope requirements' },
+  { cmd: '/dt.engineering', desc: 'Technical design' },
+  { cmd: '/dt.planning', desc: 'Task breakdown' },
+  { cmd: '/dt.execute-api', desc: 'Backend executor' },
+  { cmd: '/dt.execute-ui', desc: 'Frontend executor' },
+  { cmd: '/dt.infrastructure-ops', desc: 'Infra executor' },
+  { cmd: '/dt.red-team', desc: 'Security review' },
+  { cmd: '/dt.architect', desc: 'Architecture audit' },
+  { cmd: '/dt.simplify', desc: 'Code cleanup' },
+  { cmd: '/dt.ui', desc: 'Design language' },
+  { cmd: '/dt.document', desc: 'Session handover' },
+  { cmd: '/dt.setup', desc: 'Configure devteam' },
+  { cmd: '/deploy', desc: 'Deploy to Railway' },
+  { cmd: '/document', desc: 'Wrap up session' },
+  { cmd: '/restart-project', desc: 'Deep cold-start' },
+  { cmd: '/quick-restart', desc: 'Fast resume' },
+  { cmd: '/help', desc: 'Show help' },
+  { cmd: '/clear', desc: 'Clear context' },
+  { cmd: '/compact', desc: 'Compact context' },
+];
+
+const acEl = $('autocomplete');
+
+function showAutocomplete(filter) {
+  const matches = COMMANDS.filter(c => c.cmd.startsWith(filter));
+  if (!matches.length) { acEl.classList.remove('show'); return; }
+  acEl.innerHTML = '';
+  matches.forEach(c => {
+    const btn = document.createElement('button');
+    btn.className = 'ac-item';
+    btn.innerHTML = `<span class="ac-cmd">${c.cmd}</span><span class="ac-desc">${c.desc}</span>`;
+    btn.onmousedown = e => e.preventDefault();
+    btn.onclick = () => {
+      msgInput.value = c.cmd;
+      acEl.classList.remove('show');
+      autoGrow();
+      updateSendBtn();
+      msgInput.focus();
+    };
+    acEl.appendChild(btn);
+  });
+  acEl.classList.add('show');
+}
+
+msgInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); acEl.classList.remove('show'); }
+  if (e.key === 'Escape') acEl.classList.remove('show');
+});
+msgInput.addEventListener('input', () => {
+  autoGrow(); updateSendBtn();
+  const v = msgInput.value;
+  if (v.startsWith('/') && !v.includes(' ')) {
+    showAutocomplete(v);
+  } else {
+    acEl.classList.remove('show');
+  }
+});
+msgInput.addEventListener('blur', () => {
+  setTimeout(() => acEl.classList.remove('show'), 150);
+});
+
+function doResize() {
+  if (activeSession !== null && fits[activeSession]) {
+    try {
+      fits[activeSession].fit();
+      const dims = fits[activeSession].proposeDimensions();
+      if (dims && ws && ws.readyState === 1) {
+        const rows = Math.max(dims.rows, 40);
+        ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: rows }));
+      }
+    } catch {}
+  }
+}
+
+window.addEventListener('resize', doResize);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', () => {
+    appEl.style.height = window.visualViewport.height + 'px';
+    doResize();
+  });
+  window.visualViewport.addEventListener('scroll', () => window.scrollTo(0, 0));
+}
+
+document.addEventListener('touchmove', e => {
+  if (!e.target.closest('#term-area, #qbar, #msg, .xterm-viewport')) e.preventDefault();
+}, { passive: false });
+
+let lastTap = 0;
+document.addEventListener('touchend', e => {
+  const now = Date.now();
+  if (now - lastTap < 300) e.preventDefault();
+  lastTap = now;
+}, { passive: false });
+
+document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
+
+if ('wakeLock' in navigator) {
+  const lock = () => navigator.wakeLock.request('screen').catch(() => {});
+  lock();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') lock(); });
+}
+</script>
+</body>
+</html>

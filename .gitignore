@@ -1,0 +1,6 @@
+node_modules/
+.pin
+.credentials.json
+.totp-secret
+.bootstrap-token
+config.json

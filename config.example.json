@@ -1,0 +1,9 @@
+{
+  "port": 3456,
+  "ngrokDomain": "your-domain.ngrok-free.dev",
+  "autoStart": ["My Project"],
+  "defaultDir": "",
+  "projects": [
+    { "name": "My Project", "dir": "C:\\Users\\YOU\\Projects\\my-project" }
+  ]
+}
