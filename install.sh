@@ -221,7 +221,119 @@ if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || -n "$WINDIR" ]]; then
   fi
 fi
 
-# ── Step 8: Start server and run setup ───────────────────
+# ── Step 8: Create launcher scripts ──────────────────────
+say "Creating launcher scripts..."
+
+INSTALL_DIR="$(pwd)"
+
+# Bash launcher (macOS / Linux / Git Bash on Windows)
+cat > claude-mobile << 'LAUNCHEOF'
+#!/usr/bin/env bash
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if command -v pm2 &>/dev/null; then
+  PM_LIST=$(pm2 list --no-color 2>/dev/null)
+  if echo "$PM_LIST" | grep -q "claude-mobile.*online"; then
+    echo ""
+    echo "  Claude Mobile is running."
+  else
+    pm2 start "$SCRIPT_DIR/server.js" --name claude-mobile --silent
+    echo ""
+    echo "  Claude Mobile started."
+  fi
+  sleep 3
+  LOGS=$(pm2 logs claude-mobile --lines 30 --nostream 2>&1)
+  TUNNEL=$(echo "$LOGS" | grep -o 'https://[^ ]*ngrok[^ ]*' | head -1)
+  TOKEN=$(echo "$LOGS" | grep 'Token:' | awk '{print $NF}' | tail -1)
+  echo ""
+  echo "  ============================================"
+  if [ -n "$TUNNEL" ]; then
+    echo "  URL:   $TUNNEL"
+  fi
+  echo "  Local: http://localhost:3456"
+  echo "  ============================================"
+  echo ""
+  echo "  Commands:"
+  echo "    pm2 logs claude-mobile     # view logs"
+  echo "    pm2 restart claude-mobile  # restart"
+  echo "    pm2 stop claude-mobile     # stop"
+  echo ""
+else
+  echo "  Starting Claude Mobile (foreground)..."
+  echo "  Press Ctrl+C to stop."
+  echo ""
+  node "$SCRIPT_DIR/server.js"
+fi
+LAUNCHEOF
+chmod +x claude-mobile
+ok "Created: ./claude-mobile (bash launcher)"
+
+# Windows batch launcher
+cat > claude-mobile.bat << BATEOF
+@echo off
+title Claude Mobile
+cd /d "%~dp0"
+where pm2 >nul 2>&1
+if %errorlevel%==0 (
+    pm2 list --no-color 2>nul | findstr /C:"claude-mobile" | findstr /C:"online" >nul 2>&1
+    if %errorlevel%==0 (
+        echo.
+        echo   Claude Mobile is running.
+    ) else (
+        pm2 start server.js --name claude-mobile --silent
+        echo.
+        echo   Claude Mobile started.
+    )
+    timeout /t 3 /nobreak >nul
+    echo.
+    echo   Local: http://localhost:3456
+    echo.
+    pm2 logs claude-mobile --lines 10 --nostream 2>&1 | findstr /C:"Tunnel:" /C:"Token:"
+    echo.
+    echo   Commands:
+    echo     pm2 logs claude-mobile
+    echo     pm2 restart claude-mobile
+    echo     pm2 stop claude-mobile
+    echo.
+    pause
+) else (
+    echo   Starting Claude Mobile...
+    echo   Press Ctrl+C to stop.
+    echo.
+    node server.js
+)
+BATEOF
+ok "Created: claude-mobile.bat (Windows launcher)"
+
+# Create desktop shortcut on Windows
+if [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || -n "$WINDIR" ]]; then
+  DESKTOP_PATH="$(cmd.exe /C 'echo %USERPROFILE%\Desktop' 2>/dev/null | tr -d '\r')"
+  if [ -n "$DESKTOP_PATH" ]; then
+    INSTALL_DIR_WIN=$(cygpath -w "$INSTALL_DIR" 2>/dev/null || echo "$INSTALL_DIR")
+    powershell.exe -Command "
+      \$ws = New-Object -ComObject WScript.Shell
+      \$s = \$ws.CreateShortcut('$DESKTOP_PATH\\Claude Mobile.lnk')
+      \$s.TargetPath = '$INSTALL_DIR_WIN\\claude-mobile.bat'
+      \$s.WorkingDirectory = '$INSTALL_DIR_WIN'
+      \$s.Description = 'Launch Claude Mobile Bridge'
+      \$s.Save()
+    " 2>/dev/null
+    ok "Desktop shortcut created: Claude Mobile"
+  fi
+fi
+
+# Create symlink in PATH on macOS/Linux
+if [[ "$OSTYPE" != "msys" && "$OSTYPE" != "cygwin" && -z "$WINDIR" ]]; then
+  if [ -d "/usr/local/bin" ] && [ -w "/usr/local/bin" ]; then
+    ln -sf "$INSTALL_DIR/claude-mobile" /usr/local/bin/claude-mobile 2>/dev/null
+    ok "Symlinked to /usr/local/bin/claude-mobile (run from anywhere)"
+  elif [ -d "$HOME/.local/bin" ]; then
+    mkdir -p "$HOME/.local/bin"
+    ln -sf "$INSTALL_DIR/claude-mobile" "$HOME/.local/bin/claude-mobile" 2>/dev/null
+    ok "Symlinked to ~/.local/bin/claude-mobile"
+  fi
+fi
+
+# ── Step 9: Start server and run setup ───────────────────
 echo ""
 say "Starting Claude Mobile server..."
 node server.js &

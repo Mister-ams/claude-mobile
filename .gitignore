@@ -4,3 +4,5 @@ node_modules/
 .totp-secret
 .bootstrap-token
 config.json
+claude-mobile
+claude-mobile.bat
