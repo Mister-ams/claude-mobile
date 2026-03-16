@@ -792,8 +792,8 @@ function switchTo(id) {
     terms[id] = term;
     fits[id] = fitAddon;
 
-    // Fit multiple times to handle layout settling
-    const fitAndSync = () => {
+    // Single fit after layout settles
+    setTimeout(() => {
       try {
         fitAddon.fit();
         const dims = fitAddon.proposeDimensions();
@@ -802,10 +802,7 @@ function switchTo(id) {
           updateDiag(dims.cols, dims.rows);
         }
       } catch {}
-    };
-    setTimeout(fitAndSync, 50);
-    setTimeout(fitAndSync, 200);
-    setTimeout(fitAndSync, 500);
+    }, 150);
     wrap.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); }, true);
     wrap.addEventListener('touchmove', e => { e.stopPropagation(); e.preventDefault(); }, true);
   }
@@ -918,21 +915,26 @@ function navigateTab(direction) {
   return false;
 }
 
-// Attach gesture to scroll-zones (overlays term-area, receives touches)
-const swipeSurface = $('scroll-zones');
+// Gesture navigation -- attached to document, filtered by touch origin
+// Using document-level avoids iOS event bubbling issues with nested elements
+let swipeActive = false;
 
-swipeSurface.addEventListener('touchstart', e => {
-  // Only track horizontal swipes starting with one finger
+document.addEventListener('touchstart', e => {
   if (e.touches.length !== 1) return;
   const t = e.touches[0];
+  // Only activate for touches inside the terminal area
+  const ta = $('term-area');
+  const rect = ta.getBoundingClientRect();
+  if (t.clientY < rect.top || t.clientY > rect.bottom || t.clientX < rect.left || t.clientX > rect.right) return;
+  swipeActive = true;
   swipeStartX = t.clientX;
   swipeStartY = t.clientY;
   swiping = false;
   swipeDx = 0;
 }, { passive: true });
 
-swipeSurface.addEventListener('touchmove', e => {
-  if (e.touches.length !== 1) return;
+document.addEventListener('touchmove', e => {
+  if (!swipeActive || e.touches.length !== 1) return;
   const t = e.touches[0];
   const dx = t.clientX - swipeStartX;
   const dy = t.clientY - swipeStartY;
@@ -941,66 +943,46 @@ swipeSurface.addEventListener('touchmove', e => {
     swiping = true;
   }
   if (!swiping) return;
-  e.preventDefault();
   swipeDx = dx;
   const idx = getActiveIndex();
   // Show edge hints
-  if (dx > 20 && idx > 0) {
-    hintL.classList.add('flash');
-  } else {
-    hintL.classList.remove('flash');
-  }
-  if (dx < -20 && idx < sessions.length - 1) {
-    hintR.classList.add('flash');
-  } else {
-    hintR.classList.remove('flash');
-  }
+  hintL.classList.toggle('flash', dx > 20 && idx > 0);
+  hintR.classList.toggle('flash', dx < -20 && idx < sessions.length - 1);
   // New session pull indicator (swipe left past last tab)
   if (dx < -20 && idx === sessions.length - 1) {
     const pull = Math.min(Math.abs(dx), 200);
     newHint.style.width = pull + 'px';
-    if (pull >= NEW_SESSION_THRESHOLD) {
-      newHint.classList.add('ready');
-    } else {
-      newHint.classList.remove('ready');
-    }
+    newHint.classList.toggle('ready', pull >= NEW_SESSION_THRESHOLD);
   } else {
     newHint.style.width = '0';
     newHint.classList.remove('ready');
   }
-}, { passive: false });
+}, { passive: true });
 
-swipeSurface.addEventListener('touchend', () => {
+function endSwipe() {
   hintL.classList.remove('flash');
   hintR.classList.remove('flash');
   newHint.style.width = '0';
   newHint.classList.remove('ready');
+  if (!swipeActive) return;
+  swipeActive = false;
   if (!swiping) return;
   const idx = getActiveIndex();
   if (swipeDx > SWIPE_THRESHOLD) {
-    // Swipe right -- previous tab
     navigateTab(-1);
   } else if (swipeDx < -SWIPE_THRESHOLD) {
     if (idx === sessions.length - 1 && Math.abs(swipeDx) >= NEW_SESSION_THRESHOLD) {
-      // Hard pull left past last tab -- new session
       newSession();
     } else {
-      // Swipe left -- next tab
       navigateTab(1);
     }
   }
   swiping = false;
   swipeDx = 0;
-}, { passive: true });
+}
 
-swipeSurface.addEventListener('touchcancel', () => {
-  hintL.classList.remove('flash');
-  hintR.classList.remove('flash');
-  newHint.style.width = '0';
-  newHint.classList.remove('ready');
-  swiping = false;
-  swipeDx = 0;
-}, { passive: true });
+document.addEventListener('touchend', endSwipe, { passive: true });
+document.addEventListener('touchcancel', endSwipe, { passive: true });
 
 let lastSent = '';
 
