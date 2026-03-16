@@ -516,13 +516,44 @@ function stripAnsi(str) {
   return str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b\][^\x07]*\x07/g, '').replace(/\x1b[^[]/g, '');
 }
 
-function detectAttention(text) {
-  const clean = stripAnsi(text);
-  if (/Allow|Deny|Don't allow/i.test(clean)) return 'permission';
-  if (/\?\s*$/m.test(clean)) return 'question';
+// Accumulate recent output for better attention detection
+let recentOutput = new Map(); // session id -> last N chars of output
+
+function updateRecentOutput(sessionId, data) {
+  const existing = recentOutput.get(sessionId) || '';
+  const combined = existing + data;
+  // Keep last 2KB for pattern matching
+  recentOutput.set(sessionId, combined.length > 2048 ? combined.slice(-2048) : combined);
+}
+
+function detectAttention(sessionId) {
+  const raw = recentOutput.get(sessionId) || '';
+  const clean = stripAnsi(raw);
   const lines = clean.split('\n').filter(l => l.trim());
-  const last = lines[lines.length - 1] || '';
-  if (/^\s*[>]\s*$/.test(last)) return 'ready';
+  const last5 = lines.slice(-5).join('\n');
+  const lastLine = lines[lines.length - 1] || '';
+
+  // Permission prompts -- Claude Code tool approval
+  if (/Allow|Deny|Don't allow|allow this|for this session|always allow/i.test(last5)) return 'permission';
+
+  // Yes/No prompts
+  if (/\(y\/n\)/i.test(last5)) return 'permission';
+
+  // Question directed at user (line ending with ?)
+  // Only trigger if it's near the bottom of output (last 3 lines)
+  const last3 = lines.slice(-3).join('\n');
+  if (/\?\s*$/.test(last3) && !/^\s*(http|\/\/|#)/.test(lastLine)) return 'question';
+
+  // Claude Code idle prompt -- waiting for user input
+  // The prompt character > appears as the last meaningful character
+  if (/^\s*[>]\s*$/.test(lastLine)) return 'ready';
+  // Also check for the Unicode prompt character
+  if (/^\s*[>\u276f\u2771]\s*$/.test(lastLine)) return 'ready';
+
+  // Claude finished responding -- look for cost/token summary lines
+  // which appear at the end of a response
+  if (/total cost|tokens used|input:|output:/i.test(last3)) return 'ready';
+
   return null;
 }
 
@@ -565,24 +596,33 @@ function createSession(name, dir) {
     if (session.scrollback.length > SCROLLBACK_SIZE) {
       session.scrollback = session.scrollback.slice(-SCROLLBACK_SIZE);
     }
+    updateRecentOutput(id, data);
+
+    // Clear attention when new output arrives (Claude is responding)
     if (session.attention) { session.attention = null; broadcastSessions(); }
+
     const msg = JSON.stringify({ type: 'output', session: id, data });
     for (const ws of session.clients) {
       if (ws.readyState === 1) ws.send(msg);
     }
+
+    // Debounce: wait for output to settle, then check accumulated buffer
     if (session.attentionTimer) clearTimeout(session.attentionTimer);
     session.attentionTimer = setTimeout(() => {
-      const reason = detectAttention(data);
+      const reason = detectAttention(id);
       if (reason) {
         session.attention = reason;
         broadcastAttention(id, reason);
         broadcastSessions();
       }
+      // Clear recent output after detection (start fresh for next cycle)
+      recentOutput.delete(id);
     }, 3000);
   });
 
   proc.onExit(() => {
     if (session.attentionTimer) clearTimeout(session.attentionTimer);
+    recentOutput.delete(id);
     sessions.delete(id);
     broadcastSessions();
   });
