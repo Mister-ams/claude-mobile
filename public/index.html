@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Claude">
@@ -39,7 +39,7 @@
       font-size: 14px; line-height: 1.286;
       -webkit-tap-highlight-color: transparent;
     }
-    #app { display: none; flex-direction: column; height: 100vh; }
+    #app { display: none; flex-direction: column; height: 100vh; position: relative; overflow: hidden; }
 
     /* ── Auth Screen ── */
     #pin-screen {
@@ -166,6 +166,16 @@
       justify-content: center; font-size: 24px; color: var(--accent);
     }
 
+    /* ── Diagnostics ── */
+    #diag {
+      display: none; padding: 4px 12px;
+      background: rgba(45,114,210,0.15); border-top: 1px solid var(--accent);
+      font-size: 11px; color: var(--accent-light);
+      font-family: 'SF Mono', 'Menlo', monospace;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #diag.show { display: block; }
+
     /* ── Quick Actions ── */
     #qbar {
       display: flex; gap: 8px; padding: 8px 12px; overflow-x: auto;
@@ -185,11 +195,41 @@
     }
     .qb:active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
+    /* ── Image Preview ── */
+    #img-preview {
+      display: none; align-items: center; gap: 8px; padding: 6px 12px;
+      background: var(--surface-alt); border-top: 1px solid var(--border);
+      font-size: 12px; color: var(--text-sec);
+    }
+    #img-preview.show { display: flex; }
+    #img-name {
+      flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-family: 'SF Mono', 'Menlo', monospace;
+    }
+    #img-clear {
+      background: rgba(205,66,70,0.12); border: 1px solid var(--red);
+      border-radius: var(--radius); color: var(--red); font-size: 11px;
+      font-weight: 600; padding: 4px 8px; cursor: pointer;
+      min-height: 28px; min-width: 28px;
+    }
+
     /* ── Input ── */
     #input-bar {
       display: flex; gap: 8px; padding: 8px 12px;
       background: var(--surface); border-top: 1px solid var(--border);
     }
+    #img-btn {
+      padding: 12px 10px; min-height: 44px;
+      background: var(--surface-alt); color: var(--text-sec);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      font-weight: 600; font-size: 12px; cursor: pointer;
+      align-self: flex-end; white-space: nowrap;
+      font-family: 'SF Mono', 'Menlo', monospace;
+      box-shadow: var(--shadow-inset);
+      transition: all 0.1s var(--transition);
+    }
+    #img-btn:active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    #img-btn.has-img { background: var(--accent-muted); color: var(--accent-light); border-color: var(--accent); }
     #msg {
       flex: 1; padding: 10px 12px; font-size: 15px;
       background: rgba(17,20,24,0.5); border: 1px solid var(--border);
@@ -231,33 +271,59 @@
     .ac-item .ac-cmd { font-weight: 600; color: var(--accent-light); }
     .ac-item .ac-desc { color: var(--dim); font-size: 12px; margin-left: 8px; }
 
-    /* ── Tabs ── */
+    /* ── Tab Strip (Safari-style) ── */
     #tabs {
-      display: flex; background: var(--surface);
+      display: flex; align-items: center; justify-content: center;
+      background: var(--surface); gap: 6px;
+      padding: 10px 12px; padding-bottom: calc(10px + max(8px, env(safe-area-inset-bottom)));
       border-top: 1px solid var(--border);
-      padding-bottom: max(4px, env(safe-area-inset-bottom));
+      min-height: 28px; position: relative;
     }
-    .tab {
-      flex: 1; display: flex; flex-direction: column; align-items: center;
-      padding: 10px 4px; cursor: pointer; position: relative;
-      border: none; background: none; color: var(--dim); font-size: 12px;
-      min-height: 44px;
-      border-top: 2px solid transparent;
-      transition: all 0.15s var(--transition);
+    .tab-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--border); border: none; cursor: pointer;
+      padding: 0; transition: all 0.2s var(--transition);
+      position: relative;
     }
-    .tab:active { background: var(--surface-hover); }
-    .tab.on { color: var(--accent-light); border-top-color: var(--accent); }
-    .tab .ticon { font-size: 16px; margin-bottom: 2px; }
-    .tab .tname {
-      max-width: 72px; overflow: hidden; text-overflow: ellipsis;
-      white-space: nowrap; font-size: 12px;
+    .tab-dot.on { background: var(--accent-light); width: 24px; border-radius: 4px; }
+    .tab-dot.attn { background: var(--red); animation: pulse 1.5s infinite; }
+    .tab-label {
+      position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+      background: var(--surface-alt); color: var(--text); font-size: 11px;
+      padding: 4px 8px; border-radius: var(--radius); white-space: nowrap;
+      pointer-events: none; opacity: 0; transition: opacity 0.15s;
+      border: 1px solid var(--border); font-family: 'SF Mono', monospace;
+      margin-bottom: 4px;
     }
-    .tab .badge {
-      position: absolute; top: 4px; right: calc(50% - 16px);
-      width: 10px; height: 10px; border-radius: 50%;
-      background: var(--red); display: none; animation: pulse 1.5s infinite;
+    .tab-dot.on .tab-label { opacity: 1; }
+    #tab-counter {
+      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+      font-size: 10px; color: var(--dim);
+      font-family: 'SF Mono', monospace;
     }
-    .tab .badge.show { display: block; }
+    /* Swipe hint edges */
+    #swipe-hint-left, #swipe-hint-right {
+      position: absolute; top: 0; bottom: 0; width: 4px;
+      opacity: 0; transition: opacity 0.15s;
+      pointer-events: none; z-index: 20;
+    }
+    #swipe-hint-left { left: 0; background: linear-gradient(to right, var(--accent), transparent); }
+    #swipe-hint-right { right: 0; background: linear-gradient(to left, var(--accent), transparent); }
+    #swipe-hint-left.flash, #swipe-hint-right.flash { opacity: 1; }
+    /* New session pull indicator */
+    #new-session-hint {
+      position: absolute; right: 0; top: 0; bottom: 0; width: 0;
+      background: rgba(45,114,210,0.15); display: flex;
+      align-items: center; justify-content: center;
+      overflow: hidden; transition: width 0.1s; z-index: 15;
+      pointer-events: none;
+    }
+    #new-session-hint span {
+      color: var(--accent-light); font-size: 18px; font-weight: 700;
+      opacity: 0; transition: opacity 0.15s;
+    }
+    #new-session-hint.ready { background: rgba(45,114,210,0.25); }
+    #new-session-hint.ready span { opacity: 1; }
     @keyframes pulse {
       0%,100% { opacity:1; transform:scale(1); }
       50% { opacity:0.6; transform:scale(0.8); }
@@ -316,12 +382,13 @@
       <div class="scroll-divider"></div>
       <div class="scroll-zone scroll-zone-down" id="sz-down"><div class="scroll-flash" id="sf-down"></div></div>
     </div>
-    <div id="empty-state">
+    <div id="empty-state" onclick="newSession()">
       <div class="empty-icon">+</div>
-      <p>Tap + to start a Claude session</p>
+      <p>Tap to start a Claude session</p>
     </div>
   </div>
 
+  <div id="diag"></div>
   <div id="qbar">
     <button class="qb" onclick="scrollBottom()" aria-label="Scroll to bottom">&#8600;</button>
     <button class="qb" onclick="qsend('\x7f')" aria-label="Backspace">Bksp</button>
@@ -331,11 +398,18 @@
     <button class="qb" onclick="qsend('\t')" aria-label="Tab key">Tab</button>
     <button class="qb" onclick="qsend('\x1b[A')" aria-label="Arrow up">&#9650;</button>
     <button class="qb" onclick="qsend('\x1b[B')" aria-label="Arrow down">&#9660;</button>
+    <button class="qb" onclick="toggleDiag()" aria-label="Toggle diagnostics">Diag</button>
   </div>
 
   <div style="position:relative">
     <div id="autocomplete"></div>
+    <div id="img-preview" style="display:none">
+      <span id="img-name"></span>
+      <button id="img-clear" aria-label="Remove image">x</button>
+    </div>
     <div id="input-bar">
+      <input type="file" id="img-input" accept="image/*" style="display:none">
+      <button id="img-btn" onclick="document.getElementById('img-input').click()" aria-label="Attach image">Img</button>
       <textarea id="msg" rows="1" placeholder="Type a message..."
                 autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
                 aria-label="Message input"></textarea>
@@ -344,8 +418,11 @@
   </div>
 
   <div id="tabs">
-    <button class="tab-add" onclick="newSession()" aria-label="New session">+</button>
+    <span id="tab-counter"></span>
   </div>
+  <div id="swipe-hint-left"></div>
+  <div id="swipe-hint-right"></div>
+  <div id="new-session-hint"><span>+</span></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
@@ -716,18 +793,22 @@ function switchTo(id) {
     terms[id] = term;
     fits[id] = fitAddon;
 
-    setTimeout(() => {
+    // Fit multiple times to handle layout settling
+    const fitAndSync = () => {
       try {
         fitAddon.fit();
         const dims = fitAddon.proposeDimensions();
         if (dims && ws && ws.readyState === 1) {
-          const rows = Math.max(dims.rows, 40);
-          ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: rows }));
+          ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+          updateDiag(dims.cols, dims.rows);
         }
-        wrap.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); }, true);
-        wrap.addEventListener('touchmove', e => { e.stopPropagation(); e.preventDefault(); }, true);
       } catch {}
-    }, 100);
+    };
+    setTimeout(fitAndSync, 50);
+    setTimeout(fitAndSync, 200);
+    setTimeout(fitAndSync, 500);
+    wrap.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); }, true);
+    wrap.addEventListener('touchmove', e => { e.stopPropagation(); e.preventDefault(); }, true);
   }
 
   const wrap = document.getElementById(`tw-${id}`);
@@ -780,30 +861,32 @@ function commitRename() {
 }
 
 function renderTabs() {
-  const addBtn = tabsEl.querySelector('.tab-add');
-  tabsEl.innerHTML = '';
-  sessions.forEach(s => {
-    const t = document.createElement('button');
-    t.className = 'tab' + (s.id === activeSession ? ' on' : '');
-    t.onclick = () => switchTo(s.id);
-    t.setAttribute('aria-label', s.name);
+  const counter = $('tab-counter');
+  const idx = sessions.findIndex(x => x.id === activeSession);
+  counter.textContent = sessions.length ? `${idx + 1}/${sessions.length}` : '';
+  // Render dot indicators
+  const dotsOnly = tabsEl.querySelectorAll('.tab-dot');
+  dotsOnly.forEach(d => d.remove());
+  const counterEl = tabsEl.querySelector('#tab-counter');
+  sessions.forEach((s, i) => {
+    const dot = document.createElement('button');
+    dot.className = 'tab-dot' + (s.id === activeSession ? ' on' : '') + (s.attention ? ' attn' : '');
+    dot.onclick = () => switchTo(s.id);
+    dot.setAttribute('aria-label', s.name);
+    // Long-press to close
     let hold = null;
-    t.addEventListener('touchstart', () => { hold = setTimeout(() => { hold = null; closeSession(s.id); }, 800); }, { passive: true });
-    t.addEventListener('touchend', () => { if (hold) clearTimeout(hold); });
-    t.addEventListener('touchmove', () => { if (hold) clearTimeout(hold); });
-    const badge = document.createElement('span');
-    badge.className = 'badge' + (s.attention ? ' show' : '');
-    const icon = document.createElement('span');
-    icon.className = 'ticon'; icon.textContent = s.attention ? '!' : '>';
-    const label = document.createElement('span');
-    label.className = 'tname'; label.textContent = s.name;
-    t.append(badge, icon, label);
-    tabsEl.appendChild(t);
+    dot.addEventListener('touchstart', () => { hold = setTimeout(() => { hold = null; closeSession(s.id); }, 800); }, { passive: true });
+    dot.addEventListener('touchend', () => { if (hold) clearTimeout(hold); });
+    dot.addEventListener('touchmove', () => { if (hold) clearTimeout(hold); });
+    // Tooltip label on active dot
+    if (s.id === activeSession) {
+      const lbl = document.createElement('span');
+      lbl.className = 'tab-label';
+      lbl.textContent = s.name;
+      dot.appendChild(lbl);
+    }
+    tabsEl.insertBefore(dot, counterEl);
   });
-  const ab = addBtn || document.createElement('button');
-  ab.className = 'tab-add'; ab.textContent = '+'; ab.onclick = () => newSession();
-  ab.setAttribute('aria-label', 'New session');
-  tabsEl.appendChild(ab);
 }
 
 function newSession() {
@@ -813,6 +896,113 @@ function newSession() {
   ws.send(JSON.stringify({ type: 'create', name: 'Session ' + num, dir: defaultDir }));
 }
 
+// ── Safari-style Gesture Navigation ──
+const SWIPE_THRESHOLD = 80;
+const NEW_SESSION_THRESHOLD = 150;
+let swipeStartX = 0, swipeStartY = 0, swiping = false, swipeDx = 0;
+const hintL = $('swipe-hint-left');
+const hintR = $('swipe-hint-right');
+const newHint = $('new-session-hint');
+
+function getActiveIndex() {
+  return sessions.findIndex(s => s.id === activeSession);
+}
+
+function navigateTab(direction) {
+  const idx = getActiveIndex();
+  if (idx < 0) return false;
+  const target = idx + direction;
+  if (target >= 0 && target < sessions.length) {
+    switchTo(sessions[target].id);
+    return true;
+  }
+  return false;
+}
+
+// Attach gesture to scroll-zones (overlays term-area, receives touches)
+const swipeSurface = $('scroll-zones');
+
+swipeSurface.addEventListener('touchstart', e => {
+  // Only track horizontal swipes starting with one finger
+  if (e.touches.length !== 1) return;
+  const t = e.touches[0];
+  swipeStartX = t.clientX;
+  swipeStartY = t.clientY;
+  swiping = false;
+  swipeDx = 0;
+}, { passive: true });
+
+swipeSurface.addEventListener('touchmove', e => {
+  if (e.touches.length !== 1) return;
+  const t = e.touches[0];
+  const dx = t.clientX - swipeStartX;
+  const dy = t.clientY - swipeStartY;
+  // Lock to horizontal after 10px movement
+  if (!swiping && Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+    swiping = true;
+  }
+  if (!swiping) return;
+  e.preventDefault();
+  swipeDx = dx;
+  const idx = getActiveIndex();
+  // Show edge hints
+  if (dx > 20 && idx > 0) {
+    hintL.classList.add('flash');
+  } else {
+    hintL.classList.remove('flash');
+  }
+  if (dx < -20 && idx < sessions.length - 1) {
+    hintR.classList.add('flash');
+  } else {
+    hintR.classList.remove('flash');
+  }
+  // New session pull indicator (swipe left past last tab)
+  if (dx < -20 && idx === sessions.length - 1) {
+    const pull = Math.min(Math.abs(dx), 200);
+    newHint.style.width = pull + 'px';
+    if (pull >= NEW_SESSION_THRESHOLD) {
+      newHint.classList.add('ready');
+    } else {
+      newHint.classList.remove('ready');
+    }
+  } else {
+    newHint.style.width = '0';
+    newHint.classList.remove('ready');
+  }
+}, { passive: false });
+
+swipeSurface.addEventListener('touchend', () => {
+  hintL.classList.remove('flash');
+  hintR.classList.remove('flash');
+  newHint.style.width = '0';
+  newHint.classList.remove('ready');
+  if (!swiping) return;
+  const idx = getActiveIndex();
+  if (swipeDx > SWIPE_THRESHOLD) {
+    // Swipe right -- previous tab
+    navigateTab(-1);
+  } else if (swipeDx < -SWIPE_THRESHOLD) {
+    if (idx === sessions.length - 1 && Math.abs(swipeDx) >= NEW_SESSION_THRESHOLD) {
+      // Hard pull left past last tab -- new session
+      newSession();
+    } else {
+      // Swipe left -- next tab
+      navigateTab(1);
+    }
+  }
+  swiping = false;
+  swipeDx = 0;
+}, { passive: true });
+
+swipeSurface.addEventListener('touchcancel', () => {
+  hintL.classList.remove('flash');
+  hintR.classList.remove('flash');
+  newHint.style.width = '0';
+  newHint.classList.remove('ready');
+  swiping = false;
+  swipeDx = 0;
+}, { passive: true });
+
 let lastSent = '';
 
 function clearPrompt() {
@@ -821,9 +1011,16 @@ function clearPrompt() {
 }
 
 function sendMsg() {
-  const t = msgInput.value;
+  let t = msgInput.value;
   if (activeSession === null) return;
-  if (!t) { qsend('\r'); return; }
+  if (!t && !pendingImage) { qsend('\r'); return; }
+  // Prepend image path if attached
+  if (pendingImage) {
+    t = (t ? t + ' ' : 'Look at this screenshot: ') + pendingImage;
+    pendingImage = null;
+    imgPreview.classList.remove('show');
+    imgBtn.classList.remove('has-img');
+  }
   lastSent = t;
   clearPrompt();
   setTimeout(() => {
@@ -846,6 +1043,46 @@ function editLast() {
   clearPrompt();
 }
 
+// ── Image Upload ──
+let pendingImage = null;
+const imgInput = $('img-input');
+const imgPreview = $('img-preview');
+const imgName = $('img-name');
+const imgClear = $('img-clear');
+const imgBtn = $('img-btn');
+
+imgInput.addEventListener('change', async () => {
+  const file = imgInput.files[0];
+  if (!file) return;
+  imgBtn.textContent = '...';
+  imgBtn.disabled = true;
+  try {
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': file.type, 'X-Session-Token': sessionToken },
+      body: file
+    });
+    if (!res.ok) throw new Error('Upload failed');
+    const data = await res.json();
+    pendingImage = data.path;
+    imgName.textContent = data.filename;
+    imgPreview.classList.add('show');
+    imgBtn.classList.add('has-img');
+  } catch (e) {
+    imgBtn.style.borderColor = 'var(--red)';
+    setTimeout(() => { imgBtn.style.borderColor = ''; }, 1000);
+  }
+  imgBtn.textContent = 'Img';
+  imgBtn.disabled = false;
+  imgInput.value = '';
+});
+
+imgClear.addEventListener('click', () => {
+  pendingImage = null;
+  imgPreview.classList.remove('show');
+  imgBtn.classList.remove('has-img');
+});
+
 function updateSendBtn() {
   $('send').textContent = msgInput.value.trim() ? 'Send' : 'Enter';
 }
@@ -858,6 +1095,12 @@ function autoGrow() {
 function qsend(k) {
   if (!ws || ws.readyState !== 1 || activeSession === null) return;
   ws.send(JSON.stringify({ type: 'input', data: k }));
+}
+
+function toggleDiag() {
+  const el = $('diag');
+  el.classList.toggle('show');
+  if (el.classList.contains('show')) doResize();
 }
 
 function scrollTerm(lines) {
@@ -879,18 +1122,42 @@ function setupScrollZones() {
   ];
   zones.forEach(z => {
     let interval = null;
+    let startX = 0, startY = 0, scrollLocked = false;
     const doScroll = () => {
       scrollTerm(z.lines);
       z.flash.style.opacity = '1';
       setTimeout(() => { z.flash.style.opacity = '0'; }, 100);
     };
     z.el.addEventListener('touchstart', e => {
-      e.preventDefault();
-      doScroll();
-      interval = setInterval(doScroll, 200);
-    }, { passive: false });
-    z.el.addEventListener('touchend', () => { if (interval) { clearInterval(interval); interval = null; } });
-    z.el.addEventListener('touchcancel', () => { if (interval) { clearInterval(interval); interval = null; } });
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      scrollLocked = false;
+      // Delay scroll start to distinguish from horizontal swipe
+      interval = setTimeout(() => {
+        scrollLocked = true;
+        doScroll();
+        interval = setInterval(doScroll, 200);
+      }, 150);
+    }, { passive: true });
+    z.el.addEventListener('touchmove', e => {
+      if (scrollLocked) return;
+      const dx = Math.abs(e.touches[0].clientX - startX);
+      const dy = Math.abs(e.touches[0].clientY - startY);
+      // If horizontal movement detected, cancel scroll -- let swipe gesture handle it
+      if (dx > 10 && dx > dy) {
+        if (interval) { clearTimeout(interval); clearInterval(interval); interval = null; }
+      }
+    }, { passive: true });
+    z.el.addEventListener('touchend', () => {
+      if (interval) { clearTimeout(interval); clearInterval(interval); interval = null; }
+      // If no scroll happened and touch was short, fire one scroll
+      if (!scrollLocked && !swiping) doScroll();
+      scrollLocked = false;
+    });
+    z.el.addEventListener('touchcancel', () => {
+      if (interval) { clearTimeout(interval); clearInterval(interval); interval = null; }
+      scrollLocked = false;
+    });
   });
 }
 setupScrollZones();
@@ -987,11 +1254,24 @@ function doResize() {
       fits[activeSession].fit();
       const dims = fits[activeSession].proposeDimensions();
       if (dims && ws && ws.readyState === 1) {
-        const rows = Math.max(dims.rows, 40);
-        ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: rows }));
+        ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+        updateDiag(dims.cols, dims.rows);
       }
     } catch {}
   }
+}
+
+// ── Diagnostic Overlay ──
+function updateDiag(cols, rows) {
+  const el = $('diag');
+  if (!el || !el.classList.contains('show')) return;
+  const vvH = window.visualViewport ? Math.round(window.visualViewport.height) : '?';
+  const vvW = window.visualViewport ? Math.round(window.visualViewport.width) : '?';
+  const wH = window.innerHeight;
+  const wW = window.innerWidth;
+  const ta = document.getElementById('term-area');
+  const taH = ta ? ta.clientHeight : '?';
+  el.textContent = `PTY:${cols}x${rows} | VP:${vvW}x${vvH} | Win:${wW}x${wH} | Term:${taH}px`;
 }
 
 window.addEventListener('resize', doResize);

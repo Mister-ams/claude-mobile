@@ -505,6 +505,32 @@ app.post('/api/totp/verify-setup', (req, res) => {
   }
 });
 
+// ─── Image Upload ─────────────────────────────────────────────
+const UPLOAD_DIR = path.join(os.tmpdir(), 'claude-mobile-uploads');
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+app.post('/api/upload', (req, res) => {
+  const token = req.headers['x-session-token'];
+  if (!validateSessionToken(token)) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const chunks = [];
+  req.on('data', chunk => chunks.push(chunk));
+  req.on('end', () => {
+    const buf = Buffer.concat(chunks);
+    if (buf.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ error: 'File too large (max 10MB)' });
+    }
+    const ct = req.headers['content-type'] || '';
+    const ext = ct.includes('png') ? '.png' : ct.includes('jpeg') || ct.includes('jpg') ? '.jpg' : ct.includes('webp') ? '.webp' : '.png';
+    const filename = `screenshot-${Date.now()}${ext}`;
+    const filepath = path.join(UPLOAD_DIR, filename);
+    fs.writeFileSync(filepath, buf);
+    audit('UPLOAD', `Image uploaded: ${filename}`, req.ip);
+    res.json({ path: filepath, filename });
+  });
+});
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
@@ -582,7 +608,7 @@ function createSession(name, dir) {
   if (sessions.size >= MAX_SESSIONS) return null;
   const id = nextId++;
   const proc = pty.spawn('cmd.exe', ['/c', 'claude'], {
-    name: 'xterm-256color', cols: 80, rows: 50,
+    name: 'xterm-256color', cols: 80, rows: 24,
     cwd: dir, env: getSafeEnv()  // Phase 2: restricted env
   });
 
