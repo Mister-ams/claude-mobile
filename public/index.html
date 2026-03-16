@@ -881,6 +881,25 @@ function qcmd(text) {
 }
 
 const COMMANDS = [
+  // Claude Code native commands
+  { cmd: '/help', desc: 'Show help and commands' },
+  { cmd: '/clear', desc: 'Clear conversation context' },
+  { cmd: '/compact', desc: 'Compact context to save space' },
+  { cmd: '/config', desc: 'View/modify configuration' },
+  { cmd: '/cost', desc: 'Show token usage and cost' },
+  { cmd: '/doctor', desc: 'Check Claude Code health' },
+  { cmd: '/init', desc: 'Initialize CLAUDE.md in project' },
+  { cmd: '/login', desc: 'Switch Anthropic account' },
+  { cmd: '/logout', desc: 'Sign out of Anthropic' },
+  { cmd: '/memory', desc: 'Edit CLAUDE.md project memory' },
+  { cmd: '/model', desc: 'Switch AI model' },
+  { cmd: '/permissions', desc: 'View/manage tool permissions' },
+  { cmd: '/pr-comments', desc: 'View PR review comments' },
+  { cmd: '/review', desc: 'Review a pull request' },
+  { cmd: '/status', desc: 'Show account and session status' },
+  { cmd: '/terminal-setup', desc: 'Install shell integration' },
+  { cmd: '/vim', desc: 'Toggle vim keybindings' },
+  // DevTeam skills
   { cmd: '/dt.restart', desc: 'Resume session' },
   { cmd: '/dt.orchestrate', desc: 'Auto-chain pipeline' },
   { cmd: '/dt.discovery', desc: 'Scope requirements' },
@@ -895,13 +914,11 @@ const COMMANDS = [
   { cmd: '/dt.ui', desc: 'Design language' },
   { cmd: '/dt.document', desc: 'Session handover' },
   { cmd: '/dt.setup', desc: 'Configure devteam' },
+  // Custom skills
   { cmd: '/deploy', desc: 'Deploy to Railway' },
   { cmd: '/document', desc: 'Wrap up session' },
   { cmd: '/restart-project', desc: 'Deep cold-start' },
   { cmd: '/quick-restart', desc: 'Fast resume' },
-  { cmd: '/help', desc: 'Show help' },
-  { cmd: '/clear', desc: 'Clear context' },
-  { cmd: '/compact', desc: 'Compact context' },
 ];
 
 const acEl = $('autocomplete');
