@@ -280,12 +280,13 @@
       min-height: 28px; position: relative;
     }
     .tab-dot {
-      width: 8px; height: 8px; border-radius: 50%;
+      width: 10px; height: 10px; border-radius: 50%;
       background: var(--border); border: none; cursor: pointer;
-      padding: 0; transition: all 0.2s var(--transition);
+      padding: 14px 10px; background-clip: content-box;
+      transition: all 0.2s var(--transition);
       position: relative;
     }
-    .tab-dot.on { background: var(--accent-light); width: 24px; border-radius: 4px; }
+    .tab-dot.on { background: var(--accent-light); width: 28px; border-radius: 4px; background-clip: content-box; }
     .tab-dot.attn { background: var(--red); animation: pulse 1.5s infinite; }
     .tab-label {
       position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
@@ -391,11 +392,9 @@
   <div id="diag"></div>
   <div id="qbar">
     <button class="qb" onclick="scrollBottom()" aria-label="Scroll to bottom">&#8600;</button>
-    <button class="qb" onclick="qsend('\x7f')" aria-label="Backspace">Bksp</button>
     <button class="qb" onclick="clearPrompt()" aria-label="Clear prompt">Clear</button>
     <button class="qb" onclick="editLast()" aria-label="Edit last message">Edit</button>
     <button class="qb" onclick="qsend('\x1b')" aria-label="Escape">Esc</button>
-    <button class="qb" onclick="qsend('\t')" aria-label="Tab key">Tab</button>
     <button class="qb" onclick="qsend('\x1b[A')" aria-label="Arrow up">&#9650;</button>
     <button class="qb" onclick="qsend('\x1b[B')" aria-label="Arrow down">&#9660;</button>
     <button class="qb" onclick="toggleDiag()" aria-label="Toggle diagnostics">Diag</button>
