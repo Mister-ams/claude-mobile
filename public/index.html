@@ -596,7 +596,6 @@
       <button class="gear-item" onclick="toggleTheme(); toggleGearMenu()">
         <span id="theme-label">Dark mode</span>
       </button>
-      <button class="gear-item" onclick="newSession(); toggleGearMenu()">New session</button>
     </div>
   </div>
   <div id="swipe-hint-left"></div>
@@ -1776,20 +1775,41 @@ document.addEventListener('click', e => {
   if (!e.target.closest('#gear-btn') && !e.target.closest('#gear-menu')) menu.classList.remove('open');
 });
 
-// ── Pull-down on tab count = new session ──
+// ── Pull-up on tab count = new session ──
 (function() {
   const btn = $('tab-count-btn');
-  let startY = 0, pulling = false;
+  const THRESHOLD = 40;
+  let startY = 0, pulling = false, originalText = '';
   btn.addEventListener('touchstart', e => {
     startY = e.touches[0].clientY;
     pulling = false;
+    originalText = btn.firstChild.textContent;
   }, { passive: true });
   btn.addEventListener('touchmove', e => {
     const dy = startY - e.touches[0].clientY;
-    if (dy > 40) pulling = true;
+    if (dy > THRESHOLD && !pulling) {
+      pulling = true;
+      btn.firstChild.textContent = '+';
+      btn.style.borderColor = 'var(--accent)';
+      btn.style.color = 'var(--accent-light)';
+    } else if (dy <= THRESHOLD && pulling) {
+      pulling = false;
+      btn.firstChild.textContent = originalText;
+      btn.style.borderColor = '';
+      btn.style.color = '';
+    }
   }, { passive: true });
   btn.addEventListener('touchend', () => {
     if (pulling) { newSession(); pulling = false; }
+    btn.firstChild.textContent = originalText;
+    btn.style.borderColor = '';
+    btn.style.color = '';
+  });
+  btn.addEventListener('touchcancel', () => {
+    pulling = false;
+    btn.firstChild.textContent = originalText;
+    btn.style.borderColor = '';
+    btn.style.color = '';
   });
 })();
 
