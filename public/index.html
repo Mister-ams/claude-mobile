@@ -167,7 +167,7 @@
       color: var(--text); outline: none;
       width: auto; max-width: 180px; min-width: 60px;
       font-family: 'SF Mono', 'Menlo', monospace;
-      padding: 2px 0;
+      padding: 2px 0; text-transform: uppercase;
     }
     .sess-name:focus { border-bottom-color: var(--accent); }
     .sess-dir {
@@ -512,7 +512,7 @@
         <span class="dot" id="dot"></span>
         <input type="text" class="sess-name" id="sname" value="No session"
                onfocus="this.select()" onblur="commitRename()" onkeydown="if(event.key==='Enter'){this.blur()}"
-               autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
+               autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false"
                aria-label="Session name">
       </div>
       <div class="sess-dir" id="sdir"></div>
@@ -1186,7 +1186,7 @@ function closeCurrent() { if (activeSession !== null) closeSession(activeSession
 function updateHdr() {
   const s = sessions.find(x => x.id === activeSession);
   if (!document.activeElement || document.activeElement !== sname) {
-    sname.value = s ? s.name : 'No session';
+    sname.value = s ? s.name.toUpperCase() : 'NO SESSION';
   }
   sdir.textContent = s ? s.dir : '';
   cbtn.style.display = s ? 'block' : 'none';
@@ -1195,8 +1195,9 @@ function updateHdr() {
 
 function commitRename() {
   if (activeSession === null) return;
-  const name = sname.value.trim();
+  const name = sname.value.trim().toUpperCase();
   if (!name) return;
+  sname.value = name;
   const s = sessions.find(x => x.id === activeSession);
   if (s && name !== s.name) {
     s.name = name;
@@ -1281,7 +1282,7 @@ function newSession() {
   if (!ws || ws.readyState !== 1) return;
   const num = sessions.length + 1;
   const defaultDir = 'C:\\Users\\MRAL-\\Projects\\loomi-os';
-  queueSend({ type: 'create', name: 'Session ' + num, dir: defaultDir });
+  queueSend({ type: 'create', name: 'SESSION ' + num, dir: defaultDir });
 }
 
 // ── Safari-style Gesture Navigation ──
@@ -1644,6 +1645,9 @@ msgInput.addEventListener('blur', () => {
 });
 
 function doResize() {
+  // Skip refit if a text input is focused -- keyboard is open, refit would cause jumping
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === 'TEXTAREA' || (ae.tagName === 'INPUT' && ae.type === 'text'))) return;
   if (activeSession !== null && fits[activeSession]) {
     try {
       fits[activeSession].fit();
@@ -1672,21 +1676,29 @@ function updateDiag(cols, rows) {
 window.addEventListener('resize', doResize);
 if (window.visualViewport) {
   let lastVVH = window.visualViewport.height;
+  let resizeTimer = null;
   window.visualViewport.addEventListener('resize', () => {
     const h = window.visualViewport.height;
+    // Always update app height immediately (prevents page overflow)
     appEl.style.height = h + 'px';
-    const keyboardDismissed = h > lastVVH + 50;
+    const delta = h - lastVVH;
     lastVVH = h;
-    doResize();
-    // When keyboard dismisses, refit fills the reclaimed space --
-    // scroll to bottom so content sits above the quick action bar
-    if (keyboardDismissed && !userScrolled) {
-      requestAnimationFrame(() => {
-        if (activeSession !== null && terms[activeSession]) {
-          terms[activeSession].scrollToBottom();
-        }
-      });
-    }
+    // Skip small changes (< 30px) -- these are iOS prediction bar adjustments
+    // that cause terminal reflow and visible jumping on every keystroke
+    if (Math.abs(delta) < 30) return;
+    // Debounce the terminal refit to avoid rapid reflows
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      doResize();
+      // Keyboard dismissed (large positive delta) -- scroll to bottom
+      if (delta > 50 && !userScrolled) {
+        requestAnimationFrame(() => {
+          if (activeSession !== null && terms[activeSession]) {
+            terms[activeSession].scrollToBottom();
+          }
+        });
+      }
+    }, 150);
   });
   window.visualViewport.addEventListener('scroll', () => window.scrollTo(0, 0));
 }
