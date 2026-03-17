@@ -781,8 +781,7 @@ function handle(m) {
     case 'output':
       if (terms[m.session]) {
         terms[m.session].write(m.data);
-        // Auto-scroll to bottom on new output for active session
-        if (m.session === activeSession) terms[m.session].scrollToBottom();
+        if (m.session === activeSession && !userScrolled) terms[m.session].scrollToBottom();
       }
       break;
     case 'scrollback':
@@ -1200,14 +1199,18 @@ function toggleDiag() {
   if (el.classList.contains('show')) doResize();
 }
 
+let userScrolled = false;
+
 function scrollTerm(lines) {
   if (activeSession !== null && terms[activeSession]) {
+    userScrolled = true;
     terms[activeSession].scrollLines(lines);
   }
 }
 
 function scrollBottom() {
   if (activeSession !== null && terms[activeSession]) {
+    userScrolled = false;
     terms[activeSession].scrollToBottom();
   }
 }
