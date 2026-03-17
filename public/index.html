@@ -401,8 +401,18 @@
       font-size: 12px; font-weight: 700; cursor: pointer;
       font-family: 'SF Mono', 'Menlo', monospace;
       transition: all 0.15s var(--transition);
+      position: relative;
     }
     #tab-count-btn:active { border-color: var(--accent); color: var(--accent-light); }
+    /* Notification badge on tab count */
+    #tab-count-btn .attn-badge {
+      display: none; position: absolute; top: -4px; right: -4px;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: var(--intent-danger);
+      border: 2px solid var(--surface);
+      animation: pulse 1.5s infinite;
+    }
+    #tab-count-btn.has-attn .attn-badge { display: block; }
     /* New tab button */
     #tab-new-btn {
       flex-shrink: 0; width: 44px; height: 44px;
@@ -538,7 +548,7 @@
   </div>
 
   <div id="diag"></div>
-  <div id="qbar">
+  <div id="qbar" onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()">
     <button class="qb" onclick="clearPrompt()" aria-label="Clear prompt">Clear</button>
     <button class="qb" onclick="editLast()" aria-label="Edit last message">Edit</button>
     <button class="qb" onclick="qsend('\x1b')" aria-label="Escape">Esc</button>
@@ -569,7 +579,7 @@
       <span class="pill-name">No session</span>
       <span class="pill-dir"></span>
     </div>
-    <button id="tab-count-btn" onclick="toggleSwitcher()" aria-label="Switch tabs">0</button>
+    <button id="tab-count-btn" onclick="toggleSwitcher()" aria-label="Switch tabs">0<span class="attn-badge"></span></button>
     <button id="tab-new-btn" onclick="newSession()" aria-label="New session">+</button>
   </div>
   <div id="swipe-hint-left"></div>
@@ -1225,10 +1235,9 @@ function renderTabs() {
   // Update count badge
   countBtn.textContent = sessions.length || '0';
 
-  // Check if any non-active session needs attention
-  const anyAttn = sessions.some(x => x.id !== activeSession && x.attention);
-  countBtn.style.borderColor = anyAttn ? 'var(--intent-warn)' : '';
-  countBtn.style.color = anyAttn ? 'var(--intent-warn)' : '';
+  // Attention badge: show when ANY session needs input (active or background)
+  const anyAttn = sessions.some(x => x.attention);
+  countBtn.classList.toggle('has-attn', anyAttn);
 
   // Update switcher if open
   renderSwitcher();
@@ -1529,6 +1538,8 @@ function setupScrollZones() {
       setTimeout(() => { z.flash.style.opacity = '0'; }, 100);
     };
     z.el.addEventListener('touchstart', e => {
+      // Prevent default to stop iOS from blurring the focused input (closing keyboard)
+      e.preventDefault();
       startX = e.touches[0].clientX;
       startY = e.touches[0].clientY;
       scrollLocked = false;
@@ -1538,7 +1549,7 @@ function setupScrollZones() {
         doScroll();
         interval = setInterval(doScroll, 200);
       }, 150);
-    }, { passive: true });
+    }, { passive: false });
     z.el.addEventListener('touchmove', e => {
       if (scrollLocked) return;
       const dx = Math.abs(e.touches[0].clientX - startX);
@@ -1649,9 +1660,6 @@ msgInput.addEventListener('blur', () => {
 });
 
 function doResize() {
-  // Skip refit if a text input is focused -- keyboard is open, refit would cause jumping
-  const ae = document.activeElement;
-  if (ae && (ae.tagName === 'TEXTAREA' || (ae.tagName === 'INPUT' && ae.type === 'text'))) return;
   if (activeSession !== null && fits[activeSession]) {
     try {
       fits[activeSession].fit();
