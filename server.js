@@ -255,7 +255,10 @@ const challenges = new Map(); // challengeId -> { challenge, expires }
 
 // ─── Express ─────────────────────────────────────────────────────
 const app = express();
-app.use(express.json());
+app.use((req, res, next) => {
+  if (req.path === '/api/upload') return next();
+  express.json()(req, res, next);
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── Localhost-only setup page ─────────────────────────────────

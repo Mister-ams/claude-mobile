@@ -1171,10 +1171,11 @@ imgInput.addEventListener('change', async () => {
     imgBtn.classList.add('has-img');
     imgBtn.textContent = 'Img';
   } catch (e) {
-    imgBtn.textContent = 'Err';
+    const msg = e.message || 'fail';
+    imgBtn.textContent = msg.length > 6 ? msg.slice(0, 6) : msg;
     imgBtn.style.borderColor = 'var(--red)';
     imgBtn.style.color = 'var(--red)';
-    setTimeout(() => { imgBtn.textContent = 'Img'; imgBtn.style.borderColor = ''; imgBtn.style.color = ''; }, 2000);
+    setTimeout(() => { imgBtn.textContent = 'Img'; imgBtn.style.borderColor = ''; imgBtn.style.color = ''; }, 3000);
   }
   imgBtn.disabled = false;
   imgInput.value = '';
