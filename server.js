@@ -72,6 +72,30 @@ function getTotpUri() {
 
 loadTotpSecret();
 
+// ─── Server Identity Key (P2: TOFU pinning) ────────────────────
+const IDENTITY_KEY_PATH = path.join(__dirname, '.server-identity-key');
+let identityKeys = null; // { publicKey, privateKey, fingerprint }
+
+function loadOrCreateIdentityKey() {
+  try {
+    identityKeys = JSON.parse(fs.readFileSync(IDENTITY_KEY_PATH, 'utf8'));
+    return;
+  } catch {}
+  // Generate new P-256 EC keypair
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', {
+    namedCurve: 'prime256v1',
+    publicKeyEncoding: { type: 'spki', format: 'der' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+  const pubHex = publicKey.toString('hex');
+  const fingerprint = crypto.createHash('sha256').update(publicKey).digest('hex');
+  identityKeys = { publicKey: pubHex, privateKey, fingerprint, created: new Date().toISOString() };
+  fs.writeFileSync(IDENTITY_KEY_PATH, JSON.stringify(identityKeys, null, 2));
+  audit('CRYPTO', `Identity key generated. Fingerprint: ${fingerprint.slice(0, 16)}...`);
+}
+
+loadOrCreateIdentityKey();
+
 // Session tokens: issued after auth, 30-min TTL, auto-rotated
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 min (short-lived, auto-refreshed)
 const sessionTokens = new Map(); // token -> { expires, ip }
@@ -82,10 +106,14 @@ function issueSessionToken(ip) {
   return token;
 }
 
-function validateSessionToken(token) {
+function validateSessionToken(token, callerIP) {
   const entry = sessionTokens.get(token);
   if (!entry) return false;
   if (Date.now() > entry.expires) { sessionTokens.delete(token); return false; }
+  if (callerIP && entry.ip && entry.ip !== callerIP) {
+    audit('SECURITY', `Token IP mismatch: expected ${entry.ip}, got ${callerIP}`, callerIP);
+    return false;
+  }
   return true;
 }
 
@@ -329,7 +357,7 @@ app.post('/api/setup/verify', (req, res) => {
 
 // Auth-gated config
 app.get('/api/config', (req, res) => {
-  if (!validateSessionToken(req.query.st)) {
+  if (!validateSessionToken(req.query.st, req.ip)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   res.json({ projects: config.projects, maxSessions: MAX_SESSIONS });
@@ -337,7 +365,7 @@ app.get('/api/config', (req, res) => {
 
 // WebAuthn registration
 app.post('/api/passkey/register-options', async (req, res) => {
-  if (!validateSessionToken(req.body.sessionToken)) {
+  if (!validateSessionToken(req.body.sessionToken, req.ip)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   try {
@@ -362,7 +390,7 @@ app.post('/api/passkey/register-options', async (req, res) => {
 });
 
 app.post('/api/passkey/register-verify', async (req, res) => {
-  if (!validateSessionToken(req.body.sessionToken)) {
+  if (!validateSessionToken(req.body.sessionToken, req.ip)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   try {
@@ -453,7 +481,7 @@ app.post('/api/passkey/auth-verify', async (req, res) => {
 // Token refresh (silent rotation)
 app.post('/api/auth/refresh', (req, res) => {
   const oldToken = req.body.sessionToken;
-  if (!validateSessionToken(oldToken)) {
+  if (!validateSessionToken(oldToken, req.ip)) {
     return res.status(401).json({ error: 'Token expired or invalid' });
   }
   const newToken = rotateSessionToken(oldToken, req.ip);
@@ -466,7 +494,7 @@ app.post('/api/auth/refresh', (req, res) => {
 
 // Kill switch
 app.post('/api/kill', (req, res) => {
-  if (!validateSessionToken(req.body.sessionToken)) {
+  if (!validateSessionToken(req.body.sessionToken, req.ip)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   audit('SYSTEM', 'Remote kill switch activated', req.ip);
@@ -485,7 +513,7 @@ app.get('/api/auth/status', (_req, res) => {
 
 // TOTP setup (requires session token -- bootstrap or passkey authed)
 app.post('/api/totp/setup', (req, res) => {
-  if (!validateSessionToken(req.body.sessionToken)) {
+  if (!validateSessionToken(req.body.sessionToken, req.ip)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   if (totpConfigured()) {
@@ -497,7 +525,7 @@ app.post('/api/totp/setup', (req, res) => {
 });
 
 app.post('/api/totp/verify-setup', (req, res) => {
-  if (!validateSessionToken(req.body.sessionToken)) {
+  if (!validateSessionToken(req.body.sessionToken, req.ip)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   if (verifyTotp(req.body.code)) {
@@ -514,7 +542,7 @@ if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 app.post('/api/upload', express.raw({ type: '*/*', limit: '10mb' }), (req, res) => {
   const token = req.headers['x-session-token'];
-  if (!validateSessionToken(token)) {
+  if (!validateSessionToken(token, req.ip)) {
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const buf = req.body;
@@ -662,10 +690,14 @@ const allClients = new Set();
 const MAX_CONNECTIONS_PER_IP = 10;
 
 function getClientIP(ws) {
+  // X-Forwarded-For from WS upgrade request (ngrok sets this)
+  const xff = ws._req?.headers?.['x-forwarded-for'];
+  if (xff) return xff.split(',')[0].trim();
   return ws._socket?._peername?.address || 'unknown';
 }
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  ws._req = req; // store upgrade request for X-Forwarded-For
   const ip = getClientIP(ws);
   const ipCount = [...allClients].filter(c => c._ip === ip).length;
   if (ipCount >= MAX_CONNECTIONS_PER_IP) {
@@ -700,7 +732,7 @@ wss.on('connection', (ws) => {
       }
 
       // Session token re-auth (reconnect)
-      if (msg.sessionToken && validateSessionToken(msg.sessionToken)) {
+      if (msg.sessionToken && validateSessionToken(msg.sessionToken, ws._ip)) {
         ws.authenticated = true;
         ws._sessionToken = msg.sessionToken;
         lastAuthenticatedActivity = Date.now();
@@ -732,7 +764,7 @@ wss.on('connection', (ws) => {
 
     // ── Auth via passkey (session token from HTTP auth flow) ──
     if (msg.type === 'auth-passkey') {
-      if (msg.sessionToken && validateSessionToken(msg.sessionToken)) {
+      if (msg.sessionToken && validateSessionToken(msg.sessionToken, ws._ip)) {
         ws.authenticated = true;
         ws._sessionToken = msg.sessionToken;
         lastAuthenticatedActivity = Date.now();
@@ -746,7 +778,7 @@ wss.on('connection', (ws) => {
 
     // ── Token refresh over WebSocket ──
     if (msg.type === 'refresh') {
-      if (ws.authenticated && ws._sessionToken && validateSessionToken(ws._sessionToken)) {
+      if (ws.authenticated && ws._sessionToken && validateSessionToken(ws._sessionToken, ws._ip)) {
         const newToken = rotateSessionToken(ws._sessionToken, ws._ip);
         if (newToken) {
           ws._sessionToken = newToken;
@@ -762,7 +794,7 @@ wss.on('connection', (ws) => {
     }
 
     // Check session token still valid
-    if (ws._sessionToken && !validateSessionToken(ws._sessionToken)) {
+    if (ws._sessionToken && !validateSessionToken(ws._sessionToken, ws._ip)) {
       ws.authenticated = false;
       ws.send(JSON.stringify({ type: 'expired' }));
       audit('AUTH', `Session expired`, ws._ip);
@@ -876,7 +908,7 @@ wss.on('connection', (ws) => {
 // ─── Session expiry checker (every 60s) ──────────────────────────
 setInterval(() => {
   for (const ws of allClients) {
-    if (ws.authenticated && ws._sessionToken && !validateSessionToken(ws._sessionToken)) {
+    if (ws.authenticated && ws._sessionToken && !validateSessionToken(ws._sessionToken, ws._ip)) {
       ws.authenticated = false;
       ws.send(JSON.stringify({ type: 'expired' }));
       audit('AUTH', `Session auto-expired`, ws._ip);
