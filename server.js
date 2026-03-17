@@ -17,7 +17,7 @@ const { TOTP, Secret } = require('otpauth');
 // ─── Config ──────────────────────────────────────────────────────
 const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
 const PORT = process.env.PORT || config.port || 3456;
-const MAX_SESSIONS = 4;
+const MAX_SESSIONS = 8;
 const SCROLLBACK_SIZE = 100000;
 
 // ─── Auth: No tokens. Setup via localhost only. ──────────────────
