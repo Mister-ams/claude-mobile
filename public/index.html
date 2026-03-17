@@ -179,9 +179,17 @@
       display: flex; align-items: center; justify-content: center;
       background: none; border: none; color: var(--text-sec);
       cursor: pointer; transition: color 0.15s var(--transition);
-      padding: 0;
+      padding: 0; font-size: 16px;
     }
     #theme-toggle:active { color: var(--accent-light); }
+    /* ── Notification pulse on pill ── */
+    #tab-pill .pill-notify {
+      display: none; width: 8px; height: 8px; border-radius: 50%;
+      background: var(--intent-danger); flex-shrink: 0;
+      box-shadow: 0 0 0 2px var(--surface);
+      animation: pulse 1.5s infinite;
+    }
+    #tab-pill.needs-input .pill-notify { display: block; }
     /* Status dot: shape+color for colorblind safety
        connected = filled circle, disconnected = hollow ring */
     .dot {
@@ -384,14 +392,6 @@
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
       max-width: 100px;
     }
-    /* Attention indicator: pulsing dot + ring for colorblind safety */
-    #tab-pill .pill-attn {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: var(--intent-warn); flex-shrink: 0;
-      box-shadow: 0 0 0 2px rgba(200,118,25,0.3);
-      animation: pulse 1.5s infinite; display: none;
-    }
-    #tab-pill.attn .pill-attn { display: block; }
     /* Tab count badge */
     #tab-count-btn {
       flex-shrink: 0; width: 44px; height: 44px;
@@ -562,16 +562,9 @@
 
   <div id="tabs">
     <div id="tab-switcher"></div>
-    <button id="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
-      <svg id="theme-icon-moon" width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M8 1a7 7 0 1 0 0 14A5 5 0 0 1 8 1z"/>
-      </svg>
-      <svg id="theme-icon-sun" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="display:none">
-        <circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M2.9 2.9l1.4 1.4M11.7 11.7l1.4 1.4M13.1 2.9l-1.4 1.4M4.3 11.7l-1.4 1.4"/>
-      </svg>
-    </button>
+    <button id="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="theme-char">&#9790;</span></button>
     <div id="tab-pill" onclick="scrollBottom()">
-      <span class="pill-attn"></span>
+      <span class="pill-notify"></span>
       <span class="pill-name">No session</span>
       <span class="pill-dir"></span>
     </div>
@@ -1222,13 +1215,13 @@ function renderTabs() {
   // Update pill content
   pillName.textContent = s ? s.name : 'No session';
   pillDir.textContent = s ? s.dir.split('\\').pop() : '';
-  pill.classList.toggle('attn', !!(s && s.attention));
 
   // Update count text
   countBtn.querySelector('.count-text').textContent = sessions.length || '0';
 
-  // Attention badge: show when ANY session needs input (active or background)
+  // Notification: red dot on pill + badge on count when ANY session needs input
   const anyAttn = sessions.some(x => x.attention);
+  pill.classList.toggle('needs-input', anyAttn);
   countBtn.classList.toggle('has-attn', anyAttn);
 
   // Update switcher if open
@@ -1778,16 +1771,16 @@ sendBtn.addEventListener('click', e => {
 })();
 
 // ── Light/Dark Mode Toggle ──
-function updateThemeIcons() {
+function updateThemeChar() {
   const isLight = document.documentElement.classList.contains('light');
-  $('theme-icon-moon').style.display = isLight ? 'none' : 'block';
-  $('theme-icon-sun').style.display = isLight ? 'block' : 'none';
+  // Moon crescent in dark mode, sun in light mode
+  $('theme-char').innerHTML = isLight ? '&#9788;' : '&#9790;';
 }
 
 function toggleTheme() {
   const isLight = document.documentElement.classList.toggle('light');
   localStorage.setItem('cm-theme', isLight ? 'light' : 'dark');
-  updateThemeIcons();
+  updateThemeChar();
   const theme = getTermTheme();
   Object.keys(terms).forEach(id => { terms[id].options.theme = theme; });
   let meta = document.querySelector('meta[name="theme-color"]');
@@ -1799,7 +1792,7 @@ function toggleTheme() {
 if (localStorage.getItem('cm-theme') === 'light') {
   document.documentElement.classList.add('light');
 }
-updateThemeIcons();
+updateThemeChar();
 
 // Wake lock
 if ('wakeLock' in navigator) {
