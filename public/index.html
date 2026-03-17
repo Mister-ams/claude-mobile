@@ -1076,7 +1076,6 @@ function handle(m) {
       if (terms[m.session]) terms[m.session].write(m.data);
       break;
     case 'attention':
-      console.log('[ATTN]', m.session, m.reason, 'sessions:', sessions.map(x => x.id + ':' + x.attention));
       const s = sessions.find(x => x.id === m.session);
       if (s) { s.attention = m.reason; renderTabs(); }
       if (navigator.vibrate) navigator.vibrate(200);
@@ -1222,7 +1221,6 @@ function renderTabs() {
 
   // Notification: red dot on pill + badge on count when ANY session needs input
   const anyAttn = sessions.some(x => x.attention);
-  console.log('[RENDER] anyAttn:', anyAttn, 'sessions:', sessions.map(x => x.id + ':' + x.attention));
   pill.classList.toggle('needs-input', anyAttn);
   countBtn.classList.toggle('has-attn', anyAttn);
 
