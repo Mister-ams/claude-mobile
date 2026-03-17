@@ -536,12 +536,12 @@
   </div>
 
   <div id="diag"></div>
-  <div id="qbar" onmousedown="event.preventDefault()" ontouchstart="event.preventDefault()">
-    <button class="qb" onclick="clearPrompt()" aria-label="Clear prompt">Clear</button>
-    <button class="qb" onclick="editLast()" aria-label="Edit last message">Edit</button>
-    <button class="qb" onclick="qsend('\x1b')" aria-label="Escape">Esc</button>
-    <button class="qb" onclick="qsend('\x1b[A')" aria-label="Arrow up">Up</button>
-    <button class="qb" onclick="qsend('\x1b[B')" aria-label="Arrow down">Down</button>
+  <div id="qbar" onmousedown="event.preventDefault()" ontouchstart="if(!event.target.closest('.qb'))event.preventDefault()">
+    <button class="qb" ontouchend="event.preventDefault();clearPrompt()" onclick="clearPrompt()" aria-label="Clear prompt">Clear</button>
+    <button class="qb" ontouchend="event.preventDefault();editLast()" onclick="editLast()" aria-label="Edit last message">Edit</button>
+    <button class="qb" ontouchend="event.preventDefault();qsend('\x1b')" onclick="qsend('\x1b')" aria-label="Escape">Esc</button>
+    <button class="qb" ontouchend="event.preventDefault();qsend('\x1b[A')" onclick="qsend('\x1b[A')" aria-label="Arrow up">Up</button>
+    <button class="qb" ontouchend="event.preventDefault();qsend('\x1b[B')" onclick="qsend('\x1b[B')" aria-label="Arrow down">Down</button>
   </div>
 
   <div style="position:relative">
