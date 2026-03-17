@@ -96,6 +96,118 @@ function loadOrCreateIdentityKey() {
 
 loadOrCreateIdentityKey();
 
+// ─── E2E Encryption (P1: ECDH + AES-256-GCM) ───────────────────
+
+function initKeyExchange(ws) {
+  // Generate ephemeral ECDH keypair
+  const eph = crypto.createECDH('prime256v1');
+  eph.generateKeys();
+  const ephPubHex = eph.getPublicKey('hex');
+  // Sign ephemeral pubkey with identity private key (red-team fix #1)
+  const sig = crypto.sign('sha256', Buffer.from(ephPubHex, 'hex'), identityKeys.privateKey);
+  // Random salt for HKDF
+  const salt = crypto.randomBytes(32);
+  ws._eph = eph;
+  ws._salt = salt;
+  ws.encrypted = false;
+  ws._sendSeq = 0;
+  ws._recvSeq = 0;
+  ws._sessionKey = null;
+  // Send key-exchange (plaintext -- only unencrypted message)
+  ws.send(JSON.stringify({
+    type: 'key-exchange',
+    identity: identityKeys.publicKey,
+    fingerprint: identityKeys.fingerprint,
+    ephemeral: ephPubHex,
+    sig: sig.toString('hex'),
+    salt: salt.toString('hex'),
+  }));
+}
+
+function completeKeyExchange(ws, clientEphPubHex) {
+  if (!ws._eph) return false;
+  try {
+    const sharedSecret = ws._eph.computeSecret(Buffer.from(clientEphPubHex, 'hex'));
+    const ephPubHex = ws._eph.getPublicKey('hex');
+    // HKDF with salt and both pubkeys in info (red-team fix: key binding)
+    const info = Buffer.concat([
+      Buffer.from('cm-e2e'),
+      Buffer.from(clientEphPubHex, 'hex'),
+      Buffer.from(ephPubHex, 'hex'),
+    ]);
+    const key = crypto.hkdfSync('sha256', sharedSecret, ws._salt, info, 32);
+    ws._sessionKey = Buffer.from(key);
+    ws.encrypted = true;
+    delete ws._eph;
+    delete ws._salt;
+    audit('CRYPTO', 'E2E session established', ws._ip);
+    return true;
+  } catch (e) {
+    audit('CRYPTO', `Key exchange failed: ${e.message}`, ws._ip);
+    return false;
+  }
+}
+
+function secureSend(ws, obj) {
+  if (!ws.encrypted || !ws._sessionKey) {
+    // Pre-encryption: only key-exchange messages allowed
+    ws.send(JSON.stringify(obj));
+    return;
+  }
+  ws._sendSeq++;
+  // Counter-based IV: 4-byte zero prefix + 8-byte big-endian counter
+  const iv = Buffer.alloc(12);
+  iv.writeBigUInt64BE(BigInt(ws._sendSeq), 4);
+  const seqBuf = Buffer.alloc(8);
+  seqBuf.writeBigUInt64BE(BigInt(ws._sendSeq));
+  const cipher = crypto.createCipheriv('aes-256-gcm', ws._sessionKey, iv);
+  cipher.setAAD(seqBuf);
+  const plaintext = JSON.stringify(obj);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  const payload = Buffer.concat([iv, encrypted, tag]).toString('base64url');
+  ws.send(JSON.stringify({ e: payload, n: ws._sendSeq }));
+}
+
+function secureReceive(ws, rawStr) {
+  let parsed;
+  try { parsed = JSON.parse(rawStr); } catch { return null; }
+  // Key exchange messages are always plaintext
+  if (parsed.type === 'key-exchange') return parsed;
+  // Encrypted message
+  if (parsed.e) {
+    if (!ws.encrypted || !ws._sessionKey) return null;
+    // Replay protection: sequence must be strictly increasing
+    if (parsed.n <= ws._recvSeq) {
+      audit('SECURITY', `Replay detected: seq ${parsed.n} <= ${ws._recvSeq}`, ws._ip);
+      return null;
+    }
+    try {
+      const data = Buffer.from(parsed.e, 'base64url');
+      const iv = data.subarray(0, 12);
+      const tag = data.subarray(data.length - 16);
+      const ciphertext = data.subarray(12, data.length - 16);
+      const seqBuf = Buffer.alloc(8);
+      seqBuf.writeBigUInt64BE(BigInt(parsed.n));
+      const decipher = crypto.createDecipheriv('aes-256-gcm', ws._sessionKey, iv);
+      decipher.setAuthTag(tag);
+      decipher.setAAD(seqBuf);
+      const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+      ws._recvSeq = parsed.n;
+      return JSON.parse(decrypted.toString('utf8'));
+    } catch (e) {
+      audit('CRYPTO', `Decrypt failed: ${e.message}`, ws._ip);
+      return null;
+    }
+  }
+  // Plaintext message post-handshake = anti-downgrade violation
+  if (ws.encrypted) {
+    audit('SECURITY', 'Plaintext message rejected (anti-downgrade)', ws._ip);
+    return null;
+  }
+  return parsed;
+}
+
 // Session tokens: issued after auth, 30-min TTL, auto-rotated
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 min (short-lived, auto-refreshed)
 const sessionTokens = new Map(); // token -> { expires, ip }
@@ -292,7 +404,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // ─── Localhost-only setup page ─────────────────────────────────
 app.get('/setup', (req, res) => {
   if (!isLocalhost(req)) return res.status(403).send('Setup only available from localhost');
-  if (isSetupComplete()) return res.send('<h2>Setup already complete.</h2><p>TOTP configured. Use your phone to connect.</p>');
+  if (isSetupComplete()) return res.send(`<h2>Setup already complete.</h2><p>TOTP configured. Use your phone to connect.</p><p style="margin-top:16px;font-family:monospace;font-size:12px;color:#8b949e">Server fingerprint:<br><code style="color:#58a6ff">${identityKeys.fingerprint}</code></p>`);
   res.send(`<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Claude Mobile Setup</title>
 <style>body{font-family:system-ui;background:#0d1117;color:#e6edf3;display:flex;flex-direction:column;align-items:center;padding:40px;gap:20px}
@@ -478,18 +590,9 @@ app.post('/api/passkey/auth-verify', async (req, res) => {
   }
 });
 
-// Token refresh (silent rotation)
-app.post('/api/auth/refresh', (req, res) => {
-  const oldToken = req.body.sessionToken;
-  if (!validateSessionToken(oldToken, req.ip)) {
-    return res.status(401).json({ error: 'Token expired or invalid' });
-  }
-  const newToken = rotateSessionToken(oldToken, req.ip);
-  if (newToken) {
-    res.json({ sessionToken: newToken, ttl: SESSION_TTL_MS });
-  } else {
-    res.status(401).json({ error: 'Rotation failed' });
-  }
+// Token refresh -- deprecated (use WebSocket refresh path for E2E encryption)
+app.post('/api/auth/refresh', (_req, res) => {
+  res.status(410).json({ error: 'Deprecated. Use WebSocket refresh for E2E encrypted rotation.' });
 });
 
 // Kill switch
@@ -507,7 +610,8 @@ app.get('/api/auth/status', (_req, res) => {
   res.json({
     hasPasskey: storedCredentials.length > 0,
     hasTotp: totpConfigured(),
-    setupDone: isSetupComplete()
+    setupDone: isSetupComplete(),
+    serverFingerprint: identityKeys?.fingerprint || null,
   });
 });
 
@@ -618,16 +722,16 @@ function getSessionList() {
 }
 
 function broadcastSessions() {
-  const msg = JSON.stringify({ type: 'sessions', sessions: getSessionList() });
+  const obj = { type: 'sessions', sessions: getSessionList() };
   for (const client of allClients) {
-    if (client.authenticated && client.readyState === 1) client.send(msg);
+    if (client.authenticated && client.readyState === 1) secureSend(client, obj);
   }
 }
 
 function broadcastAttention(sessionId, reason) {
-  const msg = JSON.stringify({ type: 'attention', session: sessionId, reason });
+  const obj = { type: 'attention', session: sessionId, reason };
   for (const client of allClients) {
-    if (client.authenticated && client.readyState === 1) client.send(msg);
+    if (client.authenticated && client.readyState === 1) secureSend(client, obj);
   }
 }
 
@@ -654,9 +758,9 @@ function createSession(name, dir) {
     // Clear attention when new output arrives (Claude is responding)
     if (session.attention) { session.attention = null; broadcastSessions(); }
 
-    const msg = JSON.stringify({ type: 'output', session: id, data });
+    const obj = { type: 'output', session: id, data };
     for (const ws of session.clients) {
-      if (ws.readyState === 1) ws.send(msg);
+      if (ws.readyState === 1) secureSend(ws, obj);
     }
 
     // Debounce: wait for output to settle, then check accumulated buffer
@@ -712,14 +816,44 @@ wss.on('connection', (ws, req) => {
   allClients.add(ws);
   audit('CONNECT', `WebSocket opened`, ip);
 
+  // Initiate E2E key exchange immediately
+  initKeyExchange(ws);
+
+  // Anti-downgrade: close if not encrypted within 10 seconds
+  const encryptionTimeout = setTimeout(() => {
+    if (!ws.encrypted) {
+      audit('SECURITY', 'Encryption timeout -- closing connection', ws._ip);
+      ws.close(1008, 'Encryption required');
+    }
+  }, 10000);
+
   ws.on('message', (raw) => {
-    let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
+    const msg = secureReceive(ws, raw.toString());
+    if (!msg) return;
+
+    // ── Key exchange (E2E handshake) ──
+    if (msg.type === 'key-exchange') {
+      if (msg.ephemeral && !ws.encrypted) {
+        if (completeKeyExchange(ws, msg.ephemeral)) {
+          clearTimeout(encryptionTimeout);
+          secureSend(ws, { type: 'encrypted', status: 'ok' });
+        } else {
+          ws.close(1008, 'Key exchange failed');
+        }
+      }
+      return;
+    }
+
+    // Anti-downgrade: reject all non-key-exchange messages before encryption
+    if (!ws.encrypted) {
+      ws.close(1008, 'Encryption required');
+      return;
+    }
 
     // ── Auth via TOTP (backup 2FA) or session token re-auth ──
     if (msg.type === 'auth') {
       if (!checkGlobalRate() || !checkIPRate(ws._ip)) {
-        ws.send(JSON.stringify({ type: 'auth', success: false, locked: true }));
+        secureSend(ws, { type: 'auth', success: false, locked: true });
         return;
       }
       const setupDone = isSetupComplete();
@@ -727,7 +861,7 @@ wss.on('connection', (ws, req) => {
 
       // Not set up yet -- reject all remote auth
       if (!setupDone) {
-        ws.send(JSON.stringify({ type: 'auth', success: false, ...authState, reason: 'Setup required. Open http://localhost:' + PORT + '/setup on the laptop.' }));
+        secureSend(ws, { type: 'auth', success: false, ...authState, reason: 'Setup required. Open http://localhost:' + PORT + '/setup on the laptop.' });
         return;
       }
 
@@ -737,8 +871,8 @@ wss.on('connection', (ws, req) => {
         ws._sessionToken = msg.sessionToken;
         lastAuthenticatedActivity = Date.now();
         audit('AUTH', `Session token re-auth`, ws._ip);
-        ws.send(JSON.stringify({ type: 'auth', success: true, sessionToken: msg.sessionToken, ...authState }));
-        ws.send(JSON.stringify({ type: 'sessions', sessions: getSessionList() }));
+        secureSend(ws, { type: 'auth', success: true, sessionToken: msg.sessionToken, ...authState });
+        secureSend(ws, { type: 'sessions', sessions: getSessionList() });
         return;
       }
 
@@ -750,15 +884,15 @@ wss.on('connection', (ws, req) => {
         authAttempts.delete(ws._ip);
         lastAuthenticatedActivity = Date.now();
         audit('AUTH', `TOTP auth successful`, ws._ip);
-        ws.send(JSON.stringify({ type: 'auth', success: true, sessionToken: st, ...authState }));
-        ws.send(JSON.stringify({ type: 'sessions', sessions: getSessionList() }));
+        secureSend(ws, { type: 'auth', success: true, sessionToken: st, ...authState });
+        secureSend(ws, { type: 'sessions', sessions: getSessionList() });
         return;
       }
 
       recordIPFailure(ws._ip);
       recordGlobalFailure(ws._ip);
       audit('AUTH', `Failed auth attempt`, ws._ip);
-      ws.send(JSON.stringify({ type: 'auth', success: false, ...authState }));
+      secureSend(ws, { type: 'auth', success: false, ...authState });
       return;
     }
 
@@ -768,10 +902,10 @@ wss.on('connection', (ws, req) => {
         ws.authenticated = true;
         ws._sessionToken = msg.sessionToken;
         lastAuthenticatedActivity = Date.now();
-        ws.send(JSON.stringify({ type: 'auth', success: true, sessionToken: msg.sessionToken, hasPasskey: true }));
-        ws.send(JSON.stringify({ type: 'sessions', sessions: getSessionList() }));
+        secureSend(ws, { type: 'auth', success: true, sessionToken: msg.sessionToken, hasPasskey: true });
+        secureSend(ws, { type: 'sessions', sessions: getSessionList() });
       } else {
-        ws.send(JSON.stringify({ type: 'auth', success: false }));
+        secureSend(ws, { type: 'auth', success: false });
       }
       return;
     }
@@ -782,21 +916,21 @@ wss.on('connection', (ws, req) => {
         const newToken = rotateSessionToken(ws._sessionToken, ws._ip);
         if (newToken) {
           ws._sessionToken = newToken;
-          ws.send(JSON.stringify({ type: 'refreshed', sessionToken: newToken, ttl: SESSION_TTL_MS }));
+          secureSend(ws, { type: 'refreshed', sessionToken: newToken, ttl: SESSION_TTL_MS });
         }
       }
       return;
     }
 
     if (!ws.authenticated) {
-      ws.send(JSON.stringify({ type: 'error', message: 'Not authenticated' }));
+      secureSend(ws, { type: 'error', message: 'Not authenticated' });
       return;
     }
 
     // Check session token still valid
     if (ws._sessionToken && !validateSessionToken(ws._sessionToken, ws._ip)) {
       ws.authenticated = false;
-      ws.send(JSON.stringify({ type: 'expired' }));
+      secureSend(ws, { type: 'expired' });
       audit('AUTH', `Session expired`, ws._ip);
       return;
     }
@@ -808,15 +942,15 @@ wss.on('connection', (ws, req) => {
         const dir = msg.dir || config.projects[0].dir;
         const allowedDirs = config.projects.map(p => p.dir);
         if (!allowedDirs.includes(dir)) {
-          ws.send(JSON.stringify({ type: 'error', message: 'Directory not in allowed project list' }));
+          secureSend(ws, { type: 'error', message: 'Directory not in allowed project list' });
           break;
         }
         const session = createSession(msg.name || 'Session', dir);
         if (session) {
           broadcastSessions();
-          ws.send(JSON.stringify({ type: 'created', session: session.id }));
+          secureSend(ws, { type: 'created', session: session.id });
         } else {
-          ws.send(JSON.stringify({ type: 'error', message: 'Max sessions reached (4)' }));
+          secureSend(ws, { type: 'error', message: 'Max sessions reached (4)' });
         }
         break;
       }
@@ -832,10 +966,10 @@ wss.on('connection', (ws, req) => {
         if (session.scrollback) {
           // Phase 2: redact secrets from scrollback
           const safe = redactSecrets(session.scrollback);
-          ws.send(JSON.stringify({ type: 'scrollback', session: session.id, data: safe }));
+          secureSend(ws, { type: 'scrollback', session: session.id, data: safe });
         }
         if (session.attention) {
-          ws.send(JSON.stringify({ type: 'attention', session: session.id, reason: session.attention }));
+          secureSend(ws, { type: 'attention', session: session.id, reason: session.attention });
         }
         break;
       }
@@ -847,7 +981,7 @@ wss.on('connection', (ws, req) => {
           const canary = checkCanary(msg.data);
           if (canary) {
             audit('CANARY', `Suspicious input detected: ${canary}`, ws._ip);
-            ws.send(JSON.stringify({ type: 'warning', message: `Canary triggered: ${canary}` }));
+            secureSend(ws, { type: 'warning', message: `Canary triggered: ${canary}` });
           }
           const inputHash = crypto.createHash('sha256').update(msg.data).digest('hex').slice(0, 12);
           audit('INPUT', `session=${ws.currentSession} len=${msg.data.length} hash=${inputHash}`, ws._ip);
@@ -910,7 +1044,7 @@ setInterval(() => {
   for (const ws of allClients) {
     if (ws.authenticated && ws._sessionToken && !validateSessionToken(ws._sessionToken, ws._ip)) {
       ws.authenticated = false;
-      ws.send(JSON.stringify({ type: 'expired' }));
+      secureSend(ws, { type: 'expired' });
       audit('AUTH', `Session auto-expired`, ws._ip);
     }
   }
@@ -1007,6 +1141,7 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`  Setup:    http://localhost:${PORT}/setup`);
     console.log(`            (laptop only -- open this URL to configure)`);
   }
+  console.log(`  Identity: ${identityKeys.fingerprint.slice(0, 16)}...`);
   console.log(`  Audit:    ${AUDIT_PATH}`);
   console.log(`  Shutdown: auto after 8h idle`);
   console.log('  ────────────────────────────────');
