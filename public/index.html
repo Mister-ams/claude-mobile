@@ -582,6 +582,177 @@ let reconnectDelay = 1000;
 let sessionToken = null;
 let refreshTimer = null;
 
+// ── E2E Encryption State ──
+let e2eKey = null; // CryptoKey for AES-256-GCM
+let e2eSendSeq = 0, e2eRecvSeq = 0;
+let e2eReady = false;
+let pendingAuth = null; // { method, totpCode } -- deferred until E2E ready
+let sendQueue = Promise.resolve();
+
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  return bytes;
+}
+
+function bytesToHex(bytes) {
+  return Array.from(new Uint8Array(bytes)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function base64urlEncode(buf) {
+  const bytes = new Uint8Array(buf);
+  let str = '';
+  for (const b of bytes) str += String.fromCharCode(b);
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+function base64urlDecode(s) {
+  const str = s.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = str.length % 4 === 0 ? '' : '='.repeat(4 - (str.length % 4));
+  const binary = atob(str + pad);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function handleKeyExchange(msg) {
+  showStatus('Establishing secure channel...', 'var(--accent)');
+  try {
+    // Import server identity pubkey for signature verification
+    const identityDer = hexToBytes(msg.identity);
+    const identityKey = await crypto.subtle.importKey('spki', identityDer,
+      { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+
+    // Verify ECDSA signature on ephemeral pubkey
+    const ephBytes = hexToBytes(msg.ephemeral);
+    const sigBytes = hexToBytes(msg.sig);
+    const valid = await crypto.subtle.verify(
+      { name: 'ECDSA', hash: 'SHA-256' }, identityKey, sigBytes, ephBytes);
+    if (!valid) {
+      showStatus('SIGNATURE INVALID -- connection rejected', 'var(--intent-danger)');
+      ws.close(); return;
+    }
+
+    // TOFU fingerprint check
+    const fpBuf = await crypto.subtle.digest('SHA-256', identityDer);
+    const fingerprint = bytesToHex(fpBuf);
+    const storedFP = localStorage.getItem('cm-server-fp');
+
+    if (!storedFP) {
+      // First connection -- show confirmation
+      const shortFP = fingerprint.slice(0, 8) + ' ' + fingerprint.slice(8, 16) +
+                       ' ' + fingerprint.slice(16, 24) + ' ' + fingerprint.slice(24, 32);
+      if (!confirm('First secure connection.\n\nServer fingerprint:\n' + shortFP +
+                    '\n\nVerify this matches your laptop /setup page.\nPin this server?')) {
+        ws.close(); return;
+      }
+      localStorage.setItem('cm-server-fp', fingerprint);
+    } else if (storedFP !== fingerprint) {
+      // Key changed -- warning
+      const oldShort = storedFP.slice(0, 16);
+      const newShort = fingerprint.slice(0, 16);
+      if (!confirm('WARNING: SERVER KEY CHANGED\n\nOld: ' + oldShort + '...\nNew: ' + newShort +
+                    '...\n\nThis could indicate a man-in-the-middle attack.\nRe-pin new key?')) {
+        ws.close(); return;
+      }
+      localStorage.setItem('cm-server-fp', fingerprint);
+    }
+
+    // Generate client ephemeral ECDH keypair
+    const clientKP = await crypto.subtle.generateKey(
+      { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+
+    // Import server ephemeral pubkey
+    // The server sends raw EC point (uncompressed), we need to wrap in SPKI for Web Crypto
+    // Actually, server uses createECDH which gives raw format -- import as raw
+    const serverEphKey = await crypto.subtle.importKey('raw', ephBytes,
+      { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+
+    // Derive shared secret
+    const sharedBits = await crypto.subtle.deriveBits(
+      { name: 'ECDH', public: serverEphKey }, clientKP.privateKey, 256);
+
+    // Export client public key as raw
+    const clientPubRaw = await crypto.subtle.exportKey('raw', clientKP.publicKey);
+    const clientPubHex = bytesToHex(clientPubRaw);
+
+    // HKDF: derive AES key
+    const salt = hexToBytes(msg.salt);
+    const info = new Uint8Array([
+      ...new TextEncoder().encode('cm-e2e'),
+      ...new Uint8Array(clientPubRaw),
+      ...ephBytes,
+    ]);
+    const hkdfKey = await crypto.subtle.importKey('raw', sharedBits, 'HKDF', false, ['deriveBits']);
+    const derivedBits = await crypto.subtle.deriveBits(
+      { name: 'HKDF', hash: 'SHA-256', salt, info }, hkdfKey, 256);
+    e2eKey = await crypto.subtle.importKey('raw', derivedBits,
+      { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+
+    e2eSendSeq = 0;
+    e2eRecvSeq = 0;
+    e2eReady = true;
+
+    // Send client ephemeral pubkey (plaintext -- last unencrypted message)
+    ws.send(JSON.stringify({ type: 'key-exchange', ephemeral: clientPubHex }));
+    showStatus('Secure channel established', 'var(--intent-ok)');
+  } catch (err) {
+    showStatus('Key exchange failed: ' + err.message, 'var(--intent-danger)');
+    ws.close();
+  }
+}
+
+async function secureSend(obj) {
+  if (!e2eReady || !e2eKey) {
+    ws.send(JSON.stringify(obj));
+    return;
+  }
+  e2eSendSeq++;
+  // Counter-based IV: 4 zero bytes + 8-byte big-endian counter
+  const iv = new Uint8Array(12);
+  const dv = new DataView(iv.buffer);
+  dv.setBigUint64(4, BigInt(e2eSendSeq));
+  const seqBuf = new Uint8Array(8);
+  new DataView(seqBuf.buffer).setBigUint64(0, BigInt(e2eSendSeq));
+  const plaintext = new TextEncoder().encode(JSON.stringify(obj));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, additionalData: seqBuf }, e2eKey, plaintext);
+  // AES-GCM output = ciphertext + tag (last 16 bytes) appended by Web Crypto
+  const combined = new Uint8Array(12 + encrypted.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(encrypted), 12);
+  ws.send(JSON.stringify({ e: base64urlEncode(combined), n: e2eSendSeq }));
+}
+
+function queueSend(obj) {
+  sendQueue = sendQueue.then(() => secureSend(obj)).catch(() => {});
+}
+
+async function secureReceive(rawData) {
+  let parsed;
+  try { parsed = JSON.parse(rawData); } catch { return null; }
+  if (parsed.type === 'key-exchange') return parsed;
+  if (parsed.type === 'encrypted') return parsed; // handshake ack
+  if (parsed.e) {
+    if (!e2eReady || !e2eKey) return null;
+    if (parsed.n <= e2eRecvSeq) return null; // replay
+    try {
+      const data = base64urlDecode(parsed.e);
+      const iv = data.subarray(0, 12);
+      const ciphertext = data.subarray(12); // includes tag (Web Crypto handles it)
+      const seqBuf = new Uint8Array(8);
+      new DataView(seqBuf.buffer).setBigUint64(0, BigInt(parsed.n));
+      const decrypted = await crypto.subtle.decrypt(
+        { name: 'AES-GCM', iv, additionalData: seqBuf }, e2eKey, ciphertext);
+      e2eRecvSeq = parsed.n;
+      return JSON.parse(new TextDecoder().decode(decrypted));
+    } catch { return null; }
+  }
+  // Plaintext after encryption = anti-downgrade violation
+  if (e2eReady) return null;
+  return parsed;
+}
+
 // Silent token rotation: refresh at 75% of TTL so the token
 // is always fresh. Old token invalidated immediately on rotation.
 function scheduleTokenRefresh(ttl) {
@@ -589,7 +760,7 @@ function scheduleTokenRefresh(ttl) {
   const interval = (ttl || 30 * 60 * 1000) * 0.75; // 75% of TTL
   refreshTimer = setTimeout(() => {
     if (ws && ws.readyState === 1 && sessionToken) {
-      ws.send(JSON.stringify({ type: 'refresh' }));
+      queueSend({ type: 'refresh' });
     }
   }, interval);
 }
@@ -794,30 +965,49 @@ $('totp-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.p
 
 function doConnect(method, totpCode) {
   if (ws) try { ws.close(); } catch {}
+  e2eReady = false; e2eKey = null; e2eSendSeq = 0; e2eRecvSeq = 0;
+  sendQueue = Promise.resolve();
+  pendingAuth = { method, totpCode };
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(`${proto}//${location.host}`);
   ws.onopen = () => {
     reconnectDelay = 1000; dot.className = 'dot on';
-    showStatus('Authenticating...', 'var(--intent-ok)');
-    if (method === 'passkey' && sessionToken) {
-      ws.send(JSON.stringify({ type: 'auth-passkey', sessionToken }));
-    } else if (method === 'totp' && totpCode) {
-      ws.send(JSON.stringify({ type: 'auth', totp: totpCode }));
-    } else if (sessionToken) {
-      ws.send(JSON.stringify({ type: 'auth', sessionToken }));
-    } else {
-      showStatus('Please authenticate', 'var(--dim)');
-    }
+    showStatus('Connecting securely...', 'var(--accent)');
+    // Wait for server key-exchange -- auth deferred until E2E ready
   };
   ws.onclose = () => {
-    dot.className = 'dot off';
+    dot.className = 'dot off'; e2eReady = false;
     if (sessionToken) { showStatus('Reconnecting...', 'var(--intent-warn)'); setTimeout(doConnect, reconnectDelay); }
     reconnectDelay = Math.min(reconnectDelay * 2, 30000);
   };
   ws.onerror = () => {
     showStatus('Cannot reach server.', 'var(--intent-danger)');
   };
-  ws.onmessage = e => handle(JSON.parse(e.data));
+  ws.onmessage = async (e) => {
+    const msg = await secureReceive(e.data);
+    if (!msg) return;
+    // Handle key-exchange first
+    if (msg.type === 'key-exchange') {
+      await handleKeyExchange(msg);
+      return;
+    }
+    // After encryption established, send deferred auth
+    if (msg.type === 'encrypted' && msg.status === 'ok' && pendingAuth) {
+      const { method: m, totpCode: tc } = pendingAuth;
+      pendingAuth = null;
+      if (m === 'passkey' && sessionToken) {
+        queueSend({ type: 'auth-passkey', sessionToken });
+      } else if (m === 'totp' && tc) {
+        queueSend({ type: 'auth', totp: tc });
+      } else if (sessionToken) {
+        queueSend({ type: 'auth', sessionToken });
+      } else {
+        showStatus('Please authenticate', 'var(--dim)');
+      }
+      return;
+    }
+    handle(msg);
+  };
 }
 
 function handle(m) {
@@ -828,7 +1018,7 @@ function handle(m) {
         pinScreen.style.display = 'none'; appEl.style.display = 'flex';
         loadProjects();
         scheduleTokenRefresh();
-        if (activeSession !== null) ws.send(JSON.stringify({ type: 'connect', session: activeSession }));
+        if (activeSession !== null) queueSend({ type: 'connect', session: activeSession });
         if (m.hasTotp && !m.hasPasskey && window.PublicKeyCredential && !localStorage.getItem('passkey-dismissed')) {
           setTimeout(async () => {
             if (confirm('Register Face ID for instant login next time?')) {
@@ -951,7 +1141,7 @@ function switchTo(id) {
         fitAddon.fit();
         const dims = fitAddon.proposeDimensions();
         if (dims && ws && ws.readyState === 1) {
-          ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+          queueSend({ type: 'resize', cols: dims.cols, rows: dims.rows });
           updateDiag(dims.cols, dims.rows);
         }
       } catch {}
@@ -967,7 +1157,7 @@ function switchTo(id) {
   }
 
   emptyState.style.display = 'none';
-  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'connect', session: id }));
+  if (ws && ws.readyState === 1) queueSend({ type: 'connect', session: id });
   updateHdr(); renderTabs();
 }
 
@@ -977,7 +1167,7 @@ function closeSession(id) {
   if (terms[id]) { terms[id].dispose(); delete terms[id]; delete fits[id]; }
   const w = document.getElementById(`tw-${id}`);
   if (w) w.remove();
-  ws.send(JSON.stringify({ type: 'close', session: id }));
+  queueSend({ type: 'close', session: id });
   if (activeSession === id) {
     activeSession = null;
     const rest = sessions.filter(x => x.id !== id);
@@ -1004,7 +1194,7 @@ function commitRename() {
   const s = sessions.find(x => x.id === activeSession);
   if (s && name !== s.name) {
     s.name = name;
-    ws.send(JSON.stringify({ type: 'rename', session: activeSession, name }));
+    queueSend({ type: 'rename', session: activeSession, name });
     renderTabs();
   }
 }
@@ -1085,7 +1275,7 @@ function newSession() {
   if (!ws || ws.readyState !== 1) return;
   const num = sessions.length + 1;
   const defaultDir = 'C:\\Users\\MRAL-\\Projects\\loomi-os';
-  ws.send(JSON.stringify({ type: 'create', name: 'Session ' + num, dir: defaultDir }));
+  queueSend({ type: 'create', name: 'Session ' + num, dir: defaultDir });
 }
 
 // ── Safari-style Gesture Navigation ──
@@ -1286,7 +1476,7 @@ function autoGrow() {
 
 function qsend(k) {
   if (!ws || ws.readyState !== 1 || activeSession === null) return;
-  ws.send(JSON.stringify({ type: 'input', data: k }));
+  queueSend({ type: 'input', data: k });
 }
 
 function toggleDiag() {
@@ -1453,7 +1643,7 @@ function doResize() {
       fits[activeSession].fit();
       const dims = fits[activeSession].proposeDimensions();
       if (dims && ws && ws.readyState === 1) {
-        ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }));
+        queueSend({ type: 'resize', cols: dims.cols, rows: dims.rows });
         updateDiag(dims.cols, dims.rows);
       }
     } catch {}
