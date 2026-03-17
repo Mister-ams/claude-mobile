@@ -97,12 +97,12 @@
       font-size: 14px; line-height: 1.286;
       -webkit-tap-highlight-color: transparent;
     }
-    #app { display: none; flex-direction: column; height: 100vh; position: relative; overflow: hidden; }
+    #app { display: none; flex-direction: column; height: 100dvh; position: relative; overflow: hidden; }
 
     /* ── Auth Screen ── */
     #pin-screen {
       display: flex; flex-direction: column; align-items: center;
-      justify-content: center; height: 100vh; gap: 20px;
+      justify-content: center; height: 100dvh; gap: 20px;
       animation: fadeIn 0.3s var(--transition);
     }
     @keyframes fadeIn {
@@ -162,7 +162,7 @@
       gap: 8px;
     }
     .sess-name {
-      font-size: 13px; font-weight: 600;
+      font-size: 16px; font-weight: 600;
       background: none; border: none; border-bottom: 1px dashed transparent;
       color: var(--text); outline: none;
       width: auto; max-width: 180px; min-width: 60px;
@@ -178,7 +178,7 @@
       background: none; border: 1px solid var(--border);
       border-radius: var(--radius); color: var(--dim); font-size: 11px;
       font-weight: 600; padding: 6px 10px; cursor: pointer; display: none;
-      min-height: 32px;
+      min-height: 44px; min-width: 44px;
       transition: all 0.1s var(--transition);
     }
     .close-btn:active { background: var(--intent-danger); color: #fff; border-color: var(--intent-danger); }
@@ -261,7 +261,7 @@
     #qbar::-webkit-scrollbar { display: none; }
     .qb {
       flex: 1; padding: 8px 6px; font-size: 11px;
-      min-height: 34px;
+      min-height: 44px;
       display: flex; align-items: center; justify-content: center;
       background: var(--surface-alt); border: 1px solid var(--border);
       border-radius: var(--radius); color: var(--text-sec); cursor: pointer;
@@ -287,7 +287,7 @@
       background: none; border: 1px solid var(--border);
       border-radius: var(--radius); color: var(--dim); font-size: 11px;
       font-weight: 600; padding: 4px 8px; cursor: pointer;
-      min-height: 28px; min-width: 28px;
+      min-height: 44px; min-width: 44px;
       transition: all 0.1s var(--transition);
     }
 
@@ -312,7 +312,7 @@
     #img-btn:active { background: var(--accent); color: #fff; border-color: var(--accent); }
     #img-btn.has-img { background: var(--accent-muted); color: var(--accent-light); border-color: var(--accent); }
     #msg {
-      flex: 1; padding: 8px 10px; font-size: 14px;
+      flex: 1; padding: 8px 10px; font-size: 16px;
       background: var(--bg); border: 1px solid var(--border);
       border-radius: var(--radius); color: var(--text); outline: none;
       font-family: 'SF Mono', 'Menlo', monospace;
@@ -368,7 +368,7 @@
       flex: 1; display: flex; align-items: center; gap: 6px;
       background: var(--bg); border: 1px solid var(--border);
       border-radius: var(--radius); padding: 0 10px;
-      height: 34px; min-width: 0; cursor: pointer;
+      height: 44px; min-width: 0; cursor: pointer;
       transition: border-color 0.15s var(--transition);
       overflow: hidden;
     }
@@ -377,7 +377,7 @@
       flex: 1; font-size: 12px; color: var(--text);
       font-family: 'SF Mono', 'Menlo', monospace;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      line-height: 34px;
+      line-height: 44px;
     }
     #tab-pill .pill-dir {
       font-size: 10px; color: var(--dim);
@@ -394,7 +394,7 @@
     #tab-pill.attn .pill-attn { display: block; }
     /* Tab count badge */
     #tab-count-btn {
-      flex-shrink: 0; width: 34px; height: 34px;
+      flex-shrink: 0; width: 44px; height: 44px;
       display: flex; align-items: center; justify-content: center;
       background: none; border: 1px solid var(--border);
       border-radius: var(--radius); color: var(--text-sec);
@@ -405,7 +405,7 @@
     #tab-count-btn:active { border-color: var(--accent); color: var(--accent-light); }
     /* New tab button */
     #tab-new-btn {
-      flex-shrink: 0; width: 34px; height: 34px;
+      flex-shrink: 0; width: 44px; height: 44px;
       display: flex; align-items: center; justify-content: center;
       background: none; border: 1px solid var(--border);
       border-radius: var(--radius); color: var(--accent-light);
@@ -476,6 +476,10 @@
     @keyframes pulse {
       0%,100% { opacity:1; transform:scale(1); }
       50% { opacity:0.6; transform:scale(0.8); }
+    }
+    /* Reduced motion support */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
     }
   </style>
 </head>
