@@ -271,37 +271,96 @@
     .ac-item .ac-cmd { font-weight: 600; color: var(--accent-light); }
     .ac-item .ac-desc { color: var(--dim); font-size: 12px; margin-left: 8px; }
 
-    /* ── Tab Strip (Safari-style) ── */
+    /* ── Safari Address Bar Tab Strip ── */
     #tabs {
-      display: flex; align-items: center; justify-content: center;
-      background: var(--surface); gap: 6px;
-      padding: 10px 12px; padding-bottom: calc(10px + max(8px, env(safe-area-inset-bottom)));
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface);
+      padding: 8px 12px; padding-bottom: calc(8px + max(12px, env(safe-area-inset-bottom)));
       border-top: 1px solid var(--border);
-      min-height: 28px; position: relative;
+      min-height: 52px; position: relative;
     }
-    .tab-dot {
-      width: 10px; height: 10px; border-radius: 50%;
-      background: var(--border); border: none; cursor: pointer;
-      padding: 14px 10px; background-clip: content-box;
-      transition: all 0.2s var(--transition);
-      position: relative;
+    /* Active session pill -- Safari address bar style */
+    #tab-pill {
+      flex: 1; display: flex; align-items: center; gap: 8px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 12px; padding: 0 14px;
+      height: 44px; min-width: 0; cursor: pointer;
+      transition: border-color 0.15s var(--transition);
+      overflow: hidden;
     }
-    .tab-dot.on { background: var(--accent-light); width: 28px; border-radius: 4px; background-clip: content-box; }
-    .tab-dot.attn { background: var(--red); animation: pulse 1.5s infinite; }
-    .tab-label {
-      position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
-      background: var(--surface-alt); color: var(--text); font-size: 11px;
-      padding: 4px 8px; border-radius: var(--radius); white-space: nowrap;
-      pointer-events: none; opacity: 0; transition: opacity 0.15s;
-      border: 1px solid var(--border); font-family: 'SF Mono', monospace;
-      margin-bottom: 4px;
+    #tab-pill:active { border-color: var(--accent); }
+    #tab-pill .pill-name {
+      flex: 1; font-size: 13px; color: var(--text);
+      font-family: 'SF Mono', 'Menlo', monospace;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      line-height: 44px;
     }
-    .tab-dot.on .tab-label { opacity: 1; }
-    #tab-counter {
-      position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-      font-size: 10px; color: var(--dim);
-      font-family: 'SF Mono', monospace;
+    #tab-pill .pill-dir {
+      font-size: 11px; color: var(--dim);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      max-width: 120px;
     }
+    /* Attention dot inside pill */
+    #tab-pill .pill-attn {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--red); flex-shrink: 0;
+      animation: pulse 1.5s infinite; display: none;
+    }
+    #tab-pill.attn .pill-attn { display: block; }
+    /* Tab count badge -- Safari style rounded square */
+    #tab-count-btn {
+      flex-shrink: 0; width: 44px; height: 44px;
+      display: flex; align-items: center; justify-content: center;
+      background: none; border: 1.5px solid var(--text-sec);
+      border-radius: 8px; color: var(--text-sec);
+      font-size: 14px; font-weight: 700; cursor: pointer;
+      font-family: 'SF Mono', 'Menlo', monospace;
+      transition: all 0.15s var(--transition);
+    }
+    #tab-count-btn:active { border-color: var(--accent); color: var(--accent-light); }
+    /* New tab button */
+    #tab-new-btn {
+      flex-shrink: 0; width: 44px; height: 44px;
+      display: flex; align-items: center; justify-content: center;
+      background: none; border: none; color: var(--accent-light);
+      font-size: 26px; font-weight: 300; cursor: pointer;
+      transition: all 0.15s var(--transition);
+    }
+    #tab-new-btn:active { color: #fff; transform: scale(0.9); }
+    /* Tab switcher overlay */
+    #tab-switcher {
+      display: none; position: absolute; bottom: 100%; left: 0; right: 0;
+      background: var(--surface); border-top: 1px solid var(--border);
+      max-height: 240px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+      z-index: 50; box-shadow: 0 -8px 24px rgba(0,0,0,0.4);
+    }
+    #tab-switcher.open { display: block; }
+    .switcher-item {
+      display: flex; align-items: center; gap: 10px;
+      width: 100%; padding: 14px 16px; border: none;
+      background: none; color: var(--text); font-size: 13px;
+      text-align: left; cursor: pointer;
+      font-family: 'SF Mono', 'Menlo', monospace;
+      border-bottom: 1px solid var(--border);
+      min-height: 48px;
+      transition: background 0.1s;
+    }
+    .switcher-item:active { background: var(--surface-hover); }
+    .switcher-item.active { background: var(--surface-alt); }
+    .switcher-item .sw-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .switcher-item .sw-attn {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--red); flex-shrink: 0;
+      animation: pulse 1.5s infinite;
+    }
+    .switcher-item .sw-close {
+      flex-shrink: 0; width: 28px; height: 28px;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(205,66,70,0.12); border: 1px solid var(--red);
+      border-radius: 6px; color: var(--red); font-size: 13px;
+      font-weight: 600; cursor: pointer;
+    }
+    .switcher-item .sw-close:active { background: var(--red); color: #fff; }
     /* Swipe hint edges */
     #swipe-hint-left, #swipe-hint-right {
       position: absolute; top: 0; bottom: 0; width: 4px;
@@ -329,13 +388,6 @@
       0%,100% { opacity:1; transform:scale(1); }
       50% { opacity:0.6; transform:scale(0.8); }
     }
-    .tab-add {
-      flex: 0 0 56px; display: flex; align-items: center; justify-content: center;
-      border: none; background: none; color: var(--accent); font-size: 22px;
-      cursor: pointer; min-height: 44px;
-      transition: all 0.1s var(--transition);
-    }
-    .tab-add:active { color: var(--accent-light); }
   </style>
 </head>
 <body>
@@ -417,7 +469,14 @@
   </div>
 
   <div id="tabs">
-    <span id="tab-counter"></span>
+    <div id="tab-switcher"></div>
+    <div id="tab-pill" onclick="toggleSwitcher()">
+      <span class="pill-attn"></span>
+      <span class="pill-name">No session</span>
+      <span class="pill-dir"></span>
+    </div>
+    <button id="tab-count-btn" onclick="toggleSwitcher()" aria-label="Switch tabs">0</button>
+    <button id="tab-new-btn" onclick="newSession()" aria-label="New session">+</button>
   </div>
   <div id="swipe-hint-left"></div>
   <div id="swipe-hint-right"></div>
@@ -857,32 +916,75 @@ function commitRename() {
 }
 
 function renderTabs() {
-  const counter = $('tab-counter');
-  const idx = sessions.findIndex(x => x.id === activeSession);
-  counter.textContent = sessions.length ? `${idx + 1}/${sessions.length}` : '';
-  // Render dot indicators
-  const dotsOnly = tabsEl.querySelectorAll('.tab-dot');
-  dotsOnly.forEach(d => d.remove());
-  const counterEl = tabsEl.querySelector('#tab-counter');
-  sessions.forEach((s, i) => {
-    const dot = document.createElement('button');
-    dot.className = 'tab-dot' + (s.id === activeSession ? ' on' : '') + (s.attention ? ' attn' : '');
-    dot.onclick = () => switchTo(s.id);
-    dot.setAttribute('aria-label', s.name);
-    // Long-press to close
-    let hold = null;
-    dot.addEventListener('touchstart', () => { hold = setTimeout(() => { hold = null; closeSession(s.id); }, 800); }, { passive: true });
-    dot.addEventListener('touchend', () => { if (hold) clearTimeout(hold); });
-    dot.addEventListener('touchmove', () => { if (hold) clearTimeout(hold); });
-    // Tooltip label on active dot
-    if (s.id === activeSession) {
-      const lbl = document.createElement('span');
-      lbl.className = 'tab-label';
-      lbl.textContent = s.name;
-      dot.appendChild(lbl);
+  const pill = $('tab-pill');
+  const pillName = pill.querySelector('.pill-name');
+  const pillDir = pill.querySelector('.pill-dir');
+  const countBtn = $('tab-count-btn');
+  const s = sessions.find(x => x.id === activeSession);
+
+  // Update pill content
+  pillName.textContent = s ? s.name : 'No session';
+  pillDir.textContent = s ? s.dir.split('\\').pop() : '';
+  pill.classList.toggle('attn', !!(s && s.attention));
+
+  // Update count badge
+  countBtn.textContent = sessions.length || '0';
+
+  // Check if any non-active session needs attention
+  const anyAttn = sessions.some(x => x.id !== activeSession && x.attention);
+  countBtn.style.borderColor = anyAttn ? 'var(--red)' : '';
+  countBtn.style.color = anyAttn ? 'var(--red)' : '';
+
+  // Update switcher if open
+  renderSwitcher();
+}
+
+function toggleSwitcher() {
+  const sw = $('tab-switcher');
+  sw.classList.toggle('open');
+  if (sw.classList.contains('open')) renderSwitcher();
+}
+
+function closeSwitcher() {
+  $('tab-switcher').classList.remove('open');
+}
+
+function renderSwitcher() {
+  const sw = $('tab-switcher');
+  if (!sw.classList.contains('open')) return;
+  sw.innerHTML = '';
+  sessions.forEach(s => {
+    const item = document.createElement('div');
+    item.className = 'switcher-item' + (s.id === activeSession ? ' active' : '');
+    // Attention dot
+    if (s.attention) {
+      const attn = document.createElement('span');
+      attn.className = 'sw-attn';
+      item.appendChild(attn);
     }
-    tabsEl.insertBefore(dot, counterEl);
+    // Name
+    const name = document.createElement('span');
+    name.className = 'sw-name';
+    name.textContent = s.name;
+    item.appendChild(name);
+    // Close button
+    const close = document.createElement('button');
+    close.className = 'sw-close';
+    close.textContent = 'x';
+    close.onclick = (e) => { e.stopPropagation(); closeSession(s.id); };
+    item.appendChild(close);
+    // Tap to switch
+    item.onclick = () => { switchTo(s.id); closeSwitcher(); };
+    sw.appendChild(item);
   });
+  if (!sessions.length) {
+    const empty = document.createElement('div');
+    empty.className = 'switcher-item';
+    empty.style.color = 'var(--dim)';
+    empty.style.justifyContent = 'center';
+    empty.textContent = 'No sessions';
+    sw.appendChild(empty);
+  }
 }
 
 function newSession() {
@@ -904,7 +1006,15 @@ function getActiveIndex() {
   return sessions.findIndex(s => s.id === activeSession);
 }
 
+// Close switcher when tapping outside
+document.addEventListener('click', e => {
+  const sw = $('tab-switcher');
+  if (!sw.classList.contains('open')) return;
+  if (!e.target.closest('#tabs')) closeSwitcher();
+});
+
 function navigateTab(direction) {
+  closeSwitcher();
   const idx = getActiveIndex();
   if (idx < 0) return false;
   const target = idx + direction;
