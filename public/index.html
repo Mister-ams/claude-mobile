@@ -1169,6 +1169,7 @@ function sendMsg() {
   msgInput.value = '';
   autoGrow();
   updateSendBtn();
+  userScrolled = false; // auto-follow new output after sending
   msgInput.style.borderColor = 'var(--green)';
   setTimeout(() => { msgInput.style.borderColor = ''; }, 300);
 }
@@ -1258,10 +1259,13 @@ function scrollTerm(lines) {
 }
 
 function scrollBottom() {
-  if (activeSession !== null && terms[activeSession]) {
-    userScrolled = false;
-    terms[activeSession].scrollToBottom();
-  }
+  if (activeSession === null || !terms[activeSession]) return;
+  userScrolled = false;
+  // Refit first so terminal uses full available height, then scroll
+  try { fits[activeSession]?.fit(); } catch {}
+  requestAnimationFrame(() => {
+    terms[activeSession]?.scrollToBottom();
+  });
 }
 
 function setupScrollZones() {
@@ -1425,9 +1429,22 @@ function updateDiag(cols, rows) {
 
 window.addEventListener('resize', doResize);
 if (window.visualViewport) {
+  let lastVVH = window.visualViewport.height;
   window.visualViewport.addEventListener('resize', () => {
-    appEl.style.height = window.visualViewport.height + 'px';
+    const h = window.visualViewport.height;
+    appEl.style.height = h + 'px';
+    const keyboardDismissed = h > lastVVH + 50;
+    lastVVH = h;
     doResize();
+    // When keyboard dismisses, refit fills the reclaimed space --
+    // scroll to bottom so content sits above the quick action bar
+    if (keyboardDismissed && !userScrolled) {
+      requestAnimationFrame(() => {
+        if (activeSession !== null && terms[activeSession]) {
+          terms[activeSession].scrollToBottom();
+        }
+      });
+    }
   });
   window.visualViewport.addEventListener('scroll', () => window.scrollTo(0, 0));
 }
