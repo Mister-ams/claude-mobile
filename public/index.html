@@ -219,6 +219,7 @@
       background: var(--surface); border-top: 1px solid var(--border);
     }
     #img-btn {
+      display: flex; align-items: center; justify-content: center;
       padding: 12px 10px; min-height: 44px;
       background: var(--surface-alt); color: var(--text-sec);
       border: 1px solid var(--border); border-radius: var(--radius);
@@ -227,6 +228,7 @@
       font-family: 'SF Mono', 'Menlo', monospace;
       box-shadow: var(--shadow-inset);
       transition: all 0.1s var(--transition);
+      -webkit-tap-highlight-color: transparent;
     }
     #img-btn:active { background: var(--accent); color: #fff; border-color: var(--accent); }
     #img-btn.has-img { background: var(--accent-muted); color: var(--accent-light); border-color: var(--accent); }
@@ -454,13 +456,13 @@
 
   <div style="position:relative">
     <div id="autocomplete"></div>
-    <div id="img-preview" style="display:none">
+    <div id="img-preview">
       <span id="img-name"></span>
       <button id="img-clear" aria-label="Remove image">x</button>
     </div>
     <div id="input-bar">
-      <input type="file" id="img-input" accept="image/*" style="display:none">
-      <button id="img-btn" onclick="document.getElementById('img-input').click()" aria-label="Attach image">Img</button>
+      <input type="file" id="img-input" accept="image/*,image/heic" style="display:none">
+      <label id="img-btn" for="img-input" role="button" aria-label="Attach image">Img</label>
       <textarea id="msg" rows="1" placeholder="Type a message..."
                 autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
                 aria-label="Message input"></textarea>
@@ -1155,20 +1157,25 @@ imgInput.addEventListener('change', async () => {
   try {
     const res = await fetch('/api/upload', {
       method: 'POST',
-      headers: { 'Content-Type': file.type, 'X-Session-Token': sessionToken },
+      headers: { 'Content-Type': file.type || 'image/png', 'X-Session-Token': sessionToken },
       body: file
     });
-    if (!res.ok) throw new Error('Upload failed');
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(err);
+    }
     const data = await res.json();
     pendingImage = data.path;
     imgName.textContent = data.filename;
     imgPreview.classList.add('show');
     imgBtn.classList.add('has-img');
+    imgBtn.textContent = 'Img';
   } catch (e) {
+    imgBtn.textContent = 'Err';
     imgBtn.style.borderColor = 'var(--red)';
-    setTimeout(() => { imgBtn.style.borderColor = ''; }, 1000);
+    imgBtn.style.color = 'var(--red)';
+    setTimeout(() => { imgBtn.textContent = 'Img'; imgBtn.style.borderColor = ''; imgBtn.style.color = ''; }, 2000);
   }
-  imgBtn.textContent = 'Img';
   imgBtn.disabled = false;
   imgInput.value = '';
 });
