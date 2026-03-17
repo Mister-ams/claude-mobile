@@ -30,6 +30,32 @@
       --shadow-inset:  inset 0 0 0 1px rgba(255,255,255,0.05);
       --shadow-1:      inset 0 0 0 1px rgba(255,255,255,0.05), 0 1px 2px rgba(0,0,0,0.4);
       --transition:    cubic-bezier(0.4, 1, 0.75, 0.9);
+      --term-bg:       #111418;
+      --term-fg:       #f6f7f9;
+      --term-cursor:   #2d72d2;
+    }
+    /* ── Light Mode ── */
+    .light {
+      --bg:            #f5f5f5;
+      --surface:       #ffffff;
+      --surface-alt:   #f0f0f0;
+      --surface-hover: #e8e8e8;
+      --border:        #d1d5db;
+      --text:          #1f2937;
+      --text-sec:      #4b5563;
+      --dim:           #6b7280;
+      --accent:        #2563eb;
+      --accent-light:  #3b82f6;
+      --accent-muted:  #dbeafe;
+      --red:           #dc2626;
+      --green:         #16a34a;
+      --orange:        #d97706;
+      --cerulean:      #0891b2;
+      --shadow-inset:  inset 0 0 0 1px rgba(0,0,0,0.06);
+      --shadow-1:      0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+      --term-bg:       #ffffff;
+      --term-fg:       #1f2937;
+      --term-cursor:   #2563eb;
     }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -243,14 +269,19 @@
     }
     #msg:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(45,114,210,0.3); }
     #send {
-      padding: 12px 16px; min-height: 44px;
+      padding: 12px 16px; min-height: 44px; min-width: 60px;
       background: var(--accent); color: #fff;
       border: none; border-radius: var(--radius); font-weight: 600; font-size: 14px;
       cursor: pointer; align-self: flex-end; white-space: nowrap;
       box-shadow: var(--shadow-1);
       transition: all 0.1s var(--transition);
+      touch-action: manipulation;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none; user-select: none;
     }
     #send:active { background: var(--accent-muted); transform: scale(0.97); }
+    /* Light mode send button text color fix */
+    .light #send { color: #fff; }
 
     /* ── Autocomplete ── */
     #autocomplete {
@@ -428,6 +459,7 @@
       </div>
       <div class="sess-dir" id="sdir"></div>
     </div>
+    <button class="qb" id="theme-btn" onclick="toggleTheme()" aria-label="Toggle light/dark mode" style="min-height:32px;min-width:32px;padding:6px 8px;font-size:13px">D</button>
     <button class="close-btn" id="cbtn" onclick="closeCurrent()" aria-label="Close session">Close</button>
   </div>
 
@@ -466,7 +498,7 @@
       <textarea id="msg" rows="1" placeholder="Type a message..."
                 autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
                 aria-label="Message input"></textarea>
-      <button id="send" onclick="sendMsg()" aria-label="Send message">Enter</button>
+      <button id="send" aria-label="Send message">Enter</button>
     </div>
   </div>
 
@@ -803,34 +835,33 @@ async function loadProjects() {
   try { projects = (await (await fetch('/api/config?st=' + encodeURIComponent(sessionToken))).json()).projects; } catch {}
 }
 
+function getTermTheme() {
+  const isLight = document.documentElement.classList.contains('light');
+  return isLight ? {
+    background: '#ffffff', foreground: '#1f2937', cursor: '#2563eb',
+    selectionBackground: '#bfdbfe',
+    black: '#1f2937', red: '#dc2626', green: '#16a34a', yellow: '#d97706',
+    blue: '#2563eb', magenta: '#9333ea', cyan: '#0891b2', white: '#6b7280',
+    brightBlack: '#4b5563', brightRed: '#ef4444', brightGreen: '#22c55e',
+    brightYellow: '#f59e0b', brightBlue: '#3b82f6', brightMagenta: '#a855f7',
+    brightCyan: '#06b6d4', brightWhite: '#1f2937'
+  } : {
+    background: '#111418', foreground: '#f6f7f9', cursor: '#2d72d2',
+    selectionBackground: '#184a90',
+    black: '#404854', red: '#cd4246', green: '#238551', yellow: '#c87619',
+    blue: '#2d72d2', magenta: '#9d3f9d', cyan: '#147eb3', white: '#abb3bf',
+    brightBlack: '#5f6b7c', brightRed: '#e76a6e', brightGreen: '#32a467',
+    brightYellow: '#ec9a3c', brightBlue: '#4c90f0', brightMagenta: '#bd6bbd',
+    brightCyan: '#3fa6da', brightWhite: '#f6f7f9'
+  };
+}
+
 function makeTerm() {
-  // Palantir/Blueprint terminal theme
   const term = new Terminal({
     fontSize: 13,
     fontFamily: "'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace",
     lineHeight: 1.286,
-    theme: {
-      background: '#111418',    // $black
-      foreground: '#f6f7f9',    // $light-gray5
-      cursor: '#2d72d2',        // $blue3 (accent)
-      selectionBackground: '#184a90',  // $blue1
-      black: '#404854',         // $dark-gray5
-      red: '#cd4246',           // $red3
-      green: '#238551',         // $green3
-      yellow: '#c87619',        // $orange3
-      blue: '#2d72d2',          // $blue3
-      magenta: '#9d3f9d',       // $violet3
-      cyan: '#147eb3',          // $cerulean3
-      white: '#abb3bf',         // $gray4
-      brightBlack: '#5f6b7c',   // $gray1
-      brightRed: '#e76a6e',     // $red4
-      brightGreen: '#32a467',   // $green4
-      brightYellow: '#ec9a3c',  // $orange4
-      brightBlue: '#4c90f0',    // $blue4
-      brightMagenta: '#bd6bbd', // $violet4
-      brightCyan: '#3fa6da',    // $cerulean4
-      brightWhite: '#f6f7f9'    // $light-gray5
-    },
+    theme: getTermTheme(),
     scrollback: 5000,
     convertEol: true,
     disableStdin: true,
@@ -1391,19 +1422,80 @@ if (window.visualViewport) {
   window.visualViewport.addEventListener('scroll', () => window.scrollTo(0, 0));
 }
 
+// ── iOS Prevention ──
+// Prevent bounce scroll on non-scrollable areas
 document.addEventListener('touchmove', e => {
-  if (!e.target.closest('#term-area, #qbar, #msg, .xterm-viewport')) e.preventDefault();
+  if (!e.target.closest('#term-area, #qbar, #msg, .xterm-viewport, #tab-switcher, #autocomplete')) e.preventDefault();
 }, { passive: false });
 
-let lastTap = 0;
-document.addEventListener('touchend', e => {
-  const now = Date.now();
-  if (now - lastTap < 300) e.preventDefault();
-  lastTap = now;
-}, { passive: false });
+// Prevent ALL double-tap zoom (comprehensive)
+document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
 
+// Prevent pinch zoom
 document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
+document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
+document.addEventListener('gestureend', e => e.preventDefault(), { passive: false });
 
+// Prevent shake-to-undo
+window.addEventListener('devicemotion', e => {}, { passive: true });
+// Override the undo manager
+if (document.undoManager) document.undoManager.length = 0;
+
+// ── Send Button Fix (touch-based, not onclick) ──
+const sendBtn = $('send');
+sendBtn.addEventListener('touchend', e => {
+  e.preventDefault();
+  e.stopPropagation();
+  sendMsg();
+}, { passive: false });
+sendBtn.addEventListener('click', e => {
+  e.preventDefault();
+  sendMsg();
+});
+
+// ── Light/Dark Mode Toggle ──
+function toggleTheme() {
+  const isLight = document.documentElement.classList.toggle('light');
+  localStorage.setItem('cm-theme', isLight ? 'light' : 'dark');
+  $('theme-btn').textContent = isLight ? 'L' : 'D';
+  // Update terminal theme for all sessions
+  Object.keys(terms).forEach(id => {
+    terms[id].options.theme = {
+      background: isLight ? '#ffffff' : '#111418',
+      foreground: isLight ? '#1f2937' : '#f6f7f9',
+      cursor: isLight ? '#2563eb' : '#2d72d2',
+      selectionBackground: isLight ? '#bfdbfe' : '#184a90',
+      black: isLight ? '#1f2937' : '#404854',
+      red: isLight ? '#dc2626' : '#cd4246',
+      green: isLight ? '#16a34a' : '#238551',
+      yellow: isLight ? '#d97706' : '#c87619',
+      blue: isLight ? '#2563eb' : '#2d72d2',
+      magenta: isLight ? '#9333ea' : '#9d3f9d',
+      cyan: isLight ? '#0891b2' : '#147eb3',
+      white: isLight ? '#6b7280' : '#abb3bf',
+      brightBlack: isLight ? '#4b5563' : '#5f6b7c',
+      brightRed: isLight ? '#ef4444' : '#e76a6e',
+      brightGreen: isLight ? '#22c55e' : '#32a467',
+      brightYellow: isLight ? '#f59e0b' : '#ec9a3c',
+      brightBlue: isLight ? '#3b82f6' : '#4c90f0',
+      brightMagenta: isLight ? '#a855f7' : '#bd6bbd',
+      brightCyan: isLight ? '#06b6d4' : '#3fa6da',
+      brightWhite: isLight ? '#1f2937' : '#f6f7f9'
+    };
+  });
+  // Update meta theme-color for Safari status bar
+  let meta = document.querySelector('meta[name="theme-color"]');
+  if (!meta) { meta = document.createElement('meta'); meta.name = 'theme-color'; document.head.appendChild(meta); }
+  meta.content = isLight ? '#ffffff' : '#111418';
+}
+
+// Restore saved theme
+if (localStorage.getItem('cm-theme') === 'light') {
+  document.documentElement.classList.add('light');
+  $('theme-btn').textContent = 'L';
+}
+
+// Wake lock
 if ('wakeLock' in navigator) {
   const lock = () => navigator.wakeLock.request('screen').catch(() => {});
   lock();
