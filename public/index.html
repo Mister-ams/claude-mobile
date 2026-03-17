@@ -177,7 +177,7 @@
     #theme-toggle {
       flex-shrink: 0; width: 34px; height: 44px;
       display: flex; align-items: center; justify-content: center;
-      background: none; border: none; color: var(--dim);
+      background: none; border: none; color: var(--text-sec);
       cursor: pointer; transition: color 0.15s var(--transition);
       padding: 0;
     }
@@ -575,7 +575,7 @@
       <span class="pill-name">No session</span>
       <span class="pill-dir"></span>
     </div>
-    <button id="tab-count-btn" onclick="toggleSwitcher()" aria-label="Switch tabs">0<span class="attn-badge"></span></button>
+    <button id="tab-count-btn" onclick="toggleSwitcher()" aria-label="Switch tabs"><span class="count-text">0</span><span class="attn-badge"></span></button>
   </div>
   <div id="swipe-hint-left"></div>
   <div id="swipe-hint-right"></div>
@@ -1224,8 +1224,8 @@ function renderTabs() {
   pillDir.textContent = s ? s.dir.split('\\').pop() : '';
   pill.classList.toggle('attn', !!(s && s.attention));
 
-  // Update count badge (preserve the attn-badge child)
-  countBtn.firstChild.textContent = sessions.length || '0';
+  // Update count text
+  countBtn.querySelector('.count-text').textContent = sessions.length || '0';
 
   // Attention badge: show when ANY session needs input (active or background)
   const anyAttn = sessions.some(x => x.attention);
@@ -1741,36 +1741,37 @@ sendBtn.addEventListener('click', e => {
 // ── Pull-up on tab count = new session ──
 (function() {
   const btn = $('tab-count-btn');
+  const countText = btn.querySelector('.count-text');
   const THRESHOLD = 40;
   let startY = 0, pulling = false, originalText = '';
   btn.addEventListener('touchstart', e => {
     startY = e.touches[0].clientY;
     pulling = false;
-    originalText = btn.firstChild.textContent;
+    originalText = countText.textContent;
   }, { passive: true });
   btn.addEventListener('touchmove', e => {
     const dy = startY - e.touches[0].clientY;
     if (dy > THRESHOLD && !pulling) {
       pulling = true;
-      btn.firstChild.textContent = '+';
+      countText.textContent = '+';
       btn.style.borderColor = 'var(--accent)';
       btn.style.color = 'var(--accent-light)';
     } else if (dy <= THRESHOLD && pulling) {
       pulling = false;
-      btn.firstChild.textContent = originalText;
+      countText.textContent = originalText;
       btn.style.borderColor = '';
       btn.style.color = '';
     }
   }, { passive: true });
   btn.addEventListener('touchend', () => {
     if (pulling) { newSession(); pulling = false; }
-    btn.firstChild.textContent = originalText;
+    countText.textContent = originalText;
     btn.style.borderColor = '';
     btn.style.color = '';
   });
   btn.addEventListener('touchcancel', () => {
     pulling = false;
-    btn.firstChild.textContent = originalText;
+    countText.textContent = originalText;
     btn.style.borderColor = '';
     btn.style.color = '';
   });
