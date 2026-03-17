@@ -98,13 +98,35 @@ loadOrCreateIdentityKey();
 
 // ─── E2E Encryption (P1: ECDH + AES-256-GCM) ───────────────────
 
+// Convert DER-encoded ECDSA signature to IEEE P1363 (raw r||s) for Web Crypto
+function derToP1363(derSig, keySize) {
+  const n = keySize; // 32 bytes for P-256
+  let offset = 2; // skip SEQUENCE tag + length
+  if (derSig[1] & 0x80) offset += (derSig[1] & 0x7f); // long-form length
+  // Read r
+  offset++; // INTEGER tag
+  let rLen = derSig[offset++];
+  const rBytes = derSig.subarray(offset, offset + rLen);
+  offset += rLen;
+  // Read s
+  offset++; // INTEGER tag
+  let sLen = derSig[offset++];
+  const sBytes = derSig.subarray(offset, offset + sLen);
+  // Pad/trim to fixed size (remove leading zeros, pad to n bytes)
+  const r = rBytes.length > n ? rBytes.subarray(rBytes.length - n) : Buffer.concat([Buffer.alloc(n - rBytes.length), rBytes]);
+  const s = sBytes.length > n ? sBytes.subarray(sBytes.length - n) : Buffer.concat([Buffer.alloc(n - sBytes.length), sBytes]);
+  return Buffer.concat([r, s]);
+}
+
 function initKeyExchange(ws) {
   // Generate ephemeral ECDH keypair
   const eph = crypto.createECDH('prime256v1');
   eph.generateKeys();
   const ephPubHex = eph.getPublicKey('hex');
   // Sign ephemeral pubkey with identity private key (red-team fix #1)
-  const sig = crypto.sign('sha256', Buffer.from(ephPubHex, 'hex'), identityKeys.privateKey);
+  // Convert from DER to P1363 format for Web Crypto compatibility
+  const derSig = crypto.sign('sha256', Buffer.from(ephPubHex, 'hex'), identityKeys.privateKey);
+  const sig = derToP1363(derSig, 32);
   // Random salt for HKDF
   const salt = crypto.randomBytes(32);
   ws._eph = eph;

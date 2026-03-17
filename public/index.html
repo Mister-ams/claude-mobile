@@ -697,6 +697,7 @@ async function handleKeyExchange(msg) {
     ws.send(JSON.stringify({ type: 'key-exchange', ephemeral: clientPubHex }));
     showStatus('Secure channel established', 'var(--intent-ok)');
   } catch (err) {
+    console.error('Key exchange error:', err);
     showStatus('Key exchange failed: ' + err.message, 'var(--intent-danger)');
     ws.close();
   }
@@ -984,7 +985,9 @@ function doConnect(method, totpCode) {
     showStatus('Cannot reach server.', 'var(--intent-danger)');
   };
   ws.onmessage = async (e) => {
-    const msg = await secureReceive(e.data);
+    // Safari may deliver WebSocket data as Blob instead of string
+    const rawData = typeof e.data === 'string' ? e.data : await e.data.text();
+    const msg = await secureReceive(rawData);
     if (!msg) return;
     // Handle key-exchange first
     if (msg.type === 'key-exchange') {
