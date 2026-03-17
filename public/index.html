@@ -616,20 +616,22 @@ function base64urlDecode(s) {
 }
 
 async function handleKeyExchange(msg) {
-  showStatus('Establishing secure channel...', 'var(--accent)');
+  showStatus('Key exchange...', 'var(--accent)');
   try {
     // Import server identity pubkey for signature verification
+    showStatus('Importing identity key...', 'var(--accent)');
     const identityDer = hexToBytes(msg.identity);
     const identityKey = await crypto.subtle.importKey('spki', identityDer,
       { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
 
     // Verify ECDSA signature on ephemeral pubkey
+    showStatus('Verifying signature...', 'var(--accent)');
     const ephBytes = hexToBytes(msg.ephemeral);
     const sigBytes = hexToBytes(msg.sig);
     const valid = await crypto.subtle.verify(
       { name: 'ECDSA', hash: 'SHA-256' }, identityKey, sigBytes, ephBytes);
     if (!valid) {
-      showStatus('SIGNATURE INVALID -- connection rejected', 'var(--intent-danger)');
+      showStatus('SIGNATURE INVALID', 'var(--intent-danger)');
       ws.close(); return;
     }
 
@@ -659,16 +661,16 @@ async function handleKeyExchange(msg) {
     }
 
     // Generate client ephemeral ECDH keypair
+    showStatus('Generating keys...', 'var(--accent)');
     const clientKP = await crypto.subtle.generateKey(
       { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
 
-    // Import server ephemeral pubkey
-    // The server sends raw EC point (uncompressed), we need to wrap in SPKI for Web Crypto
-    // Actually, server uses createECDH which gives raw format -- import as raw
+    // Import server ephemeral pubkey (raw uncompressed EC point)
     const serverEphKey = await crypto.subtle.importKey('raw', ephBytes,
       { name: 'ECDH', namedCurve: 'P-256' }, false, []);
 
     // Derive shared secret
+    showStatus('Deriving secret...', 'var(--accent)');
     const sharedBits = await crypto.subtle.deriveBits(
       { name: 'ECDH', public: serverEphKey }, clientKP.privateKey, 256);
 
@@ -677,6 +679,7 @@ async function handleKeyExchange(msg) {
     const clientPubHex = bytesToHex(clientPubRaw);
 
     // HKDF: derive AES key
+    showStatus('Deriving session key...', 'var(--accent)');
     const salt = hexToBytes(msg.salt);
     const info = new Uint8Array([
       ...new TextEncoder().encode('cm-e2e'),
