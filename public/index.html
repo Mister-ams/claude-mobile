@@ -173,34 +173,15 @@
       font-size: 11px; color: var(--dim); margin-top: 1px;
       font-family: 'SF Mono', 'Menlo', monospace;
     }
-    /* ── Gear Menu ── */
-    #gear-btn {
-      flex-shrink: 0; width: 44px; height: 44px;
+    /* ── Theme Toggle (bottom-left) ── */
+    #theme-toggle {
+      flex-shrink: 0; width: 34px; height: 44px;
       display: flex; align-items: center; justify-content: center;
-      background: none; border: 1px solid var(--border);
-      border-radius: var(--radius); color: var(--dim);
-      cursor: pointer; transition: all 0.15s var(--transition);
+      background: none; border: none; color: var(--dim);
+      cursor: pointer; transition: color 0.15s var(--transition);
+      padding: 0;
     }
-    #gear-btn:active { border-color: var(--accent); color: var(--accent-light); }
-    #gear-menu {
-      display: none; position: absolute; bottom: 100%; right: 0;
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); min-width: 160px;
-      box-shadow: 0 -4px 16px rgba(0,0,0,0.3); z-index: 60;
-      overflow: hidden;
-    }
-    #gear-menu.open { display: block; }
-    .gear-item {
-      display: block; width: 100%; padding: 12px 16px; border: none;
-      background: none; color: var(--text); font-size: 13px;
-      text-align: left; cursor: pointer;
-      font-family: 'SF Mono', 'Menlo', monospace;
-      min-height: 44px; transition: background 0.1s;
-      border-bottom: 1px solid var(--border);
-    }
-    .gear-item:last-child { border-bottom: none; }
-    .gear-item:active { background: var(--surface-hover); }
-    .light #gear-menu { box-shadow: 0 -4px 16px rgba(17,20,24,0.1); }
+    #theme-toggle:active { color: var(--accent-light); }
     /* Status dot: shape+color for colorblind safety
        connected = filled circle, disconnected = hollow ring */
     .dot {
@@ -581,22 +562,20 @@
 
   <div id="tabs">
     <div id="tab-switcher"></div>
+    <button id="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+      <svg id="theme-icon-dark" width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="display:none">
+        <path d="M8 1a7 7 0 1 0 0 14A5 5 0 0 1 8 1z"/>
+      </svg>
+      <svg id="theme-icon-light" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M2.9 2.9l1.4 1.4M11.7 11.7l1.4 1.4M13.1 2.9l-1.4 1.4M4.3 11.7l-1.4 1.4"/>
+      </svg>
+    </button>
     <div id="tab-pill" onclick="scrollBottom()">
       <span class="pill-attn"></span>
       <span class="pill-name">No session</span>
       <span class="pill-dir"></span>
     </div>
     <button id="tab-count-btn" onclick="toggleSwitcher()" aria-label="Switch tabs">0<span class="attn-badge"></span></button>
-    <button id="gear-btn" onclick="toggleGearMenu()" aria-label="Settings">
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-        <circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M2.9 2.9l1.4 1.4M11.7 11.7l1.4 1.4M13.1 2.9l-1.4 1.4M4.3 11.7l-1.4 1.4"/>
-      </svg>
-    </button>
-    <div id="gear-menu">
-      <button class="gear-item" onclick="toggleTheme(); toggleGearMenu()">
-        <span id="theme-label">Dark mode</span>
-      </button>
-    </div>
   </div>
   <div id="swipe-hint-left"></div>
   <div id="swipe-hint-right"></div>
@@ -1759,22 +1738,6 @@ sendBtn.addEventListener('click', e => {
   sendMsg();
 });
 
-// ── Gear Menu ──
-function toggleGearMenu() {
-  const menu = $('gear-menu');
-  menu.classList.toggle('open');
-  // Update theme label
-  const isLight = document.documentElement.classList.contains('light');
-  $('theme-label').textContent = isLight ? 'Dark mode' : 'Light mode';
-}
-
-// Close gear menu when tapping outside
-document.addEventListener('click', e => {
-  const menu = $('gear-menu');
-  if (!menu.classList.contains('open')) return;
-  if (!e.target.closest('#gear-btn') && !e.target.closest('#gear-menu')) menu.classList.remove('open');
-});
-
 // ── Pull-up on tab count = new session ──
 (function() {
   const btn = $('tab-count-btn');
@@ -1814,13 +1777,18 @@ document.addEventListener('click', e => {
 })();
 
 // ── Light/Dark Mode Toggle ──
+function updateThemeIcons() {
+  const isLight = document.documentElement.classList.contains('light');
+  $('theme-icon-dark').style.display = isLight ? 'none' : 'block';
+  $('theme-icon-light').style.display = isLight ? 'block' : 'none';
+}
+
 function toggleTheme() {
   const isLight = document.documentElement.classList.toggle('light');
   localStorage.setItem('cm-theme', isLight ? 'light' : 'dark');
-  // Update terminal theme for all sessions
+  updateThemeIcons();
   const theme = getTermTheme();
   Object.keys(terms).forEach(id => { terms[id].options.theme = theme; });
-  // Update meta theme-color for Safari status bar
   let meta = document.querySelector('meta[name="theme-color"]');
   if (!meta) { meta = document.createElement('meta'); meta.name = 'theme-color'; document.head.appendChild(meta); }
   meta.content = isLight ? '#f6f7f9' : '#111418';
@@ -1830,6 +1798,7 @@ function toggleTheme() {
 if (localStorage.getItem('cm-theme') === 'light') {
   document.documentElement.classList.add('light');
 }
+updateThemeIcons();
 
 // Wake lock
 if ('wakeLock' in navigator) {
