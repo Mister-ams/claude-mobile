@@ -1115,7 +1115,7 @@ function startTunnel() {
   rpID = NGROK_DOMAIN;
   expectedOrigin = tunnelUrl;
 
-  const ng = spawn(ngrokPath, ['http', '--domain', NGROK_DOMAIN, String(PORT)], {
+  const ng = spawn(ngrokPath, ['http', '--url', NGROK_DOMAIN, String(PORT)], {
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
