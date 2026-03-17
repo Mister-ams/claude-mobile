@@ -36,27 +36,40 @@
     }
     /* ── Light Mode ── */
     .light {
-      --bg:            #f5f5f5;
+      --bg:            #f5f6f8;
       --surface:       #ffffff;
-      --surface-alt:   #f0f0f0;
-      --surface-hover: #e8e8e8;
+      --surface-alt:   #f0f2f5;
+      --surface-hover: #e4e7eb;
       --border:        #d1d5db;
-      --text:          #1f2937;
-      --text-sec:      #4b5563;
-      --dim:           #6b7280;
-      --accent:        #2563eb;
-      --accent-light:  #3b82f6;
-      --accent-muted:  #dbeafe;
-      --red:           #dc2626;
-      --green:         #16a34a;
-      --orange:        #d97706;
+      --text:          #1c2127;
+      --text-sec:      #5c7080;
+      --dim:           #8a9ba8;
+      --accent:        #2d72d2;
+      --accent-light:  #215db0;
+      --accent-muted:  #d6e4f7;
+      --red:           #cd4246;
+      --green:         #238551;
+      --orange:        #c87619;
       --cerulean:      #0891b2;
-      --shadow-inset:  inset 0 0 0 1px rgba(0,0,0,0.06);
-      --shadow-1:      0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
-      --term-bg:       #ffffff;
-      --term-fg:       #1f2937;
-      --term-cursor:   #2563eb;
+      --shadow-inset:  inset 0 0 0 1px rgba(17,20,24,0.08);
+      --shadow-1:      0 1px 3px rgba(17,20,24,0.12), inset 0 0 0 1px rgba(17,20,24,0.08);
+      --term-bg:       #f5f6f8;
+      --term-fg:       #1c2127;
+      --term-cursor:   #2d72d2;
     }
+    /* Light mode overrides for elements with hardcoded dark backgrounds */
+    .light #msg { background: var(--surface); box-shadow: inset 0 0 0 1px rgba(17,20,24,0.15); }
+    .light .totp-input { background: var(--surface); box-shadow: inset 0 0 0 1px rgba(17,20,24,0.15); }
+    .light .qb { background: var(--surface); }
+    .light #send { color: #fff; }
+    .light .close-btn { background: rgba(205,66,70,0.08); }
+    .light #tab-pill { background: var(--surface); }
+    .light .scroll-divider { background: var(--border); opacity: 0.5; }
+    .light #term-area { border-top: 1px solid var(--border); }
+    .light #diag { background: rgba(45,114,210,0.08); }
+    .light .switcher-item:active { background: var(--surface-alt); }
+    .light #autocomplete { box-shadow: 0 -4px 12px rgba(17,20,24,0.12); }
+    .light #tab-switcher { box-shadow: 0 -8px 24px rgba(17,20,24,0.12); }
 
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body {
@@ -280,8 +293,6 @@
       -webkit-user-select: none; user-select: none;
     }
     #send:active { background: var(--accent-muted); transform: scale(0.97); }
-    /* Light mode send button text color fix */
-    .light #send { color: #fff; }
 
     /* ── Autocomplete ── */
     #autocomplete {
@@ -364,8 +375,9 @@
     #tab-switcher {
       display: none; position: absolute; bottom: 100%; left: 0; right: 0;
       background: var(--surface); border-top: 1px solid var(--border);
-      max-height: 240px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+      max-height: 60vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
       z-index: 50; box-shadow: 0 -8px 24px rgba(0,0,0,0.4);
+      overscroll-behavior: contain;
     }
     #tab-switcher.open { display: block; }
     .switcher-item {
@@ -477,13 +489,11 @@
 
   <div id="diag"></div>
   <div id="qbar">
-    <button class="qb" onclick="scrollBottom()" aria-label="Scroll to bottom">&#8600;</button>
     <button class="qb" onclick="clearPrompt()" aria-label="Clear prompt">Clear</button>
     <button class="qb" onclick="editLast()" aria-label="Edit last message">Edit</button>
     <button class="qb" onclick="qsend('\x1b')" aria-label="Escape">Esc</button>
-    <button class="qb" onclick="qsend('\x1b[A')" aria-label="Arrow up">&#9650;</button>
-    <button class="qb" onclick="qsend('\x1b[B')" aria-label="Arrow down">&#9660;</button>
-    <button class="qb" onclick="toggleDiag()" aria-label="Toggle diagnostics">Diag</button>
+    <button class="qb" onclick="qsend('\x1b[A')" aria-label="Arrow up">Up</button>
+    <button class="qb" onclick="qsend('\x1b[B')" aria-label="Arrow down">Down</button>
   </div>
 
   <div style="position:relative">
@@ -504,7 +514,7 @@
 
   <div id="tabs">
     <div id="tab-switcher"></div>
-    <div id="tab-pill" onclick="toggleSwitcher()">
+    <div id="tab-pill" onclick="scrollBottom()">
       <span class="pill-attn"></span>
       <span class="pill-name">No session</span>
       <span class="pill-dir"></span>
@@ -838,13 +848,13 @@ async function loadProjects() {
 function getTermTheme() {
   const isLight = document.documentElement.classList.contains('light');
   return isLight ? {
-    background: '#ffffff', foreground: '#1f2937', cursor: '#2563eb',
-    selectionBackground: '#bfdbfe',
-    black: '#1f2937', red: '#dc2626', green: '#16a34a', yellow: '#d97706',
-    blue: '#2563eb', magenta: '#9333ea', cyan: '#0891b2', white: '#6b7280',
-    brightBlack: '#4b5563', brightRed: '#ef4444', brightGreen: '#22c55e',
-    brightYellow: '#f59e0b', brightBlue: '#3b82f6', brightMagenta: '#a855f7',
-    brightCyan: '#06b6d4', brightWhite: '#1f2937'
+    background: '#f5f6f8', foreground: '#1c2127', cursor: '#2d72d2',
+    selectionBackground: '#d6e4f7',
+    black: '#1c2127', red: '#cd4246', green: '#238551', yellow: '#c87619',
+    blue: '#2d72d2', magenta: '#9d3f9d', cyan: '#147eb3', white: '#8a9ba8',
+    brightBlack: '#5c7080', brightRed: '#e76a6e', brightGreen: '#32a467',
+    brightYellow: '#ec9a3c', brightBlue: '#4c90f0', brightMagenta: '#bd6bbd',
+    brightCyan: '#3fa6da', brightWhite: '#1c2127'
   } : {
     background: '#111418', foreground: '#f6f7f9', cursor: '#2d72d2',
     selectionBackground: '#184a90',
@@ -1425,7 +1435,7 @@ if (window.visualViewport) {
 // ── iOS Prevention ──
 // Prevent bounce scroll on non-scrollable areas
 document.addEventListener('touchmove', e => {
-  if (!e.target.closest('#term-area, #qbar, #msg, .xterm-viewport, #tab-switcher, #autocomplete')) e.preventDefault();
+  if (!e.target.closest('#term-area, #qbar, #msg, .xterm-viewport, #tab-switcher, #autocomplete, .switcher-item')) e.preventDefault();
 }, { passive: false });
 
 // Prevent ALL double-tap zoom (comprehensive)
@@ -1459,34 +1469,12 @@ function toggleTheme() {
   localStorage.setItem('cm-theme', isLight ? 'light' : 'dark');
   $('theme-btn').textContent = isLight ? 'L' : 'D';
   // Update terminal theme for all sessions
-  Object.keys(terms).forEach(id => {
-    terms[id].options.theme = {
-      background: isLight ? '#ffffff' : '#111418',
-      foreground: isLight ? '#1f2937' : '#f6f7f9',
-      cursor: isLight ? '#2563eb' : '#2d72d2',
-      selectionBackground: isLight ? '#bfdbfe' : '#184a90',
-      black: isLight ? '#1f2937' : '#404854',
-      red: isLight ? '#dc2626' : '#cd4246',
-      green: isLight ? '#16a34a' : '#238551',
-      yellow: isLight ? '#d97706' : '#c87619',
-      blue: isLight ? '#2563eb' : '#2d72d2',
-      magenta: isLight ? '#9333ea' : '#9d3f9d',
-      cyan: isLight ? '#0891b2' : '#147eb3',
-      white: isLight ? '#6b7280' : '#abb3bf',
-      brightBlack: isLight ? '#4b5563' : '#5f6b7c',
-      brightRed: isLight ? '#ef4444' : '#e76a6e',
-      brightGreen: isLight ? '#22c55e' : '#32a467',
-      brightYellow: isLight ? '#f59e0b' : '#ec9a3c',
-      brightBlue: isLight ? '#3b82f6' : '#4c90f0',
-      brightMagenta: isLight ? '#a855f7' : '#bd6bbd',
-      brightCyan: isLight ? '#06b6d4' : '#3fa6da',
-      brightWhite: isLight ? '#1f2937' : '#f6f7f9'
-    };
-  });
+  const theme = getTermTheme();
+  Object.keys(terms).forEach(id => { terms[id].options.theme = theme; });
   // Update meta theme-color for Safari status bar
   let meta = document.querySelector('meta[name="theme-color"]');
   if (!meta) { meta = document.createElement('meta'); meta.name = 'theme-color'; document.head.appendChild(meta); }
-  meta.content = isLight ? '#ffffff' : '#111418';
+  meta.content = isLight ? '#f5f6f8' : '#111418';
 }
 
 // Restore saved theme
