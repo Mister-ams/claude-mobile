@@ -421,6 +421,20 @@ app.use((req, res, next) => {
   if (req.path === '/api/upload') return next();
   express.json()(req, res, next);
 });
+app.use((_req, res, next) => {
+  res.setHeader('Content-Security-Policy', [
+    "default-src 'none'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "connect-src 'self' ws: wss:",
+    "img-src 'self' data: blob:",
+    "font-src 'self'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join('; '));
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── Localhost-only setup page ─────────────────────────────────
@@ -816,9 +830,7 @@ const allClients = new Set();
 const MAX_CONNECTIONS_PER_IP = 10;
 
 function getClientIP(ws) {
-  // X-Forwarded-For from WS upgrade request (ngrok sets this)
-  const xff = ws._req?.headers?.['x-forwarded-for'];
-  if (xff) return xff.split(',')[0].trim();
+  // Direct connection via Tailscale -- no proxy headers needed
   return ws._socket?._peername?.address || 'unknown';
 }
 
@@ -1094,74 +1106,49 @@ function autoStartSessions() {
   }
 }
 
-// ngrok with permanent static domain
-const NGROK_DOMAIN = config.ngrokDomain || 'frida-noninferable-alexandria.ngrok-free.dev';
+// ─── Tailscale configuration ─────────────────────────────────────
+// Server binds localhost only. Tailscale serve proxies HTTPS -> localhost.
+const TAILSCALE_HOSTNAME = config.tailscaleHostname;
+if (TAILSCALE_HOSTNAME) {
+  rpID = TAILSCALE_HOSTNAME;
+  expectedOrigin = `https://${TAILSCALE_HOSTNAME}`;
+}
 
-function startTunnel() {
-  // Find ngrok
-  const ngrokCandidates = [
-    'ngrok',
-    path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages',
-      'Ngrok.Ngrok_Microsoft.Winget.Source_8wekyb3d8bbwe', 'ngrok.exe'),
-    path.join(process.env.LOCALAPPDATA || '', 'ngrok', 'ngrok.exe'),
-  ];
-  let ngrokPath = 'ngrok';
-  for (const c of ngrokCandidates) {
-    if (c && fs.existsSync(c)) { ngrokPath = c; break; }
+function detectTailscale() {
+  const nets = os.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      if (net.family === 'IPv4' && net.address.startsWith('100.')) {
+        return net.address;
+      }
+    }
   }
-
-  const tunnelUrl = `https://${NGROK_DOMAIN}`;
-  // Set WebAuthn origin for passkey support (stable domain!)
-  rpID = NGROK_DOMAIN;
-  expectedOrigin = tunnelUrl;
-
-  const ng = spawn(ngrokPath, ['http', '--url', NGROK_DOMAIN, String(PORT)], {
-    stdio: ['ignore', 'pipe', 'pipe']
-  });
-
-  ng.stderr.on('data', (data) => {
-    const line = data.toString().trim();
-    if (line) console.log(`  [ngrok] ${line}`);
-  });
-
-  ng.on('error', (err) => {
-    console.log(`  Tunnel: ngrok not found (${err.message}), local only`);
-    showLocalQR();
-  });
-
-  ng.on('exit', (code) => {
-    if (code) console.log(`  Tunnel: ngrok exited (code ${code})`);
-  });
-
-  // ngrok doesn't print the URL when using --domain, we already know it
-  setTimeout(() => {
-    console.log('');
-    console.log(`  Tunnel:   ${tunnelUrl}`);
-    console.log(`  Passkey:  rpID=${rpID} (permanent)`);
-    console.log('');
-    console.log('  Scan to connect:');
-    qrcode.generate(tunnelUrl, { small: true }, (code) => { console.log(code); });
-  }, 2000);
+  return null;
 }
 
-function showLocalQR() {
-  const ip = getLocalIP();
-  qrcode.generate(`http://${ip}:${PORT}`, { small: true }, (code) => { console.log(code); });
-}
-
-server.listen(PORT, '0.0.0.0', () => {
-  const ip = getLocalIP();
+server.listen(PORT, 'localhost', () => {
+  const tsIP = detectTailscale();
   console.log('');
   console.log('  Claude Mobile Bridge (zero-trust)');
   console.log('  ────────────────────────────────');
   console.log(`  Local:    http://localhost:${PORT}`);
+  if (TAILSCALE_HOSTNAME) {
+    console.log(`  Tailscale: https://${TAILSCALE_HOSTNAME}`);
+  }
+  if (tsIP) {
+    console.log(`  Network:  Tailscale active (${tsIP})`);
+  } else {
+    console.log('  WARNING:  Tailscale not detected -- localhost only');
+  }
   if (isSetupComplete()) {
     console.log(`  Auth:     TOTP configured, passkeys: ${storedCredentials.length}`);
-    console.log(`  Status:   Ready for remote connections`);
+    if (TAILSCALE_HOSTNAME && storedCredentials.length === 0) {
+      console.log(`  NOTICE:   Passkeys must be re-registered for new domain`);
+      console.log(`            Visit http://localhost:${PORT}/setup`);
+    }
   } else {
     console.log(`  Auth:     NOT CONFIGURED`);
     console.log(`  Setup:    http://localhost:${PORT}/setup`);
-    console.log(`            (laptop only -- open this URL to configure)`);
   }
   console.log(`  Identity: ${identityKeys.fingerprint.slice(0, 16)}...`);
   console.log(`  Audit:    ${AUDIT_PATH}`);
@@ -1169,7 +1156,4 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('  ────────────────────────────────');
   autoStartSessions();
   audit('SYSTEM', `Server started on port ${PORT}`);
-  console.log('');
-  console.log('  Starting tunnel...');
-  startTunnel();
 });

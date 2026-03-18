@@ -1,6 +1,7 @@
 {
   "port": 3456,
-  "ngrokDomain": "your-domain.ngrok-free.dev",
+  "tailscaleHostname": "your-machine.tail12345.ts.net",
+  "inactivityTimeout": 15,
   "autoStart": ["My Project"],
   "defaultDir": "",
   "projects": [
