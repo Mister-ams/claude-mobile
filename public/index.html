@@ -843,33 +843,9 @@ function hideLockScreen() {
 
 async function unlockPasskey() {
   try {
-    const optsRes = await fetch('/api/passkey/auth-options', { method: 'POST' });
-    const opts = await optsRes.json();
-    opts.challenge = base64urlToBuffer(opts.challenge);
-    if (opts.allowCredentials) {
-      opts.allowCredentials = opts.allowCredentials.map(c => ({
-        ...c, id: base64urlToBuffer(c.id)
-      }));
-    }
-    const cred = await navigator.credentials.get({ publicKey: opts });
-    const verifyRes = await fetch('/api/passkey/auth-verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        challengeId: opts._challengeId,
-        response: {
-          id: cred.id, rawId: bufferToBase64url(cred.rawId), type: cred.type,
-          response: {
-            authenticatorData: bufferToBase64url(cred.response.authenticatorData),
-            clientDataJSON: bufferToBase64url(cred.response.clientDataJSON),
-            signature: bufferToBase64url(cred.response.signature),
-          }
-        }
-      })
-    });
-    const result = await verifyRes.json();
-    if (result.verified && result.sessionToken) {
-      queueSend({ type: 'unlock', sessionToken: result.sessionToken });
+    const token = await doPasskeyAuth();
+    if (token) {
+      queueSend({ type: 'unlock', sessionToken: token });
     } else {
       lockError.textContent = 'Passkey verification failed';
       lockError.style.display = 'block';
@@ -936,41 +912,47 @@ async function checkAuthStatus() {
   }
 }
 
+// Shared passkey auth: fetches options, prompts biometric, verifies, returns sessionToken or null
+async function doPasskeyAuth() {
+  const optRes = await fetch('/api/passkey/auth-options', { method: 'POST' });
+  if (!optRes.ok) return null;
+  const options = await optRes.json();
+  options.challenge = base64urlToBuffer(options.challenge);
+  if (options.allowCredentials) {
+    options.allowCredentials = options.allowCredentials.map(c => ({
+      ...c, id: base64urlToBuffer(c.id)
+    }));
+  }
+  const credential = await navigator.credentials.get({ publicKey: options });
+  const authRes = await fetch('/api/passkey/auth-verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      expectedChallenge: bufferToBase64url(options.challenge),
+      response: {
+        id: credential.id,
+        rawId: bufferToBase64url(credential.rawId),
+        response: {
+          authenticatorData: bufferToBase64url(credential.response.authenticatorData),
+          clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
+          signature: bufferToBase64url(credential.response.signature),
+        },
+        type: credential.type,
+        clientExtensionResults: credential.getClientExtensionResults(),
+        authenticatorAttachment: credential.authenticatorAttachment,
+      }
+    })
+  });
+  const result = await authRes.json();
+  return (result.verified && result.sessionToken) ? result.sessionToken : null;
+}
+
 async function loginPasskey() {
   showStatus('Requesting passkey...', 'var(--accent)');
   try {
-    const optRes = await fetch('/api/passkey/auth-options', { method: 'POST' });
-    if (!optRes.ok) { showStatus('No passkeys registered', 'var(--intent-danger)'); return; }
-    const options = await optRes.json();
-    options.challenge = base64urlToBuffer(options.challenge);
-    if (options.allowCredentials) {
-      options.allowCredentials = options.allowCredentials.map(c => ({
-        ...c, id: base64urlToBuffer(c.id)
-      }));
-    }
-    const credential = await navigator.credentials.get({ publicKey: options });
-    const authRes = await fetch('/api/passkey/auth-verify', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        expectedChallenge: bufferToBase64url(options.challenge),
-        response: {
-          id: credential.id,
-          rawId: bufferToBase64url(credential.rawId),
-          response: {
-            authenticatorData: bufferToBase64url(credential.response.authenticatorData),
-            clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
-            signature: bufferToBase64url(credential.response.signature),
-          },
-          type: credential.type,
-          clientExtensionResults: credential.getClientExtensionResults(),
-          authenticatorAttachment: credential.authenticatorAttachment,
-        }
-      })
-    });
-    const result = await authRes.json();
-    if (result.verified && result.sessionToken) {
-      sessionToken = result.sessionToken;
+    const token = await doPasskeyAuth();
+    if (token) {
+      sessionToken = token;
       showStatus('Authenticated via passkey', 'var(--intent-ok)');
       doConnect('passkey');
     } else {
