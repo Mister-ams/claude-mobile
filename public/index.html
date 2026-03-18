@@ -323,7 +323,7 @@
     }
     #img-btn {
       display: flex; align-items: center; justify-content: center;
-      padding: 8px; min-height: 38px; min-width: 38px;
+      padding: 8px; min-height: 44px; min-width: 44px;
       background: var(--surface-alt); color: var(--dim);
       border: 1px solid var(--border); border-radius: var(--radius);
       font-weight: 600; font-size: 11px; cursor: pointer;
@@ -346,7 +346,7 @@
     }
     #msg:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
     #send {
-      padding: 8px 14px; min-height: 38px; min-width: 56px;
+      padding: 8px 14px; min-height: 44px; min-width: 56px;
       background: var(--accent); color: #fff;
       border: none; border-radius: var(--radius); font-weight: 600; font-size: 13px;
       cursor: pointer; white-space: nowrap;
@@ -445,7 +445,7 @@
       text-align: left; cursor: pointer;
       font-family: 'SF Mono', 'Menlo', monospace;
       border-bottom: 1px solid var(--border);
-      min-height: 40px;
+      min-height: 44px;
       transition: background 0.1s;
     }
     .switcher-item:active { background: var(--surface-hover); }
@@ -458,7 +458,7 @@
       animation: pulse 1.5s infinite;
     }
     .switcher-item .sw-close {
-      flex-shrink: 0; width: 24px; height: 24px;
+      flex-shrink: 0; width: 32px; height: 32px;
       display: flex; align-items: center; justify-content: center;
       background: none; border: 1px solid var(--border);
       border-radius: var(--radius); color: var(--dim); font-size: 11px;
@@ -526,7 +526,7 @@
 </div>
 
 <div id="lock-screen">
-  <div class="lock-icon">&#128274;</div>
+  <div class="lock-icon" aria-hidden="true">&#128274;</div>
   <h2>SESSION LOCKED</h2>
   <div class="auth-card">
     <p class="sub">Inactive timeout -- re-authenticate to continue</p>
@@ -562,7 +562,7 @@
       <div class="scroll-divider"></div>
       <div class="scroll-zone scroll-zone-down" id="sz-down"><div class="scroll-flash" id="sf-down"></div></div>
     </div>
-    <div id="empty-state" onclick="newSession()">
+    <div id="empty-state" onclick="newSession()" role="button" aria-label="Start new Claude session">
       <div class="empty-icon">+</div>
       <p>Tap to start a Claude session</p>
     </div>
@@ -596,7 +596,7 @@
   <div id="tabs">
     <div id="tab-switcher"></div>
     <button id="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="theme-char">&#9790;</span></button>
-    <div id="tab-pill" onclick="scrollBottom()">
+    <div id="tab-pill" onclick="scrollBottom()" role="button" aria-label="Scroll to bottom">
       <span class="pill-notify"></span>
       <span class="pill-name">No session</span>
       <span class="pill-dir"></span>
