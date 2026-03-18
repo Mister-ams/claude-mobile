@@ -232,12 +232,24 @@ function secureReceive(ws, rawStr) {
 
 // Session tokens: issued after auth, 30-min TTL, auto-rotated
 const SESSION_TTL_MS = 30 * 60 * 1000; // 30 min (short-lived, auto-refreshed)
-const sessionTokens = new Map(); // token -> { expires, ip }
+const INACTIVITY_MS = (config.inactivityTimeout || 15) * 60 * 1000;
+const sessionTokens = new Map(); // token -> { expires, ip, lastActivity }
 
 function issueSessionToken(ip) {
   const token = crypto.randomBytes(32).toString('base64url');
-  sessionTokens.set(token, { expires: Date.now() + SESSION_TTL_MS, ip });
+  sessionTokens.set(token, { expires: Date.now() + SESSION_TTL_MS, ip, lastActivity: Date.now() });
   return token;
+}
+
+function touchTokenActivity(token) {
+  const entry = sessionTokens.get(token);
+  if (entry) entry.lastActivity = Date.now();
+}
+
+function isTokenInactive(token) {
+  const entry = sessionTokens.get(token);
+  if (!entry) return false;
+  return (Date.now() - entry.lastActivity) > INACTIVITY_MS;
 }
 
 function validateSessionToken(token, callerIP) {
@@ -844,6 +856,7 @@ wss.on('connection', (ws, req) => {
     return;
   }
   ws.authenticated = false;
+  ws.locked = false;
   ws.currentSession = null;
   ws._ip = ip;
   ws._sessionToken = null;
@@ -905,8 +918,15 @@ wss.on('connection', (ws, req) => {
         ws._sessionToken = msg.sessionToken;
         lastAuthenticatedActivity = Date.now();
         audit('AUTH', `Session token re-auth`, ws._ip);
-        secureSend(ws, { type: 'auth', success: true, sessionToken: msg.sessionToken, ...authState });
+        // Check inactivity on reconnect -- send lock before accepting commands
+        const locked = isTokenInactive(msg.sessionToken);
+        if (locked) {
+          ws.locked = true;
+          audit('AUTH', `Reconnect locked (inactive)`, ws._ip);
+        }
+        secureSend(ws, { type: 'auth', success: true, sessionToken: msg.sessionToken, locked, ...authState });
         secureSend(ws, { type: 'sessions', sessions: getSessionList() });
+        if (locked) secureSend(ws, { type: 'lock' });
         return;
       }
 
@@ -961,6 +981,33 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
+    // ── Unlock (re-auth from lock screen) ──
+    if (msg.type === 'unlock') {
+      if (!ws.locked) return;
+      // Passkey unlock: validate session token from passkey auth flow
+      if (msg.sessionToken && validateSessionToken(msg.sessionToken, ws._ip)) {
+        ws.locked = false;
+        ws._sessionToken = msg.sessionToken;
+        touchTokenActivity(msg.sessionToken);
+        lastAuthenticatedActivity = Date.now();
+        secureSend(ws, { type: 'unlocked' });
+        audit('AUTH', `Unlocked via passkey`, ws._ip);
+        return;
+      }
+      // TOTP unlock
+      if (msg.totp && verifyTotp(msg.totp)) {
+        ws.locked = false;
+        touchTokenActivity(ws._sessionToken);
+        lastAuthenticatedActivity = Date.now();
+        secureSend(ws, { type: 'unlocked' });
+        audit('AUTH', `Unlocked via TOTP`, ws._ip);
+        return;
+      }
+      recordIPFailure(ws._ip);
+      secureSend(ws, { type: 'error', message: 'Unlock failed' });
+      return;
+    }
+
     // Check session token still valid
     if (ws._sessionToken && !validateSessionToken(ws._sessionToken, ws._ip)) {
       ws.authenticated = false;
@@ -969,7 +1016,21 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
+    // Inactivity lock: check if token is inactive, enforce lock
+    if (ws._sessionToken && isTokenInactive(ws._sessionToken)) {
+      ws.locked = true;
+      secureSend(ws, { type: 'lock' });
+      audit('AUTH', `Inactivity lock triggered`, ws._ip);
+      return;
+    }
+    if (ws.locked) {
+      secureSend(ws, { type: 'error', message: 'Locked -- re-authenticate to continue' });
+      return;
+    }
+
+    // Update activity trackers
     lastAuthenticatedActivity = Date.now();
+    touchTokenActivity(ws._sessionToken);
 
     switch (msg.type) {
       case 'create': {
@@ -1073,13 +1134,22 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-// ─── Session expiry checker (every 60s) ──────────────────────────
+// ─── Session expiry + inactivity checker (every 60s) ─────────────
 setInterval(() => {
   for (const ws of allClients) {
-    if (ws.authenticated && ws._sessionToken && !validateSessionToken(ws._sessionToken, ws._ip)) {
+    if (!ws.authenticated || !ws._sessionToken) continue;
+    // Token expired
+    if (!validateSessionToken(ws._sessionToken, ws._ip)) {
       ws.authenticated = false;
       secureSend(ws, { type: 'expired' });
       audit('AUTH', `Session auto-expired`, ws._ip);
+      continue;
+    }
+    // Inactivity lock
+    if (!ws.locked && isTokenInactive(ws._sessionToken)) {
+      ws.locked = true;
+      secureSend(ws, { type: 'lock' });
+      audit('AUTH', `Inactivity lock (periodic)`, ws._ip);
     }
   }
 }, 60 * 1000);
