@@ -1,6 +1,7 @@
 const express = require('express');
 const { WebSocketServer } = require('ws');
 const pty = require('node-pty');
+const { execSync } = require('child_process');
 const crypto = require('crypto');
 const http = require('http');
 const path = require('path');
@@ -18,6 +19,73 @@ const PORT = process.env.PORT || config.port || 3456;
 const MAX_SESSIONS = 8;
 const SCROLLBACK_SIZE = 100000;
 const DEBUG_ATTENTION = process.env.DEBUG_ATTENTION === '1';
+
+// ─── tmux session persistence (via WSL) ─────────────────────────
+const WSL_DISTRO = 'Ubuntu-24.04';
+const TMUX_PREFIX = 'cm'; // session names: cm-0, cm-1, ...
+
+function wslExec(cmd) {
+  return execSync(`wsl -d ${WSL_DISTRO} -u root -- bash -c "${cmd.replace(/"/g, '\\"')}"`, {
+    encoding: 'utf8', timeout: 10000
+  }).trim();
+}
+
+function winPathToWsl(winPath) {
+  return winPath
+    .replace(/^([A-Za-z]):\\/, (_, d) => `/mnt/${d.toLowerCase()}/`)
+    .replace(/\\/g, '/');
+}
+
+function wslPathToWin(wslPath) {
+  return wslPath
+    .replace(/^\/mnt\/([a-z])\//, (_, d) => `${d.toUpperCase()}:\\`)
+    .replace(/\//g, '\\');
+}
+
+function tmuxName(id) { return `${TMUX_PREFIX}-${id}`; }
+
+function listTmuxSessions() {
+  try {
+    const out = wslExec("tmux list-sessions -F '#{session_name}' 2>/dev/null || true");
+    return out.split('\n').filter(s => s.startsWith(TMUX_PREFIX + '-'));
+  } catch { return []; }
+}
+
+function createTmuxSession(name, wslDir) {
+  wslExec(`tmux new-session -d -s ${name} -c '${wslDir}' -x 80 -y 24`);
+  // Launch Claude via Windows interop (uses existing Windows auth + Claude install)
+  wslExec(`tmux send-keys -t ${name} 'cmd.exe /c claude' Enter`);
+}
+
+function attachToTmux(name, cols, rows) {
+  return pty.spawn('wsl.exe', [
+    '-d', WSL_DISTRO, '-u', 'root', '--',
+    'tmux', 'attach-session', '-t', name
+  ], {
+    name: 'xterm-256color', cols: cols || 80, rows: rows || 24,
+    env: getSafeEnv()
+  });
+}
+
+function captureTmuxScrollback(name) {
+  try {
+    return wslExec(`tmux capture-pane -t ${name} -p -S -500`);
+  } catch { return ''; }
+}
+
+function tmuxSessionAlive(name) {
+  try { wslExec(`tmux has-session -t ${name} 2>/dev/null`); return true; }
+  catch { return false; }
+}
+
+function killTmuxSession(name) {
+  try { wslExec(`tmux kill-session -t ${name}`); } catch {}
+}
+
+function getTmuxPanePath(name) {
+  try { return wslExec(`tmux display-message -t ${name} -p '#{pane_current_path}'`); }
+  catch { return null; }
+}
 
 // ─── Auth: No tokens. Setup via localhost only. ──────────────────
 const QRCode = require('qrcode');
@@ -787,20 +855,11 @@ function broadcastAttention(sessionId, reason) {
   }
 }
 
-function createSession(name, dir) {
-  if (sessions.size >= MAX_SESSIONS) return null;
-  const id = nextId++;
-  const proc = pty.spawn('cmd.exe', ['/c', 'claude'], {
-    name: 'xterm-256color', cols: 80, rows: 24,
-    cwd: dir, env: getSafeEnv()  // Phase 2: restricted env
-  });
+// Wire up proc.onData and proc.onExit for a session (shared by create + recover)
+function wireSessionProc(session) {
+  const { id } = session;
 
-  const session = {
-    id, name, dir, proc, scrollback: '',
-    attention: null, attentionTimer: null, clients: new Set()
-  };
-
-  proc.onData((data) => {
+  session.proc.onData((data) => {
     session.scrollback += data;
     if (session.scrollback.length > SCROLLBACK_SIZE) {
       session.scrollback = session.scrollback.slice(-SCROLLBACK_SIZE);
@@ -829,16 +888,96 @@ function createSession(name, dir) {
     }, 3000);
   });
 
-  proc.onExit(() => {
-    if (session.attentionTimer) clearTimeout(session.attentionTimer);
-    recentOutput.delete(id);
-    sessions.delete(id);
-    broadcastSessions();
+  session.proc.onExit(() => {
+    // PTY (wsl.exe) exited -- check if tmux session is still alive
+    if (session.tmuxName && tmuxSessionAlive(session.tmuxName)) {
+      // tmux survived (e.g., server restart) -- reattach after short delay
+      audit('SESSION', `PTY detached, tmux alive: ${session.tmuxName}`);
+      setTimeout(() => {
+        if (!sessions.has(id)) return; // cleaned up already
+        try {
+          session.proc = attachToTmux(session.tmuxName, 80, 24);
+          wireSessionProc(session);
+          audit('SESSION', `Reattached to tmux: ${session.tmuxName}`);
+        } catch (e) {
+          audit('ERROR', `Reattach failed: ${e.message}`);
+          sessions.delete(id);
+          recentOutput.delete(id);
+          broadcastSessions();
+        }
+      }, 1000);
+    } else {
+      // tmux session is gone -- clean up
+      if (session.attentionTimer) clearTimeout(session.attentionTimer);
+      recentOutput.delete(id);
+      sessions.delete(id);
+      broadcastSessions();
+    }
   });
+}
 
+function createSession(name, dir) {
+  if (sessions.size >= MAX_SESSIONS) return null;
+  const id = nextId++;
+  const tmux = tmuxName(id);
+  const wslDir = winPathToWsl(dir);
+
+  try {
+    createTmuxSession(tmux, wslDir);
+  } catch (e) {
+    audit('ERROR', `tmux create failed: ${e.message}`);
+    return null;
+  }
+
+  const proc = attachToTmux(tmux, 80, 24);
+
+  const session = {
+    id, name, dir, tmuxName: tmux, proc, scrollback: '',
+    attention: null, attentionTimer: null, clients: new Set()
+  };
+
+  wireSessionProc(session);
   sessions.set(id, session);
-  audit('SESSION', `Created: "${name}" in ${dir}`);
+  audit('SESSION', `Created: "${name}" in ${dir} (tmux: ${tmux})`);
   return session;
+}
+
+// Recover existing tmux sessions after server restart
+function recoverTmuxSessions() {
+  const existing = listTmuxSessions();
+  if (existing.length === 0) return;
+
+  console.log(`  Recovering ${existing.length} tmux session(s)...`);
+  for (const tmux of existing) {
+    const idNum = parseInt(tmux.replace(TMUX_PREFIX + '-', ''));
+    if (isNaN(idNum)) continue;
+
+    // Get working directory from tmux pane
+    const wslDir = getTmuxPanePath(tmux);
+    const winDir = wslDir ? wslPathToWin(wslDir) : 'unknown';
+
+    // Find project name from config
+    const project = config.projects.find(p => p.dir === winDir);
+    const name = project ? project.name : `Recovered-${idNum}`;
+
+    try {
+      const proc = attachToTmux(tmux, 80, 24);
+      const scrollback = captureTmuxScrollback(tmux);
+
+      const session = {
+        id: idNum, name, dir: winDir, tmuxName: tmux, proc,
+        scrollback: scrollback || '',
+        attention: null, attentionTimer: null, clients: new Set()
+      };
+
+      wireSessionProc(session);
+      sessions.set(idNum, session);
+      if (idNum >= nextId) nextId = idNum + 1;
+      console.log(`  Recovered: "${name}" (${tmux})`);
+    } catch (e) {
+      audit('ERROR', `Recovery failed for ${tmux}: ${e.message}`);
+    }
+  }
 }
 
 // ─── WebSocket ───────────────────────────────────────────────────
@@ -1100,7 +1239,13 @@ wss.on('connection', (ws, req) => {
         if (!activeSession || !msg.cols || !msg.rows) break;
         const cols = Math.max(40, Math.min(300, msg.cols));
         const rows = Math.max(10, Math.min(200, msg.rows));
-        try { activeSession.proc.resize(cols, rows); } catch {}
+        try {
+          activeSession.proc.resize(cols, rows);
+          // Also resize the tmux pane to match
+          if (activeSession.tmuxName) {
+            wslExec(`tmux resize-window -t ${activeSession.tmuxName} -x ${cols} -y ${rows}`);
+          }
+        } catch {}
         break;
       }
 
@@ -1114,12 +1259,15 @@ wss.on('connection', (ws, req) => {
 
       case 'close': {
         if (!targetSession) break;
+        // Kill tmux session first (destroys the running process)
+        if (targetSession.tmuxName) killTmuxSession(targetSession.tmuxName);
         try { targetSession.proc.kill(); } catch {}
         if (targetSession.attentionTimer) clearTimeout(targetSession.attentionTimer);
+        recentOutput.delete(msg.session);
         sessions.delete(msg.session);
         if (ws.currentSession === msg.session) ws.currentSession = null;
         broadcastSessions();
-        audit('SESSION', `Closed: "${targetSession.name}"`, ws._ip);
+        audit('SESSION', `Closed: "${targetSession.name}" (tmux: ${targetSession.tmuxName})`, ws._ip);
         break;
       }
     }
@@ -1221,7 +1369,9 @@ server.listen(PORT, 'localhost', () => {
   console.log(`  Identity: ${identityKeys.fingerprint.slice(0, 16)}...`);
   console.log(`  Audit:    ${AUDIT_PATH}`);
   console.log(`  Shutdown: auto after 8h idle`);
+  console.log(`  Sessions: tmux via WSL (${WSL_DISTRO})`);
   console.log('  ────────────────────────────────');
-  autoStartSessions();
+  recoverTmuxSessions();
+  if (sessions.size === 0) autoStartSessions();
   audit('SYSTEM', `Server started on port ${PORT}`);
 });
