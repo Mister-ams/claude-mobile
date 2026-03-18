@@ -1183,6 +1183,7 @@ function handle(m) {
         }
       } else {
         pinScreen.style.display = 'flex'; appEl.style.display = 'none';
+        $('totp-input').value = '';
         pinError.style.display = 'block'; sessionToken = null;
         if (m.locked) showStatus('Too many attempts. Locked out.', 'var(--intent-danger)');
         if (m.reason) showStatus(m.reason, 'var(--intent-danger)');
@@ -1192,6 +1193,8 @@ function handle(m) {
     case 'expired':
       pinScreen.style.display = 'flex'; appEl.style.display = 'none';
       sessionToken = null;
+      $('totp-input').value = '';
+      pinError.style.display = 'none';
       showStatus('Session expired. Re-authenticate.', 'var(--intent-warn)');
       checkAuthStatus();
       break;
@@ -1235,7 +1238,10 @@ function handle(m) {
       notifyAttention(m.session, m.reason, s?.name);
       break;
     case 'error':
-      alert(m.message); break;
+      // Ignore lock/auth errors (handled by lock screen) -- don't block with alert()
+      if (/locked|re-authenticate|not authenticated/i.test(m.message)) break;
+      showStatus(m.message, 'var(--intent-danger)');
+      break;
   }
 }
 
