@@ -110,9 +110,9 @@ ok "Hostname: $TS_HOSTNAME"
 echo ""
 say "Configuring HTTPS proxy..."
 echo -e "  ${DIM}This makes https://$TS_HOSTNAME route to localhost:$PORT${RESET}"
-"$TS_CMD" serve https / http://localhost:$PORT 2>/dev/null && ok "tailscale serve configured" || {
+"$TS_CMD" serve --bg http://localhost:$PORT 2>/dev/null && ok "tailscale serve configured" || {
   warn "tailscale serve failed. You may need to run manually:"
-  echo -e "  ${DIM}tailscale serve https / http://localhost:$PORT${RESET}"
+  echo -e "  ${DIM}tailscale serve --bg http://localhost:$PORT${RESET}"
 }
 
 # ── Step 3: Install npm dependencies ─────────────────────

@@ -842,8 +842,13 @@ const allClients = new Set();
 const MAX_CONNECTIONS_PER_IP = 10;
 
 function getClientIP(ws) {
-  // Direct connection via Tailscale -- no proxy headers needed
-  return ws._socket?._peername?.address || 'unknown';
+  // tailscale serve proxies from localhost -- trust X-Forwarded-For from loopback only
+  const peerIP = ws._socket?._peername?.address || 'unknown';
+  if (peerIP === '127.0.0.1' || peerIP === '::1') {
+    const xff = ws._req?.headers?.['x-forwarded-for'];
+    if (xff) return xff.split(',')[0].trim();
+  }
+  return peerIP;
 }
 
 wss.on('connection', (ws, req) => {
