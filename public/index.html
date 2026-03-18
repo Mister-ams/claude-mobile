@@ -930,7 +930,12 @@ async function checkAuthStatus() {
       $('passkey-btn').style.display = 'none';
       $('totp-section').style.display = 'none';
     }
-  } catch {}
+  } catch (e) {
+    // Fetch failed (proxy issue, network) -- show TOTP as fallback
+    console.error('Auth status check failed:', e);
+    $('totp-section').style.display = 'block';
+    $('auth-label').textContent = 'Enter verification code';
+  }
 }
 
 async function loginPasskey() {
