@@ -834,10 +834,12 @@ function detectAttention(sessionId) {
   // Claude Code "Task completed" or similar completion messages
   if (/task completed|changes (saved|committed|applied)|done[.!]?\s*$/i.test(last3)) return 'ready';
 
-  if (DEBUG_ATTENTION) {
-    const preview = lines.slice(-3).map(l => l.substring(0, 80)).join(' | ');
-    audit('ATTN-DEBUG', `session=${sessionId} lastLine=[${lastLine.substring(0, 60)}] preview=[${preview}]`);
-  }
+  // Catch-all: line with just a prompt char (with possible ANSI remnants stripped)
+  if (/^[^a-zA-Z0-9]*[>$%#\u276f\u2771\u279c][^a-zA-Z0-9]*$/.test(lastLine) && lastLine.length < 10) return 'ready';
+
+  // Always log for diagnostics (written to audit log)
+  const preview = lines.slice(-3).map(l => l.substring(0, 80)).join(' | ');
+  audit('ATTN-MISS', `session=${sessionId} lines=${lines.length} lastLine=[${lastLine.substring(0, 60)}] preview=[${preview}]`);
 
   return null;
 }
@@ -882,7 +884,8 @@ function wireSessionProc(session) {
       if (ws.readyState === 1) secureSend(ws, obj);
     }
 
-    // Debounce: wait for output to settle, then check accumulated buffer
+    // Debounce: wait for output to settle, then check accumulated buffer.
+    // 5s avoids false triggers during Claude's mid-response pauses.
     if (session.attentionTimer) clearTimeout(session.attentionTimer);
     session.attentionTimer = setTimeout(() => {
       const reason = detectAttention(id);
@@ -890,10 +893,11 @@ function wireSessionProc(session) {
         session.attention = reason;
         broadcastAttention(id, reason);
         broadcastSessions();
+        // Only clear buffer on successful detection
+        recentOutput.delete(id);
       }
-      // Clear recent output after detection (start fresh for next cycle)
-      recentOutput.delete(id);
-    }, 3000);
+      // On miss: keep buffer so next check has more context
+    }, 5000);
   });
 
   session.proc.onExit(() => {
