@@ -436,7 +436,7 @@ app.use((req, res, next) => {
 app.use((_req, res, next) => {
   res.setHeader('Content-Security-Policy', [
     "default-src 'none'",
-    "script-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline'",
     "connect-src 'self' ws: wss:",
     "img-src 'self' data: blob:",
