@@ -95,6 +95,7 @@
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       font-size: 14px; line-height: 1.286;
       -webkit-tap-highlight-color: transparent;
+      overscroll-behavior: none;
     }
     #app { display: none; flex-direction: column; height: 100dvh; position: relative; overflow: hidden; }
 
@@ -1182,7 +1183,10 @@ function handle(m) {
     case 'output':
       if (terms[m.session]) {
         terms[m.session].write(m.data);
-        if (m.session === activeSession && !userScrolled) terms[m.session].scrollToBottom();
+        if (m.session === activeSession && !userScrolled) {
+          terms[m.session].scrollToBottom();
+          window.scrollTo(0, 0);
+        }
       }
       break;
     case 'scrollback':
@@ -1619,6 +1623,8 @@ function scrollBottom() {
   try { fits[activeSession]?.fit(); } catch {}
   requestAnimationFrame(() => {
     terms[activeSession]?.scrollToBottom();
+    // Pin document to prevent iOS pushing page beyond visible area
+    window.scrollTo(0, 0);
   });
 }
 
@@ -1785,12 +1791,17 @@ function updateDiag(cols, rows) {
 
 window.addEventListener('resize', doResize);
 if (window.visualViewport) {
+  // Pin app height to visual viewport immediately on load
+  appEl.style.height = window.visualViewport.height + 'px';
   let lastVVH = window.visualViewport.height;
   let resizeTimer = null;
   window.visualViewport.addEventListener('resize', () => {
     const h = window.visualViewport.height;
     // Always update app height immediately (prevents page overflow)
     appEl.style.height = h + 'px';
+    // Pin document scroll to top to prevent iOS pushing content offscreen
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
     const delta = h - lastVVH;
     lastVVH = h;
     // Skip small changes (< 30px) -- these are iOS prediction bar adjustments
@@ -1810,7 +1821,10 @@ if (window.visualViewport) {
       }
     }, 150);
   });
-  window.visualViewport.addEventListener('scroll', () => window.scrollTo(0, 0));
+  window.visualViewport.addEventListener('scroll', () => {
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+  });
 }
 
 // ── iOS Prevention ──

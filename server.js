@@ -17,6 +17,7 @@ const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), '
 const PORT = process.env.PORT || config.port || 3456;
 const MAX_SESSIONS = 8;
 const SCROLLBACK_SIZE = 100000;
+const DEBUG_ATTENTION = process.env.DEBUG_ATTENTION === '1';
 
 // ─── Auth: No tokens. Setup via localhost only. ──────────────────
 const QRCode = require('qrcode');
@@ -701,7 +702,20 @@ const sessions = new Map();
 let nextId = 0;
 
 function stripAnsi(str) {
-  return str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b\][^\x07]*\x07/g, '').replace(/\x1b[^[]/g, '');
+  return str
+    // OSC sequences (both BEL and ST terminated)
+    .replace(/\x1b\].*?(?:\x07|\x1b\\)/gs, '')
+    // CSI sequences (includes ? for DEC private modes like bracketed paste)
+    .replace(/\x1b\[[\x20-\x3f]*[0-9;]*[\x20-\x3f]*[A-Za-z]/g, '')
+    // DCS/PM/APC sequences (ST terminated)
+    .replace(/\x1b[PX^_].*?(?:\x1b\\|\x07)/gs, '')
+    // Two-char escape sequences (cursor save/restore, charset select, etc.)
+    .replace(/\x1b[^[\]PX^_\x1b]/g, '')
+    // Remaining control chars except \n and \t
+    .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, '')
+    // Collapse \r\n to \n and strip bare \r (line overwrites)
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n');
 }
 
 // Accumulate recent output for better attention detection
@@ -710,14 +724,16 @@ let recentOutput = new Map(); // session id -> last N chars of output
 function updateRecentOutput(sessionId, data) {
   const existing = recentOutput.get(sessionId) || '';
   const combined = existing + data;
-  // Keep last 2KB for pattern matching
-  recentOutput.set(sessionId, combined.length > 2048 ? combined.slice(-2048) : combined);
+  // Keep last 4KB for pattern matching (Claude Code outputs are verbose)
+  recentOutput.set(sessionId, combined.length > 4096 ? combined.slice(-4096) : combined);
 }
 
 function detectAttention(sessionId) {
   const raw = recentOutput.get(sessionId) || '';
   const clean = stripAnsi(raw);
-  const lines = clean.split('\n').filter(l => l.trim());
+  // Split, collapse empty lines, take last meaningful lines
+  const lines = clean.split('\n').map(l => l.trim()).filter(Boolean);
+  const last10 = lines.slice(-10).join('\n');
   const last5 = lines.slice(-5).join('\n');
   const lastLine = lines[lines.length - 1] || '';
 
@@ -733,14 +749,19 @@ function detectAttention(sessionId) {
   if (/\?\s*$/.test(last3) && !/^\s*(http|\/\/|#)/.test(lastLine)) return 'question';
 
   // Claude Code idle prompt -- waiting for user input
-  // The prompt character > appears as the last meaningful character
-  if (/^\s*[>]\s*$/.test(lastLine)) return 'ready';
-  // Also check for the Unicode prompt character
-  if (/^\s*[>\u276f\u2771]\s*$/.test(lastLine)) return 'ready';
+  // The prompt character > or unicode variants, possibly with surrounding whitespace/dots
+  if (/^[\s.]*[>\u276f\u2771\u279c][\s.]*$/.test(lastLine)) return 'ready';
 
   // Claude finished responding -- look for cost/token summary lines
-  // which appear at the end of a response
   if (/total cost|tokens used|input:|output:/i.test(last3)) return 'ready';
+
+  // Claude Code shows a $ or > prompt after command completion
+  if (/^[\s]*[$%#>][\s]*$/.test(lastLine)) return 'ready';
+
+  if (DEBUG_ATTENTION) {
+    const preview = lines.slice(-3).map(l => l.substring(0, 80)).join(' | ');
+    audit('ATTN-DEBUG', `session=${sessionId} lastLine=[${lastLine.substring(0, 60)}] preview=[${preview}]`);
+  }
 
   return null;
 }
