@@ -480,6 +480,8 @@ const challenges = new Map(); // challengeId -> { challenge, expires }
 
 // ─── Express ─────────────────────────────────────────────────────
 const app = express();
+// Trust X-Forwarded-For from loopback (tailscale serve proxies HTTPS -> localhost)
+app.set('trust proxy', 'loopback');
 app.use((req, res, next) => {
   if (req.path === '/api/upload') return next();
   express.json()(req, res, next);
