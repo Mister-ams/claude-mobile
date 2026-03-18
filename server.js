@@ -270,14 +270,6 @@ function rotateSessionToken(oldToken, ip) {
   return newToken;
 }
 
-// Cleanup expired session tokens every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [token, entry] of sessionTokens) {
-    if (now > entry.expires) sessionTokens.delete(token);
-  }
-}, 5 * 60 * 1000);
-
 // ─── Global rate limiter ─────────────────────────────────────────
 // 20 failures total (all IPs) in 5 min = 10 min global lockout
 const GLOBAL_RATE_WINDOW = 5 * 60 * 1000;
@@ -323,14 +315,6 @@ function recordIPFailure(ip) {
   }
   authAttempts.set(ip, entry);
 }
-
-// Cleanup stale IP entries every 5 minutes
-setInterval(() => {
-  const now = Date.now();
-  for (const [ip, entry] of authAttempts) {
-    if (entry.lockUntil && now > entry.lockUntil + 60000) authAttempts.delete(ip);
-  }
-}, 5 * 60 * 1000);
 
 // ─── Audit log ───────────────────────────────────────────────────
 const AUDIT_PATH = path.join(os.homedir(), '.claude-mobile-audit.log');
@@ -1036,6 +1020,10 @@ wss.on('connection', (ws, req) => {
     lastAuthenticatedActivity = Date.now();
     touchTokenActivity(ws._sessionToken);
 
+    // Pre-resolve session for commands that operate on it
+    const activeSession = ws.currentSession !== null ? sessions.get(ws.currentSession) : null;
+    const targetSession = msg.session != null ? sessions.get(msg.session) : null;
+
     switch (msg.type) {
       case 'create': {
         const dir = msg.dir || config.projects[0].dir;
@@ -1044,10 +1032,10 @@ wss.on('connection', (ws, req) => {
           secureSend(ws, { type: 'error', message: 'Directory not in allowed project list' });
           break;
         }
-        const session = createSession(msg.name || 'Session', dir);
-        if (session) {
+        const created = createSession(msg.name || 'Session', dir);
+        if (created) {
           broadcastSessions();
-          secureSend(ws, { type: 'created', session: session.id });
+          secureSend(ws, { type: 'created', session: created.id });
         } else {
           secureSend(ws, { type: 'error', message: 'Max sessions reached (4)' });
         }
@@ -1055,75 +1043,62 @@ wss.on('connection', (ws, req) => {
       }
 
       case 'connect': {
-        const session = sessions.get(msg.session);
-        if (!session) break;
+        if (!targetSession) break;
         if (ws.currentSession !== null) {
           sessions.get(ws.currentSession)?.clients.delete(ws);
         }
         ws.currentSession = msg.session;
-        session.clients.add(ws);
-        if (session.scrollback) {
-          // Phase 2: redact secrets from scrollback
-          const safe = redactSecrets(session.scrollback);
-          secureSend(ws, { type: 'scrollback', session: session.id, data: safe });
+        targetSession.clients.add(ws);
+        if (targetSession.scrollback) {
+          const safe = redactSecrets(targetSession.scrollback);
+          secureSend(ws, { type: 'scrollback', session: targetSession.id, data: safe });
         }
-        if (session.attention) {
-          secureSend(ws, { type: 'attention', session: session.id, reason: session.attention });
+        if (targetSession.attention) {
+          secureSend(ws, { type: 'attention', session: targetSession.id, reason: targetSession.attention });
         }
         break;
       }
 
       case 'input': {
-        const session = ws.currentSession !== null ? sessions.get(ws.currentSession) : null;
-        if (session) {
-          // Phase 2: canary detection
-          const canary = checkCanary(msg.data);
-          if (canary) {
-            audit('CANARY', `Suspicious input detected: ${canary}`, ws._ip);
-            secureSend(ws, { type: 'warning', message: `Canary triggered: ${canary}` });
-          }
-          const inputHash = crypto.createHash('sha256').update(msg.data).digest('hex').slice(0, 12);
-          audit('INPUT', `session=${ws.currentSession} len=${msg.data.length} hash=${inputHash}`, ws._ip);
-          try { session.proc.write(msg.data); } catch (e) {
-            audit('ERROR', `pty write: ${e.message}`);
-          }
-          if (session.attention) { session.attention = null; broadcastSessions(); }
+        if (!activeSession) break;
+        const canary = checkCanary(msg.data);
+        if (canary) {
+          audit('CANARY', `Suspicious input detected: ${canary}`, ws._ip);
+          secureSend(ws, { type: 'warning', message: `Canary triggered: ${canary}` });
         }
+        const inputHash = crypto.createHash('sha256').update(msg.data).digest('hex').slice(0, 12);
+        audit('INPUT', `session=${ws.currentSession} len=${msg.data.length} hash=${inputHash}`, ws._ip);
+        try { activeSession.proc.write(msg.data); } catch (e) {
+          audit('ERROR', `pty write: ${e.message}`);
+        }
+        if (activeSession.attention) { activeSession.attention = null; broadcastSessions(); }
         break;
       }
 
       case 'resize': {
-        const session = ws.currentSession !== null ? sessions.get(ws.currentSession) : null;
-        if (session && msg.cols && msg.rows) {
-          // Phase 2: bounds checking
-          const cols = Math.max(40, Math.min(300, msg.cols));
-          const rows = Math.max(10, Math.min(200, msg.rows));
-          try { session.proc.resize(cols, rows); } catch {}
-        }
+        if (!activeSession || !msg.cols || !msg.rows) break;
+        const cols = Math.max(40, Math.min(300, msg.cols));
+        const rows = Math.max(10, Math.min(200, msg.rows));
+        try { activeSession.proc.resize(cols, rows); } catch {}
         break;
       }
 
       case 'rename': {
-        const session = sessions.get(msg.session);
-        if (session && msg.name) {
-          // Phase 2: name validation
-          const name = String(msg.name).slice(0, 50).replace(/[<>"'&]/g, '');
-          session.name = name;
-          broadcastSessions();
-        }
+        if (!targetSession || !msg.name) break;
+        const name = String(msg.name).slice(0, 50).replace(/[<>"'&]/g, '');
+        targetSession.name = name;
+        broadcastSessions();
         break;
       }
 
       case 'close': {
-        const session = sessions.get(msg.session);
-        if (session) {
-          try { session.proc.kill(); } catch {}
-          if (session.attentionTimer) clearTimeout(session.attentionTimer);
-          sessions.delete(msg.session);
-          if (ws.currentSession === msg.session) ws.currentSession = null;
-          broadcastSessions();
-          audit('SESSION', `Closed: "${session.name}"`, ws._ip);
-        }
+        if (!targetSession) break;
+        try { targetSession.proc.kill(); } catch {}
+        if (targetSession.attentionTimer) clearTimeout(targetSession.attentionTimer);
+        sessions.delete(msg.session);
+        if (ws.currentSession === msg.session) ws.currentSession = null;
+        broadcastSessions();
+        audit('SESSION', `Closed: "${targetSession.name}"`, ws._ip);
         break;
       }
     }
@@ -1138,18 +1113,26 @@ wss.on('connection', (ws, req) => {
   });
 });
 
-// ─── Session expiry + inactivity checker (every 60s) ─────────────
+// ─── Housekeeping (single 60s timer) ─────────────────────────────
 setInterval(() => {
+  const now = Date.now();
+  // Expired session tokens
+  for (const [token, entry] of sessionTokens) {
+    if (now > entry.expires) sessionTokens.delete(token);
+  }
+  // Stale IP rate limit entries
+  for (const [ip, entry] of authAttempts) {
+    if (entry.lockUntil && now > entry.lockUntil + 60000) authAttempts.delete(ip);
+  }
+  // Per-client: expiry + inactivity lock
   for (const ws of allClients) {
     if (!ws.authenticated || !ws._sessionToken) continue;
-    // Token expired
     if (!validateSessionToken(ws._sessionToken, ws._ip)) {
       ws.authenticated = false;
       secureSend(ws, { type: 'expired' });
       audit('AUTH', `Session auto-expired`, ws._ip);
       continue;
     }
-    // Inactivity lock
     if (!ws.locked && isTokenInactive(ws._sessionToken)) {
       ws.locked = true;
       secureSend(ws, { type: 'lock' });
