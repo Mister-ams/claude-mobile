@@ -17,7 +17,7 @@ const { TOTP, Secret } = require('otpauth');
 const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
 const PORT = process.env.PORT || config.port || 3456;
 const MAX_SESSIONS = 8;
-const SCROLLBACK_SIZE = 100000;
+const SCROLLBACK_SIZE = 400000;
 const DEBUG_ATTENTION = process.env.DEBUG_ATTENTION === '1';
 
 // ─── tmux session persistence (via WSL) ─────────────────────────
@@ -52,7 +52,9 @@ function listTmuxSessions() {
 }
 
 function createTmuxSession(name, wslDir) {
+  // set-option history-limit 8000 (4x default 2000)
   wslExec(`tmux new-session -d -s ${name} -c '${wslDir}' -x 80 -y 24`);
+  wslExec(`tmux set-option -t ${name} history-limit 8000`);
   // Launch Claude via Windows interop (uses existing Windows auth + Claude install)
   wslExec(`tmux send-keys -t ${name} 'cmd.exe /c claude' Enter`);
 }
@@ -69,7 +71,7 @@ function attachToTmux(name, cols, rows) {
 
 function captureTmuxScrollback(name) {
   try {
-    return wslExec(`tmux capture-pane -t ${name} -p -S -500`);
+    return wslExec(`tmux capture-pane -t ${name} -p -S -2000`);
   } catch { return ''; }
 }
 
