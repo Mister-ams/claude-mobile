@@ -1123,6 +1123,43 @@ function doConnect(method, totpCode) {
   };
 }
 
+// ── Notifications ──
+// Request permission on first user interaction
+let notifPermission = typeof Notification !== 'undefined' ? Notification.permission : 'denied';
+document.addEventListener('click', function reqNotif() {
+  if (typeof Notification !== 'undefined' && notifPermission === 'default') {
+    Notification.requestPermission().then(p => { notifPermission = p; });
+  }
+  document.removeEventListener('click', reqNotif);
+}, { once: true });
+
+const ATTN_LABELS = {
+  ready: 'Claude is ready',
+  permission: 'Permission needed',
+  question: 'Claude has a question'
+};
+
+const ATTN_VIBRATE = {
+  ready: [100, 50, 100],
+  permission: [200, 100, 200, 100, 200],
+  question: [150, 80, 150]
+};
+
+function notifyAttention(sessionId, reason, sessionName) {
+  // Vibrate with pattern based on reason
+  if (navigator.vibrate) navigator.vibrate(ATTN_VIBRATE[reason] || [200]);
+
+  // System notification when page is not visible (phone locked, other app)
+  if (document.hidden && notifPermission === 'granted') {
+    const title = ATTN_LABELS[reason] || 'Attention needed';
+    const body = sessionName ? `Session: ${sessionName}` : `Session ${sessionId}`;
+    try {
+      const n = new Notification(title, { body, tag: `attn-${sessionId}`, renotify: true });
+      n.onclick = () => { window.focus(); n.close(); };
+    } catch {}
+  }
+}
+
 function handle(m) {
   switch (m.type) {
     case 'auth':
@@ -1195,7 +1232,7 @@ function handle(m) {
     case 'attention':
       const s = sessions.find(x => x.id === m.session);
       if (s) { s.attention = m.reason; renderTabs(); }
-      if (navigator.vibrate) navigator.vibrate(200);
+      notifyAttention(m.session, m.reason, s?.name);
       break;
     case 'error':
       alert(m.message); break;

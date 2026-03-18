@@ -828,6 +828,12 @@ function detectAttention(sessionId) {
   // Claude Code shows a $ or > prompt after command completion
   if (/^[\s]*[$%#>][\s]*$/.test(lastLine)) return 'ready';
 
+  // Claude Code cost summary line (e.g., "$0.12 | 5.2K in | 1.8K out")
+  if (/\$[\d.]+\s*\|\s*[\d.]+[KMkm]?\s*(in|tokens)/i.test(last3)) return 'ready';
+
+  // Claude Code "Task completed" or similar completion messages
+  if (/task completed|changes (saved|committed|applied)|done[.!]?\s*$/i.test(last3)) return 'ready';
+
   if (DEBUG_ATTENTION) {
     const preview = lines.slice(-3).map(l => l.substring(0, 80)).join(' | ');
     audit('ATTN-DEBUG', `session=${sessionId} lastLine=[${lastLine.substring(0, 60)}] preview=[${preview}]`);
