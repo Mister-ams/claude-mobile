@@ -445,6 +445,7 @@ app.use((_req, res, next) => {
     "base-uri 'self'",
     "form-action 'self'",
   ].join('; '));
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   next();
 });
 app.use(express.static(path.join(__dirname, 'public')));
