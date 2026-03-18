@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────
 # Claude Mobile -- Single-file installer
-# Installs dependencies, configures projects, sets up ngrok,
+# Installs dependencies, configures projects, sets up Tailscale,
 # and runs the initial TOTP setup.
 # ─────────────────────────────────────────────────────────
 set -e
@@ -96,83 +96,51 @@ for i in 2 3 4; do
 done
 PROJECTS="$PROJECTS]"
 
-# ── Step 4: ngrok setup ──────────────────────────────────
-say "Setting up ngrok for remote access..."
+# ── Step 4: Tailscale setup ────────────────────────────────
+say "Setting up Tailscale for secure remote access..."
+echo ""
+echo -e "  ${DIM}Tailscale creates a private VPN between your devices."
+echo -e "  No public URLs. WireGuard encryption. Zero config networking.${RESET}"
 echo ""
 
-NGROK_CMD=""
-if command -v ngrok &>/dev/null; then
-  NGROK_CMD="ngrok"
-  ok "ngrok found in PATH"
+TS_CMD=""
+if command -v tailscale &>/dev/null; then
+  TS_CMD="tailscale"
+  ok "Tailscale CLI found"
 else
-  # Check common install locations (Windows)
-  for candidate in \
-    "$LOCALAPPDATA/Microsoft/WinGet/Packages/Ngrok.Ngrok_Microsoft.Winget.Source_8wekyb3d8bbwe/ngrok.exe" \
-    "$LOCALAPPDATA/ngrok/ngrok.exe" \
-    "/usr/local/bin/ngrok" \
-    "/opt/homebrew/bin/ngrok"; do
-    if [ -f "$candidate" ]; then
-      NGROK_CMD="$candidate"
-      ok "ngrok found at $candidate"
-      break
-    fi
-  done
+  echo -e "  ${BOLD}Install Tailscale:${RESET}"
+  echo -e "    Windows: ${DIM}winget install Tailscale.Tailscale${RESET}"
+  echo -e "    macOS:   ${DIM}brew install tailscale${RESET}"
+  echo -e "    Linux:   ${DIM}curl -fsSL https://tailscale.com/install.sh | sh${RESET}"
+  echo ""
+  warn "Install Tailscale, then run this installer again."
+  warn "Also install Tailscale on your iPhone from the App Store."
+  echo ""
 fi
 
-if [ -z "$NGROK_CMD" ]; then
-  echo ""
-  echo -e "  ${DIM}ngrok provides a permanent URL for phone access from any network."
-  echo -e "  Without it, you can only use Claude Mobile on the same WiFi.${RESET}"
-  echo ""
-  echo -e "  ${BOLD}Install ngrok:${RESET}"
-  echo -e "    Windows: ${DIM}winget install ngrok.ngrok${RESET}"
-  echo -e "    macOS:   ${DIM}brew install ngrok${RESET}"
-  echo -e "    Linux:   ${DIM}snap install ngrok${RESET}"
-  echo ""
-  ask "Install ngrok now? (y/n)"
-  if [[ "$REPLY" =~ ^[Yy] ]]; then
-    if command -v winget &>/dev/null; then
-      winget install ngrok.ngrok --accept-source-agreements --accept-package-agreements 2>&1 | tail -3
-    elif command -v brew &>/dev/null; then
-      brew install ngrok 2>&1 | tail -3
-    elif command -v snap &>/dev/null; then
-      sudo snap install ngrok 2>&1 | tail -3
+TS_HOSTNAME=""
+if [ -n "$TS_CMD" ]; then
+  # Check if logged in
+  if ! "$TS_CMD" status &>/dev/null 2>&1; then
+    warn "Tailscale not connected. Run: tailscale up"
+  else
+    ok "Tailscale connected"
+    # Try to extract MagicDNS hostname
+    TS_HOSTNAME=$("$TS_CMD" status --json 2>/dev/null | grep -o '"DNSName":"[^"]*"' | head -1 | sed 's/"DNSName":"//;s/\.$//' | sed 's/"$//')
+    if [ -n "$TS_HOSTNAME" ]; then
+      ok "MagicDNS hostname: $TS_HOSTNAME"
     else
-      fail "No package manager found. Install ngrok manually: https://ngrok.com/download"
+      ask "Tailscale MagicDNS hostname (e.g., your-machine.tail12345.ts.net)"
+      TS_HOSTNAME="$REPLY"
     fi
-    NGROK_CMD="ngrok"
-    ok "ngrok installed"
-  else
-    warn "Skipping ngrok -- local-only access"
-  fi
-fi
-
-NGROK_DOMAIN=""
-if [ -n "$NGROK_CMD" ]; then
-  echo ""
-  echo -e "  ${DIM}You need a free ngrok account with a static domain."
-  echo -e "  1. Sign up at https://dashboard.ngrok.com/signup (free)"
-  echo -e "  2. Copy your authtoken from the dashboard"
-  echo -e "  3. Get your free static domain from Domains page${RESET}"
-  echo ""
-
-  # Check if already authenticated
-  if ! "$NGROK_CMD" config check &>/dev/null 2>&1; then
-    ask "ngrok authtoken (from dashboard.ngrok.com)"
-    if [ -n "$REPLY" ]; then
-      "$NGROK_CMD" config add-authtoken "$REPLY" 2>&1
-      ok "ngrok authenticated"
-    fi
-  else
-    ok "ngrok already authenticated"
   fi
 
-  ask "ngrok static domain (e.g., your-name.ngrok-free.dev)"
-  NGROK_DOMAIN="$REPLY"
-  if [ -n "$NGROK_DOMAIN" ]; then
-    ok "Domain: $NGROK_DOMAIN"
-  else
-    warn "No domain provided -- tunnel will use random URLs (passkeys won't persist)"
+  if [ -n "$TS_HOSTNAME" ]; then
+    # Set up tailscale serve for HTTPS
+    echo ""
+    say "Configuring tailscale serve (HTTPS proxy)..."
+    echo -e "  ${DIM}This proxies https://$TS_HOSTNAME -> localhost:$PORT${RESET}"
+    "$TS_CMD" serve https / http://localhost:$PORT 2>/dev/null && ok "tailscale serve configured" || warn "tailscale serve failed -- configure manually"
   fi
 fi
 
@@ -186,7 +154,8 @@ PORT=3456
 cat > config.json << JSONEOF
 {
   "port": $PORT,
-  "ngrokDomain": "$NGROK_DOMAIN",
+  "tailscaleHostname": "$TS_HOSTNAME",
+  "inactivityTimeout": 15,
   "autoStart": ["$MAIN_NAME"],
   "defaultDir": "$MAIN_DIR_ESC",
   "projects": $PROJECTS
@@ -242,13 +211,8 @@ if command -v pm2 &>/dev/null; then
   fi
   sleep 3
   LOGS=$(pm2 logs claude-mobile --lines 30 --nostream 2>&1)
-  TUNNEL=$(echo "$LOGS" | grep -o 'https://[^ ]*ngrok[^ ]*' | head -1)
-  TOKEN=$(echo "$LOGS" | grep 'Token:' | awk '{print $NF}' | tail -1)
   echo ""
   echo "  ============================================"
-  if [ -n "$TUNNEL" ]; then
-    echo "  URL:   $TUNNEL"
-  fi
   echo "  Local: http://localhost:3456"
   echo "  ============================================"
   echo ""
@@ -287,7 +251,7 @@ if %errorlevel%==0 (
     echo.
     echo   Local: http://localhost:3456
     echo.
-    pm2 logs claude-mobile --lines 10 --nostream 2>&1 | findstr /C:"Tunnel:" /C:"Token:"
+    pm2 logs claude-mobile --lines 10 --nostream 2>&1 | findstr /C:"Tailscale:" /C:"Local:"
     echo.
     echo   Commands:
     echo     pm2 logs claude-mobile
@@ -360,19 +324,17 @@ echo -e "${BOLD}║${RESET}  1. Scan the QR code with your iPhone camera        
 echo -e "${BOLD}║${RESET}  2. Apple Passwords saves the verification code        ${BOLD}║${RESET}"
 echo -e "${BOLD}║${RESET}  3. Enter the 6-digit code to verify                   ${BOLD}║${RESET}"
 echo -e "${BOLD}║${RESET}                                                        ${BOLD}║${RESET}"
-if [ -n "$NGROK_DOMAIN" ]; then
-echo -e "${BOLD}║${RESET}  Then open on your phone:                              ${BOLD}║${RESET}"
-echo -e "${BOLD}║${RESET}  ${GREEN}https://$NGROK_DOMAIN${RESET}"
+if [ -n "$TS_HOSTNAME" ]; then
+echo -e "${BOLD}║${RESET}  Then open on your phone (via Tailscale):               ${BOLD}║${RESET}"
+echo -e "${BOLD}║${RESET}  ${GREEN}https://$TS_HOSTNAME${RESET}"
 echo -e "${BOLD}║${RESET}                                                        ${BOLD}║${RESET}"
 fi
 echo -e "${BOLD}╚══════════════════════════════════════════════════════════╝${RESET}"
 echo ""
 
-if [ -n "$NGROK_DOMAIN" ]; then
-  echo -e "  ${DIM}After setup, use PM2 for background running:${RESET}"
-  echo -e "    ${DIM}pm2 start server.js --name claude-mobile${RESET}"
-  echo -e "    ${DIM}pm2 save${RESET}"
-fi
+echo -e "  ${DIM}After setup, use PM2 for background running:${RESET}"
+echo -e "    ${DIM}pm2 start server.js --name claude-mobile${RESET}"
+echo -e "    ${DIM}pm2 save${RESET}"
 
 echo ""
 echo -e "  ${DIM}Press Ctrl+C to stop the server when done with setup.${RESET}"

@@ -98,6 +98,22 @@
     }
     #app { display: none; flex-direction: column; height: 100dvh; position: relative; overflow: hidden; }
 
+    /* ── Lock Screen Overlay ── */
+    #lock-screen {
+      display: none; position: fixed; inset: 0; z-index: 9999;
+      background: var(--bg); flex-direction: column; align-items: center;
+      justify-content: center; gap: 20px;
+    }
+    #lock-screen.active { display: flex; }
+    #lock-screen h2 {
+      font-size: 13px; font-weight: 600; letter-spacing: 2px;
+      color: var(--dim); text-transform: uppercase;
+    }
+    #lock-screen .lock-icon {
+      font-size: 32px; color: var(--intent-warn); margin-bottom: 8px;
+    }
+    #lock-error { color: var(--intent-danger); font-size: 12px; display: none; }
+
     /* ── Auth Screen ── */
     #pin-screen {
       display: flex; flex-direction: column; align-items: center;
@@ -509,6 +525,23 @@
   </div>
 </div>
 
+<div id="lock-screen">
+  <div class="lock-icon">&#128274;</div>
+  <h2>SESSION LOCKED</h2>
+  <div class="auth-card">
+    <p class="sub">Inactive timeout -- re-authenticate to continue</p>
+    <button class="auth-primary" id="lock-passkey-btn" onclick="unlockPasskey()"
+            style="display:none" aria-label="Unlock with Face ID">Unlock with Face ID</button>
+    <div id="lock-totp-section">
+      <p class="sub">Enter verification code</p>
+      <input type="tel" id="lock-totp-input" class="totp-input" maxlength="6" placeholder="000000"
+             autocapitalize="off" autocomplete="one-time-code" aria-label="TOTP unlock code">
+      <button class="auth-btn" onclick="submitUnlockTotp()">Unlock</button>
+    </div>
+    <p id="lock-error">Unlock failed</p>
+  </div>
+</div>
+
 <div id="app">
   <div id="header">
     <div>
@@ -758,6 +791,92 @@ async function secureReceive(rawData) {
   if (e2eReady) return null;
   return parsed;
 }
+
+// ─── Inactivity Lock ─────────────────────────────────────────────
+const lockScreen = $('lock-screen');
+const lockPasskeyBtn = $('lock-passkey-btn');
+const lockTotpInput = $('lock-totp-input');
+const lockError = $('lock-error');
+let inactivityTimer = null;
+const INACTIVITY_MS = 15 * 60 * 1000; // 15 min (matches server default)
+
+function resetInactivityTimer() {
+  if (inactivityTimer) clearTimeout(inactivityTimer);
+  inactivityTimer = setTimeout(() => {
+    if (sessionToken) showLockScreen();
+  }, INACTIVITY_MS);
+}
+
+function showLockScreen() {
+  lockScreen.classList.add('active');
+  lockError.style.display = 'none';
+  // Show passkey button if available
+  if (window.PublicKeyCredential) {
+    lockPasskeyBtn.style.display = 'block';
+  }
+}
+
+function hideLockScreen() {
+  lockScreen.classList.remove('active');
+  lockTotpInput.value = '';
+  lockError.style.display = 'none';
+  resetInactivityTimer();
+}
+
+async function unlockPasskey() {
+  try {
+    const optsRes = await fetch('/api/passkey/auth-options', { method: 'POST' });
+    const opts = await optsRes.json();
+    opts.challenge = base64urlToBuffer(opts.challenge);
+    if (opts.allowCredentials) {
+      opts.allowCredentials = opts.allowCredentials.map(c => ({
+        ...c, id: base64urlToBuffer(c.id)
+      }));
+    }
+    const cred = await navigator.credentials.get({ publicKey: opts });
+    const verifyRes = await fetch('/api/passkey/auth-verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        challengeId: opts._challengeId,
+        response: {
+          id: cred.id, rawId: bufferToBase64url(cred.rawId), type: cred.type,
+          response: {
+            authenticatorData: bufferToBase64url(cred.response.authenticatorData),
+            clientDataJSON: bufferToBase64url(cred.response.clientDataJSON),
+            signature: bufferToBase64url(cred.response.signature),
+          }
+        }
+      })
+    });
+    const result = await verifyRes.json();
+    if (result.verified && result.sessionToken) {
+      queueSend({ type: 'unlock', sessionToken: result.sessionToken });
+    } else {
+      lockError.textContent = 'Passkey verification failed';
+      lockError.style.display = 'block';
+    }
+  } catch (e) {
+    lockError.textContent = 'Passkey error -- use TOTP code';
+    lockError.style.display = 'block';
+  }
+}
+
+function submitUnlockTotp() {
+  const code = lockTotpInput.value.trim();
+  if (!code || code.length !== 6) return;
+  lockError.style.display = 'none';
+  queueSend({ type: 'unlock', totp: code });
+}
+
+lockTotpInput?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); submitUnlockTotp(); }
+});
+
+// Reset timer on any user interaction
+['touchstart', 'keydown', 'mousemove', 'click'].forEach(evt => {
+  document.addEventListener(evt, resetInactivityTimer, { passive: true });
+});
 
 // Silent token rotation: refresh at 75% of TTL so the token
 // is always fresh. Old token invalidated immediately on rotation.
@@ -1026,7 +1145,10 @@ function handle(m) {
         pinScreen.style.display = 'none'; appEl.style.display = 'flex';
         loadProjects();
         scheduleTokenRefresh();
+        resetInactivityTimer();
         if (activeSession !== null) queueSend({ type: 'connect', session: activeSession });
+        // Server may send locked=true if token was inactive during disconnect
+        if (m.locked) showLockScreen();
         if (m.hasTotp && !m.hasPasskey && window.PublicKeyCredential && !localStorage.getItem('passkey-dismissed')) {
           setTimeout(async () => {
             if (confirm('Register Face ID for instant login next time?')) {
@@ -1055,6 +1177,12 @@ function handle(m) {
         sessionToken = m.sessionToken;
         scheduleTokenRefresh(m.ttl);
       }
+      break;
+    case 'lock':
+      showLockScreen();
+      break;
+    case 'unlocked':
+      hideLockScreen();
       break;
     case 'warning':
       console.warn('Server warning:', m.message);

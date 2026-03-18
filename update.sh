@@ -86,3 +86,4 @@ fi
 
 echo ""
 say "Done. Preserved: .totp-secret, .credentials.json, .server-identity-key, config.json"
+say "Note: vendor/ files (xterm.js) are tracked in git and updated automatically."
