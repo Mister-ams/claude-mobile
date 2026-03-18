@@ -66,6 +66,13 @@ say "Step 2/6: Setting up Tailscale..."
 TS_CMD=""
 if command -v tailscale &>/dev/null; then
   TS_CMD="tailscale"
+elif [ -f "/c/Program Files/Tailscale/tailscale.exe" ]; then
+  TS_CMD="/c/Program Files/Tailscale/tailscale.exe"
+elif [ -f "C:\\Program Files\\Tailscale\\tailscale.exe" ]; then
+  TS_CMD="C:\\Program Files\\Tailscale\\tailscale.exe"
+fi
+
+if [ -n "$TS_CMD" ]; then
   ok "Tailscale CLI found"
 else
   echo ""
@@ -110,9 +117,26 @@ ok "Hostname: $TS_HOSTNAME"
 echo ""
 say "Configuring HTTPS proxy..."
 echo -e "  ${DIM}This makes https://$TS_HOSTNAME route to localhost:$PORT${RESET}"
-"$TS_CMD" serve --bg http://localhost:$PORT 2>/dev/null && ok "tailscale serve configured" || {
-  warn "tailscale serve failed. You may need to run manually:"
-  echo -e "  ${DIM}tailscale serve --bg http://localhost:$PORT${RESET}"
+SERVE_OUTPUT=$("$TS_CMD" serve --bg http://localhost:$PORT 2>&1) && ok "tailscale serve configured" || {
+  if echo "$SERVE_OUTPUT" | grep -qi "not enabled"; then
+    echo ""
+    echo -e "  ${YELLOW}Tailscale Serve needs to be enabled on your tailnet.${RESET}"
+    echo -e "  ${DIM}A browser window should open. Click 'Enable' and re-run this step.${RESET}"
+    # Extract the enable URL if present
+    ENABLE_URL=$(echo "$SERVE_OUTPUT" | grep -o 'https://login.tailscale.com/[^ ]*' | head -1)
+    if [ -n "$ENABLE_URL" ]; then
+      echo -e "  ${GREEN}$ENABLE_URL${RESET}"
+    fi
+    echo ""
+    ask "Press Enter after enabling Tailscale Serve, then we'll retry"
+    "$TS_CMD" serve --bg http://localhost:$PORT 2>/dev/null && ok "tailscale serve configured" || {
+      warn "tailscale serve still failed. Configure manually after install:"
+      echo -e "  ${DIM}tailscale serve --bg http://localhost:$PORT${RESET}"
+    }
+  else
+    warn "tailscale serve failed. Configure manually after install:"
+    echo -e "  ${DIM}tailscale serve --bg http://localhost:$PORT${RESET}"
+  fi
 }
 
 # ── Step 3: Install npm dependencies ─────────────────────
