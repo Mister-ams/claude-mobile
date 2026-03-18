@@ -1830,21 +1830,29 @@ window.addEventListener('resize', doResize);
 if (window.visualViewport) {
   // Pin app height to visual viewport immediately on load
   appEl.style.height = window.visualViewport.height + 'px';
-  let lastVVH = window.visualViewport.height;
+  let stableVVH = window.visualViewport.height; // last height we actually reflowed at
   let resizeTimer = null;
   window.visualViewport.addEventListener('resize', () => {
     const h = window.visualViewport.height;
-    // Always update app height immediately (prevents page overflow)
-    appEl.style.height = h + 'px';
     // Pin document scroll to top to prevent iOS pushing content offscreen
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
-    const delta = h - lastVVH;
-    lastVVH = h;
-    // Skip small changes (< 30px) -- these are iOS prediction bar adjustments
-    // that cause terminal reflow and visible jumping on every keystroke
-    if (Math.abs(delta) < 30) return;
-    // Debounce the terminal refit to avoid rapid reflows
+
+    const delta = h - stableVVH;
+    const absDelta = Math.abs(delta);
+
+    // Small changes (< 60px) are autocomplete/prediction bar adjustments.
+    // Only update app height (CSS only, no terminal reflow) to keep input visible.
+    if (absDelta < 60) {
+      appEl.style.height = h + 'px';
+      return;
+    }
+
+    // Significant change (keyboard open/close) -- commit new stable height
+    appEl.style.height = h + 'px';
+    stableVVH = h;
+
+    // Debounce terminal refit
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       doResize();
@@ -1856,7 +1864,7 @@ if (window.visualViewport) {
           }
         });
       }
-    }, 150);
+    }, 200);
   });
   window.visualViewport.addEventListener('scroll', () => {
     window.scrollTo(0, 0);
