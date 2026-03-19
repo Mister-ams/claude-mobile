@@ -1023,6 +1023,8 @@ function recoverTmuxSessions() {
       audit('ERROR', `Recovery failed for ${tmux}: ${e.message}`);
     }
   }
+  // Persist metadata immediately so renames from this session are captured
+  if (sessions.size > 0) saveSessionMeta();
 }
 
 // ─── WebSocket ───────────────────────────────────────────────────
