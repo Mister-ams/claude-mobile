@@ -336,7 +336,8 @@ function validateSessionToken(token, callerIP) {
   const entry = sessionTokens.get(token);
   if (!entry) return false;
   if (Date.now() > entry.expires) { sessionTokens.delete(token); return false; }
-  if (callerIP && entry.ip && entry.ip !== callerIP) {
+  // Skip IP check if token was issued with unknown IP (WS behind proxy)
+  if (callerIP && entry.ip && entry.ip !== 'unknown' && entry.ip !== callerIP) {
     audit('SECURITY', `Token IP mismatch: expected ${entry.ip}, got ${callerIP}`, callerIP);
     return false;
   }
@@ -1044,8 +1045,9 @@ const MAX_CONNECTIONS_PER_IP = 10;
 
 function getClientIP(ws) {
   // tailscale serve proxies from localhost -- trust X-Forwarded-For from loopback only
-  const peerIP = ws._socket?._peername?.address || 'unknown';
-  if (peerIP === '127.0.0.1' || peerIP === '::1') {
+  const peerIP = ws._socket?._peername?.address || ws._req?.socket?.remoteAddress || 'unknown';
+  const isLoopback = peerIP === '127.0.0.1' || peerIP === '::1' || peerIP === '::ffff:127.0.0.1';
+  if (isLoopback) {
     const xff = ws._req?.headers?.['x-forwarded-for'];
     if (xff) return xff.split(',')[0].trim();
   }
