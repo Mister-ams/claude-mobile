@@ -226,32 +226,31 @@
       z-index: 10; display: none; pointer-events: none;
     }
     #term-area:has(.term-wrap.active) #scroll-zones { display: block; pointer-events: auto; }
-    .scroll-zone { position: absolute; }
-    /* Default: top/bottom split */
-    .scroll-zone-up { top: 0; left: 0; right: 0; height: 50%; }
-    .scroll-zone-down { bottom: 0; left: 0; right: 0; height: 50%; }
-    /* Keyboard open: left/right split (toggled by JS) */
-    #scroll-zones.horizontal .scroll-zone-up { top: 0; bottom: 0; left: 0; width: 50%; height: auto; right: auto; }
-    #scroll-zones.horizontal .scroll-zone-down { top: 0; bottom: 0; right: 0; width: 50%; height: auto; left: auto; }
-    #scroll-zones.horizontal .scroll-divider {
-      top: 0; bottom: 0; left: 50%; right: auto;
-      width: 1px; height: auto;
-    }
-    /* T15: scroll zone divider affordance */
+    .scroll-zone { position: absolute; top: 0; bottom: 0; }
+    /* Left/right split -- consistent at all viewport heights */
+    .scroll-zone-up { left: 0; width: 50%; }
+    .scroll-zone-down { right: 0; width: 50%; }
     .scroll-divider {
-      position: absolute; left: 16px; right: 16px; top: 50%;
-      height: 1px; background: var(--border); opacity: 0.3;
+      position: absolute; top: 16px; bottom: 16px; left: 50%;
+      width: 1px; background: var(--border); opacity: 0.3;
       pointer-events: none;
     }
     .scroll-flash {
-      position: absolute; left: 0; right: 0; height: 6px;
+      position: absolute; top: 0; bottom: 0; width: 6px;
       background: var(--accent); opacity: 0;
       transition: opacity 0.15s var(--transition);
     }
-    .scroll-zone-up .scroll-flash { top: 0; }
-    .scroll-zone-down .scroll-flash { bottom: 0; }
-    #scroll-zones.horizontal .scroll-zone-up .scroll-flash { top: 0; bottom: 0; left: 0; width: 6px; height: auto; right: auto; }
-    #scroll-zones.horizontal .scroll-zone-down .scroll-flash { top: 0; bottom: 0; right: 0; width: 6px; height: auto; left: auto; }
+    .scroll-zone-up .scroll-flash { left: 0; }
+    .scroll-zone-down .scroll-flash { right: 0; }
+    /* Arrow icon overlay -- fades in on touch, centered in zone */
+    .scroll-icon {
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 20px; color: var(--dim); opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s var(--transition);
+    }
+    .scroll-zone:active .scroll-icon { opacity: 0.6; }
     .term-wrap {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
       display: none; overflow: hidden;
@@ -568,9 +567,9 @@
 
   <div id="term-area">
     <div id="scroll-zones">
-      <div class="scroll-zone scroll-zone-up" id="sz-up"><div class="scroll-flash" id="sf-up"></div></div>
+      <div class="scroll-zone scroll-zone-up" id="sz-up"><div class="scroll-flash" id="sf-up"></div><span class="scroll-icon">&#9650;</span></div>
       <div class="scroll-divider"></div>
-      <div class="scroll-zone scroll-zone-down" id="sz-down"><div class="scroll-flash" id="sf-down"></div></div>
+      <div class="scroll-zone scroll-zone-down" id="sz-down"><div class="scroll-flash" id="sf-down"></div><span class="scroll-icon">&#9660;</span></div>
     </div>
     <div id="empty-state" onclick="newSession()" role="button" aria-label="Start new Claude session">
       <div class="empty-icon">+</div>
@@ -1700,10 +1699,12 @@ function setupScrollZones() {
   zones.forEach(z => {
     let interval = null;
     let startX = 0, startY = 0, scrollLocked = false;
+    const icon = z.el.querySelector('.scroll-icon');
     const doScroll = () => {
       scrollTerm(z.lines);
       z.flash.style.opacity = '1';
-      setTimeout(() => { z.flash.style.opacity = '0'; }, 100);
+      if (icon) icon.style.opacity = '0.6';
+      setTimeout(() => { z.flash.style.opacity = '0'; if (icon) icon.style.opacity = '0'; }, 100);
     };
     z.el.addEventListener('touchstart', e => {
       // Prevent default to stop iOS from blurring the focused input (closing keyboard)
@@ -1842,25 +1843,6 @@ window.addEventListener('resize', () => {
   // Don't scroll on resize -- it forces xterm.js re-render during keyboard animation
   // and corrupts the terminal. Touch scroll works fine without this.
 });
-
-// ── Scroll zone layout: switch to left/right when keyboard shrinks terminal ──
-// Use visualViewport.height vs screen height to detect keyboard presence.
-// ta.clientHeight is unreliable during viewport resize (layout hasn't reflowed).
-const fullViewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-function updateScrollZoneLayout() {
-  const sz = $('scroll-zones');
-  if (!sz) return;
-  const vvh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-  // Keyboard open = viewport significantly shorter than full height
-  const keyboardOpen = vvh < fullViewportHeight * 0.75;
-  sz.classList.toggle('horizontal', keyboardOpen);
-}
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', () => requestAnimationFrame(updateScrollZoneLayout));
-}
-// Also catch focus/blur on textarea as backup signal
-msgInput.addEventListener('focus', () => setTimeout(updateScrollZoneLayout, 300));
-msgInput.addEventListener('blur', () => setTimeout(updateScrollZoneLayout, 300));
 
 // ── iOS Prevention ──
 // Prevent bounce scroll on non-scrollable areas
