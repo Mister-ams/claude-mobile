@@ -1850,25 +1850,35 @@ function updateDiag(cols, rows) {
   el.textContent = `PTY:${cols}x${rows} | VP:${vvW}x${vvH} | Win:${wW}x${wH} | Term:${taH}px`;
 }
 
-// On devices with visualViewport (mobile), skip window resize -- handled by vv listener.
-// On desktop (no visualViewport), use window resize directly.
-// With interactive-widget=resizes-content, the layout viewport shrinks for
-// the keyboard automatically. 100dvh just works. We only need JS for terminal refit.
+// Keyboard handling: use visualViewport to set app height (JS fallback for
+// when interactive-widget=resizes-content isn't supported).
+// doResize() only calls fit() when terminal cols/rows actually change.
 let resizeTimer = null;
 
-// Unified resize handler -- doResize() skips if terminal dimensions unchanged
-window.addEventListener('resize', () => {
-  if (resizeTimer) clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(() => {
-    requestAnimationFrame(() => {
-      doResize();
-    });
-  }, 200);
-});
-
 if (window.visualViewport) {
+  // Set initial height
+  appEl.style.height = window.visualViewport.height + 'px';
+
+  window.visualViewport.addEventListener('resize', () => {
+    // Always update app height to match visible area
+    appEl.style.height = window.visualViewport.height + 'px';
+
+    // Debounce terminal refit (doResize skips if dims unchanged)
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      requestAnimationFrame(() => doResize());
+    }, 200);
+  });
+
   window.visualViewport.addEventListener('scroll', () => {
     window.scrollTo(0, 0);
+  });
+} else {
+  window.addEventListener('resize', () => {
+    if (resizeTimer) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      requestAnimationFrame(() => doResize());
+    }, 200);
   });
 }
 
