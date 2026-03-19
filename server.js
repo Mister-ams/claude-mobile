@@ -849,24 +849,31 @@ function detectAttention(sessionId) {
   const last3 = lines.slice(-3).join('\n');
   if (/\?\s*$/.test(last3) && !/^\s*(http|\/\/|#)/.test(lastLine)) return 'question';
 
-  // Claude Code idle prompt -- waiting for user input
-  // The prompt character > or unicode variants, possibly with surrounding whitespace/dots
-  if (/^[\s.]*[>\u276f\u2771\u279c][\s.]*$/.test(lastLine)) return 'ready';
+  // Claude Code idle prompt -- the ❯ prompt char anywhere in last 5 lines
+  // (status bar lines render BELOW the prompt after ANSI stripping)
+  for (const line of lines.slice(-5)) {
+    if (/^[\s.]*[>\u276f\u2771\u279c][\s.]*$/.test(line)) return 'ready';
+    if (/^[^a-zA-Z0-9]*[>$%#\u276f\u2771\u279c][^a-zA-Z0-9]*$/.test(line) && line.length < 10) return 'ready';
+  }
 
-  // Claude finished responding -- look for cost/token summary lines
+  // Claude Code status bar (only visible when idle/waiting for input)
+  // Pattern: "Opus 4.6 ... │ project-name ██░░░░ NN%"
+  if (/\d+%\s*(\d+ local)?/i.test(lastLine) && /[│\|]/.test(last3)) return 'ready';
+
+  // Claude finished responding -- cost/token summary lines
   if (/total cost|tokens used|input:|output:/i.test(last3)) return 'ready';
-
-  // Claude Code shows a $ or > prompt after command completion
-  if (/^[\s]*[$%#>][\s]*$/.test(lastLine)) return 'ready';
 
   // Claude Code cost summary line (e.g., "$0.12 | 5.2K in | 1.8K out")
   if (/\$[\d.]+\s*\|\s*[\d.]+[KMkm]?\s*(in|tokens)/i.test(last3)) return 'ready';
 
+  // "Crunched for Xs" / "Cogitated for Xs" -- Claude just finished thinking
+  if (/(?:crunched|cogitated) for/i.test(last5)) return 'ready';
+
   // Claude Code "Task completed" or similar completion messages
   if (/task completed|changes (saved|committed|applied)|done[.!]?\s*$/i.test(last3)) return 'ready';
 
-  // Catch-all: line with just a prompt char (with possible ANSI remnants stripped)
-  if (/^[^a-zA-Z0-9]*[>$%#\u276f\u2771\u279c][^a-zA-Z0-9]*$/.test(lastLine) && lastLine.length < 10) return 'ready';
+  // Shell prompt after command completion
+  if (/^[\s]*[$%#>][\s]*$/.test(lastLine)) return 'ready';
 
   // Always log for diagnostics (written to audit log)
   const preview = lines.slice(-3).map(l => l.substring(0, 80)).join(' | ');
