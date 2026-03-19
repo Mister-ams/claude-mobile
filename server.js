@@ -962,20 +962,47 @@ function wireSessionProc(session) {
   });
 }
 
+function createDirectPtySession(name, dir, cols, rows) {
+  const c = Math.max(10, Math.min(500, parseInt(cols, 10) || 50));
+  const r = Math.max(5, Math.min(200, parseInt(rows, 10) || 30));
+  return pty.spawn('cmd.exe', ['/c', 'claude'], {
+    name: 'xterm-256color',
+    cols: c, rows: r,
+    cwd: dir,
+    env: getSafeEnv()
+  });
+}
+
 function createSession(name, dir, cols, rows) {
   if (sessions.size >= MAX_SESSIONS) return null;
   const id = nextId++;
-  const tmux = tmuxName(id);
-  const wslDir = winPathToWsl(dir);
 
-  try {
-    createTmuxSession(tmux, wslDir, cols, rows);
-  } catch (e) {
-    audit('ERROR', `tmux create failed: ${e.message}`);
-    return null;
+  let proc, tmux = null;
+
+  if (wslAvailable) {
+    // Full mode: tmux session persistence via WSL
+    tmux = tmuxName(id);
+    const wslDir = winPathToWsl(dir);
+    try {
+      createTmuxSession(tmux, wslDir, cols, rows);
+      proc = attachToTmux(tmux, 80, 24);
+    } catch (e) {
+      audit('ERROR', `tmux create failed: ${e.message}`);
+      // Fall through to direct pty
+      tmux = null;
+    }
   }
 
-  const proc = attachToTmux(tmux, 80, 24);
+  if (!proc) {
+    // Degraded mode: direct pty (no persistence)
+    try {
+      proc = createDirectPtySession(name, dir, cols, rows);
+      audit('SESSION', `Created (direct pty, no persistence): "${name}" in ${dir}`);
+    } catch (e) {
+      audit('ERROR', `Direct pty failed: ${e.message}`);
+      return null;
+    }
+  }
 
   const session = {
     id, name, dir, tmuxName: tmux, proc, scrollback: '',
@@ -984,7 +1011,7 @@ function createSession(name, dir, cols, rows) {
 
   wireSessionProc(session);
   sessions.set(id, session);
-  audit('SESSION', `Created: "${name}" in ${dir} (tmux: ${tmux})`);
+  if (tmux) audit('SESSION', `Created: "${name}" in ${dir} (tmux: ${tmux})`);
   saveSessionMeta();
   return session;
 }
