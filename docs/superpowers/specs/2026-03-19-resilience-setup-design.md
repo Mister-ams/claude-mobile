@@ -104,9 +104,9 @@ Add `GET /health` to `server.js`:
 
 Add to server.js startup logging:
 ```
-Server started | restart_count: N | last_shutdown: {reason} | wsl: {true/false}
+Server started | restart_count: N | wsl: {true/false}
 ```
-Correlates with PM2 logs for post-incident review.
+Correlates with PM2 logs for post-incident review. Shutdown reason is already captured by PM2 logs (`pm2 logs claude-mobile`), so duplicating it here adds complexity without value.
 
 #### 3c. Scheduled Task Watchdog
 
