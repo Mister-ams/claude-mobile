@@ -1844,16 +1844,23 @@ window.addEventListener('resize', () => {
 });
 
 // ── Scroll zone layout: switch to left/right when keyboard shrinks terminal ──
+// Use visualViewport.height vs screen height to detect keyboard presence.
+// ta.clientHeight is unreliable during viewport resize (layout hasn't reflowed).
+const fullViewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
 function updateScrollZoneLayout() {
-  const ta = $('term-area');
   const sz = $('scroll-zones');
-  if (!ta || !sz) return;
-  sz.classList.toggle('horizontal', ta.clientHeight < 250);
+  if (!sz) return;
+  const vvh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  // Keyboard open = viewport significantly shorter than full height
+  const keyboardOpen = vvh < fullViewportHeight * 0.75;
+  sz.classList.toggle('horizontal', keyboardOpen);
 }
 if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', updateScrollZoneLayout);
+  window.visualViewport.addEventListener('resize', () => requestAnimationFrame(updateScrollZoneLayout));
 }
-window.addEventListener('resize', updateScrollZoneLayout);
+// Also catch focus/blur on textarea as backup signal
+msgInput.addEventListener('focus', () => setTimeout(updateScrollZoneLayout, 300));
+msgInput.addEventListener('blur', () => setTimeout(updateScrollZoneLayout, 300));
 
 // ── iOS Prevention ──
 // Prevent bounce scroll on non-scrollable areas
