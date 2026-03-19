@@ -56,6 +56,8 @@ function ensureTmuxConfig() {
   // smcup@:rmcup@ strips the alt-screen enter/exit capabilities so tmux
   // renders into the normal screen buffer, preserving xterm.js scrollback.
   try { wslExec(`tmux set -g terminal-overrides 'xterm*:smcup@:rmcup@'`); } catch {}
+  // Hide tmux status bar -- it wastes a terminal row and confuses the UI
+  try { wslExec(`tmux set -g status off`); } catch {}
 }
 
 function createTmuxSession(name, wslDir) {
