@@ -1889,33 +1889,47 @@ if (window.visualViewport) {
   let stableVVH = window.visualViewport.height; // last height we actually reflowed at
   let resizeTimer = null;
   let pendingHeight = null;
+  let msgFocused = false;
+  msgInput.addEventListener('focus', () => { msgFocused = true; });
+  msgInput.addEventListener('blur', () => {
+    msgFocused = false;
+    // Snap to correct height on blur
+    const h = window.visualViewport.height;
+    if (Math.abs(h - stableVVH) > 10) {
+      appEl.style.height = h + 'px';
+      stableVVH = h;
+      requestAnimationFrame(() => doResize());
+    }
+  });
+
   window.visualViewport.addEventListener('resize', () => {
     const h = window.visualViewport.height;
-    // Pin document scroll to top to prevent iOS pushing content offscreen
+
+    // While typing: freeze ALL layout changes. iOS handles input visibility.
+    if (msgFocused) return;
+
+    // Pin document scroll to top
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
 
     const delta = h - stableVVH;
     const absDelta = Math.abs(delta);
 
-    // Small changes (< 60px) are autocomplete/prediction bar adjustments.
+    // Small changes (< 60px) -- skip entirely
     if (absDelta < 60) return;
 
-    // Don't update height immediately -- batch it into the debounced callback.
-    // This avoids multiple forced layouts during the keyboard animation.
+    // Batch height update into debounced callback
     pendingHeight = h;
 
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       requestAnimationFrame(() => {
-        // Single layout pass: update height + refit terminal together
         if (pendingHeight !== null) {
           appEl.style.height = pendingHeight + 'px';
           const finalDelta = pendingHeight - stableVVH;
           stableVVH = pendingHeight;
           pendingHeight = null;
           doResize();
-          // Keyboard dismissed (large positive delta) -- scroll to bottom
           if (finalDelta > 50 && !userScrolled) {
             requestAnimationFrame(() => {
               if (activeSession !== null && terms[activeSession]) {
@@ -1927,13 +1941,10 @@ if (window.visualViewport) {
       });
     }, 250);
   });
-  // Pin viewport scroll -- but skip when textarea is focused (causes jitter during typing)
+  // Pin viewport scroll -- skip when textarea is focused (causes jitter during typing)
   let vvScrollPending = false;
-  let inputFocused = false;
-  msgInput.addEventListener('focus', () => { inputFocused = true; });
-  msgInput.addEventListener('blur', () => { inputFocused = false; window.scrollTo(0, 0); });
   window.visualViewport.addEventListener('scroll', () => {
-    if (vvScrollPending || inputFocused) return;
+    if (vvScrollPending || msgFocused) return;
     vvScrollPending = true;
     requestAnimationFrame(() => {
       window.scrollTo(0, 0);
