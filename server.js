@@ -85,7 +85,7 @@ function attachToTmux(name, cols, rows) {
 
 function captureTmuxScrollback(name) {
   try {
-    return wslExec(`tmux capture-pane -t ${name} -p -e -S -10000`);
+    return wslExec(`tmux capture-pane -t ${name} -p -e -J -S -10000`);
   } catch { return ''; }
 }
 
