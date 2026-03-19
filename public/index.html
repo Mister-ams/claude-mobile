@@ -1868,6 +1868,11 @@ if (window.visualViewport) {
       lastWidth = w;
       requestAnimationFrame(() => doResize());
     }
+
+    // Scroll terminal to bottom so cursor stays visible above keyboard
+    if (activeSession !== null && terms[activeSession]) {
+      terms[activeSession].scrollToBottom();
+    }
   });
 
   window.visualViewport.addEventListener('scroll', () => {
