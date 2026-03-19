@@ -52,9 +52,11 @@ function listTmuxSessions() {
 }
 
 function createTmuxSession(name, wslDir) {
-  // set-option history-limit 8000 (4x default 2000)
   wslExec(`tmux new-session -d -s ${name} -c '${wslDir}' -x 80 -y 24`);
   wslExec(`tmux set-option -t ${name} history-limit 8000`);
+  // Disable alternate screen so xterm.js keeps its scrollback buffer.
+  // Without this, tmux enters alt-screen on attach and xterm.js can't scroll up.
+  wslExec(`tmux set-window-option -t ${name} alternate-screen off`);
   // Launch Claude via Windows interop (uses existing Windows auth + Claude install)
   wslExec(`tmux send-keys -t ${name} 'cmd.exe /c claude' Enter`);
 }
@@ -975,6 +977,8 @@ function recoverTmuxSessions() {
     const name = project ? project.name : `Recovered-${idNum}`;
 
     try {
+      // Ensure alternate-screen is off (may predate this fix)
+      try { wslExec(`tmux set-window-option -t ${tmux} alternate-screen off`); } catch {}
       const proc = attachToTmux(tmux, 80, 24);
       const scrollback = captureTmuxScrollback(tmux);
 
