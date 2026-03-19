@@ -60,9 +60,12 @@ function ensureTmuxConfig() {
   try { wslExec(`tmux set -g status off`); } catch {}
 }
 
-function createTmuxSession(name, wslDir) {
+function createTmuxSession(name, wslDir, cols, rows) {
   ensureTmuxConfig();
-  wslExec(`tmux new-session -d -s ${name} -c '${wslDir}' -x 80 -y 24`);
+  // Use client dimensions if available, otherwise phone-friendly defaults
+  const c = cols || 50;
+  const r = rows || 30;
+  wslExec(`tmux new-session -d -s ${name} -c '${wslDir}' -x ${c} -y ${r}`);
   wslExec(`tmux set-option -t ${name} history-limit 100000`);
   // Also disable alt-screen for programs inside tmux (belt + suspenders)
   wslExec(`tmux set-window-option -t ${name} alternate-screen off`);
@@ -967,14 +970,14 @@ function wireSessionProc(session) {
   });
 }
 
-function createSession(name, dir) {
+function createSession(name, dir, cols, rows) {
   if (sessions.size >= MAX_SESSIONS) return null;
   const id = nextId++;
   const tmux = tmuxName(id);
   const wslDir = winPathToWsl(dir);
 
   try {
-    createTmuxSession(tmux, wslDir);
+    createTmuxSession(tmux, wslDir, cols, rows);
   } catch (e) {
     audit('ERROR', `tmux create failed: ${e.message}`);
     return null;
@@ -1252,7 +1255,7 @@ wss.on('connection', (ws, req) => {
           secureSend(ws, { type: 'error', message: 'Directory not in allowed project list' });
           break;
         }
-        const created = createSession(msg.name || 'Session', dir);
+        const created = createSession(msg.name || 'Session', dir, msg.cols, msg.rows);
         if (created) {
           broadcastSessions();
           secureSend(ws, { type: 'created', session: created.id });

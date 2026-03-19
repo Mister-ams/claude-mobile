@@ -1311,6 +1311,8 @@ function switchTo(id) {
         fitAddon.fit();
         const dims = fitAddon.proposeDimensions();
         if (dims && ws && ws.readyState === 1) {
+          lastCols = dims.cols;
+          lastRows = dims.rows;
           queueSend({ type: 'resize', cols: dims.cols, rows: dims.rows });
           updateDiag(dims.cols, dims.rows);
         }
@@ -1442,7 +1444,13 @@ function newSession() {
   if (!ws || ws.readyState !== 1) return;
   const num = sessions.length + 1;
   const defaultDir = 'C:\\Users\\MRAL-\\Projects\\loomi-os';
-  queueSend({ type: 'create', name: 'SESSION ' + num, dir: defaultDir });
+  // Send screen dimensions so tmux session matches phone width
+  const termArea = document.getElementById('term-area');
+  const charW = 7.8; // approximate char width at 13px SF Mono
+  const lineH = 13 * 1.286; // fontSize * lineHeight
+  const cols = Math.floor((termArea?.clientWidth || 320) / charW);
+  const rows = Math.floor((termArea?.clientHeight || 400) / lineH);
+  queueSend({ type: 'create', name: 'SESSION ' + num, dir: defaultDir, cols, rows });
 }
 
 // ── Safari-style Gesture Navigation ──
