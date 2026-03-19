@@ -26,6 +26,10 @@ const TMUX_PREFIX = 'cm'; // session names: cm-0, cm-1, ...
 let wslAvailable = false;
 let lastError = null; // { message, timestamp }
 
+function setLastError(message) {
+  lastError = { message, timestamp: Date.now() };
+}
+
 let restartCount = 0;
 const RESTART_COUNT_FILE = path.join(__dirname, '.restart-count');
 try {
@@ -955,6 +959,7 @@ function wireSessionProc(session) {
           audit('SESSION', `Reattached to tmux: ${session.tmuxName}`);
         } catch (e) {
           audit('ERROR', `Reattach failed: ${e.message}`);
+          setLastError(`Reattach failed: ${e.message}`);
           sessions.delete(id);
           recentOutput.delete(id);
           broadcastSessions();
@@ -996,6 +1001,7 @@ function createSession(name, dir, cols, rows) {
       proc = attachToTmux(tmux, 80, 24);
     } catch (e) {
       audit('ERROR', `tmux create failed: ${e.message}`);
+      setLastError(`tmux create failed: ${e.message}`);
       // Fall through to direct pty
       tmux = null;
     }
@@ -1008,6 +1014,7 @@ function createSession(name, dir, cols, rows) {
       audit('SESSION', `Created (direct pty, no persistence): "${name}" in ${dir}`);
     } catch (e) {
       audit('ERROR', `Direct pty failed: ${e.message}`);
+      setLastError(`Direct pty failed: ${e.message}`);
       return null;
     }
   }
@@ -1063,6 +1070,7 @@ function recoverTmuxSessions() {
       console.log(`  Recovered: "${name}" (${tmux})`);
     } catch (e) {
       audit('ERROR', `Recovery failed for ${tmux}: ${e.message}`);
+      setLastError(`Recovery failed for ${tmux}: ${e.message}`);
     }
   }
   // Persist metadata immediately so renames from this session are captured
@@ -1352,6 +1360,7 @@ wss.on('connection', (ws, req) => {
         audit('INPUT', `session=${ws.currentSession} len=${msg.data.length} hash=${inputHash}`, ws._ip);
         try { activeSession.proc.write(msg.data); } catch (e) {
           audit('ERROR', `pty write: ${e.message}`);
+          setLastError(`pty write: ${e.message}`);
         }
         if (activeSession.attention) { activeSession.attention = null; broadcastSessions(); }
         break;
