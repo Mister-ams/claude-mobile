@@ -1818,12 +1818,18 @@ msgInput.addEventListener('blur', () => {
   setTimeout(() => acEl.classList.remove('show'), 150);
 });
 
+let lastCols = 0, lastRows = 0;
 function doResize() {
   if (activeSession !== null && fits[activeSession]) {
     try {
-      fits[activeSession].fit();
       const dims = fits[activeSession].proposeDimensions();
-      if (dims && ws && ws.readyState === 1) {
+      if (!dims) return;
+      // Only refit if terminal dimensions actually changed (avoids unnecessary re-render)
+      if (dims.cols === lastCols && dims.rows === lastRows) return;
+      lastCols = dims.cols;
+      lastRows = dims.rows;
+      fits[activeSession].fit();
+      if (ws && ws.readyState === 1) {
         queueSend({ type: 'resize', cols: dims.cols, rows: dims.rows });
         updateDiag(dims.cols, dims.rows);
       }
@@ -1848,29 +1854,16 @@ function updateDiag(cols, rows) {
 // On desktop (no visualViewport), use window resize directly.
 // With interactive-widget=resizes-content, the layout viewport shrinks for
 // the keyboard automatically. 100dvh just works. We only need JS for terminal refit.
-let lastKnownH = window.innerHeight;
 let resizeTimer = null;
 
-// Unified resize handler -- works on both desktop and mobile
+// Unified resize handler -- doResize() skips if terminal dimensions unchanged
 window.addEventListener('resize', () => {
-  const h = window.innerHeight;
-  const delta = Math.abs(h - lastKnownH);
-
-  // Skip small changes (< 50px) -- prediction bar, autocomplete
-  if (delta < 50) return;
-
-  lastKnownH = h;
-
-  // Debounce terminal refit
   if (resizeTimer) clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
     requestAnimationFrame(() => {
       doResize();
-      if (!userScrolled && activeSession !== null && terms[activeSession]) {
-        terms[activeSession].scrollToBottom();
-      }
     });
-  }, 300);
+  }, 200);
 });
 
 if (window.visualViewport) {
