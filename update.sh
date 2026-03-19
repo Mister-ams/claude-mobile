@@ -76,10 +76,12 @@ IS_WINDOWS=false
 [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || -n "$WINDIR" ]] && IS_WINDOWS=true
 
 if $IS_WINDOWS && wsl --list --quiet 2>/dev/null | grep -qi "Ubuntu-24.04"; then
-  say "Updating WSL tools..."
-  wsl -d Ubuntu-24.04 -u root -- bash -c "
-    npm update -g @anthropic-ai/claude-code 2>/dev/null | tail -1
-  " 2>/dev/null && ok "WSL Claude Code updated" || warn "WSL update skipped"
+  say "Checking WSL health..."
+  if wsl -d Ubuntu-24.04 -- echo 1 > /dev/null 2>&1; then
+    ok "WSL Ubuntu-24.04 responsive"
+  else
+    warn "WSL not responding -- try: wsl --shutdown && wsl -d Ubuntu-24.04 -- echo 1"
+  fi
 fi
 
 # Restart via PM2

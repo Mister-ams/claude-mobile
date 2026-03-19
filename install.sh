@@ -150,6 +150,19 @@ IS_WINDOWS=false
 if $IS_WINDOWS; then
   say "Step 5/7: Setting up WSL + tmux for session persistence..."
 
+  # Create .wslconfig with memory cap
+  WSLCONFIG="$HOME/.wslconfig"
+  if [ ! -f "$WSLCONFIG" ]; then
+    cat > "$WSLCONFIG" << WSLEOF
+[wsl2]
+memory=1GB
+swap=256MB
+WSLEOF
+    ok ".wslconfig created (1GB memory cap, 256MB swap)"
+  else
+    ok ".wslconfig already exists"
+  fi
+
   # Check if Ubuntu-24.04 is already installed
   WSL_INSTALLED=false
   if wsl --list --quiet 2>/dev/null | grep -qi "Ubuntu-24.04"; then
@@ -163,22 +176,31 @@ if $IS_WINDOWS; then
     ok "Ubuntu-24.04 installed"
   fi
 
-  # Install tmux + node inside WSL
-  say "Installing tmux + Node.js in WSL..."
+  # Install tmux only (no Node, PM2, or Claude -- they run on Windows)
+  say "Installing tmux in WSL..."
   wsl -d Ubuntu-24.04 -u root -- bash -c "
-    apt-get update -qq && apt-get install -y -qq tmux curl > /dev/null 2>&1
-    if ! command -v node &>/dev/null; then
-      curl -fsSL https://deb.nodesource.com/setup_22.x | bash - > /dev/null 2>&1
-      apt-get install -y -qq nodejs > /dev/null 2>&1
-    fi
-    if ! command -v pm2 &>/dev/null; then
-      npm install -g pm2 > /dev/null 2>&1
-    fi
-    if ! command -v claude &>/dev/null; then
-      npm install -g @anthropic-ai/claude-code > /dev/null 2>&1
-    fi
-    echo \"tmux \$(tmux -V | cut -d' ' -f2), node \$(node -v), pm2 \$(pm2 -v 2>/dev/null | tail -1)\"
-  " 2>/dev/null && ok "WSL tools installed" || warn "WSL setup had issues -- tmux persistence may not work"
+    apt-get update -qq && apt-get install -y -qq tmux > /dev/null 2>&1
+    echo \"tmux \$(tmux -V | cut -d' ' -f2)\"
+  " 2>/dev/null && ok "tmux installed in WSL" || warn "tmux install had issues"
+
+  # Register Task Scheduler jobs
+  say "Registering auto-start task..."
+  PM2_PATH="$(cygpath -w "$(dirname "$(which pm2)")")"
+  cat > "$INSTALL_DIR/pm2-resurrect.cmd" << CMDEOF
+@echo off
+set PATH=$PM2_PATH;%PATH%
+pm2 resurrect
+CMDEOF
+  schtasks //Create //TN "ClaudeMobile" //TR "$(cygpath -w "$INSTALL_DIR/pm2-resurrect.cmd")" //SC ONLOGON //RL HIGHEST //F > /dev/null 2>&1 \
+    && ok "ClaudeMobile auto-start registered" \
+    || warn "Could not register auto-start task"
+
+  say "Registering watchdog task..."
+  WATCHDOG_CMD="powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File $(cygpath -w "$INSTALL_DIR/watchdog.ps1")"
+  schtasks //Create //TN "ClaudeMobileWatchdog" //TR "$WATCHDOG_CMD" //SC MINUTE //MO 5 //RL HIGHEST //F > /dev/null 2>&1 \
+    && ok "Watchdog registered (every 5 min)" \
+    || warn "Could not register watchdog task"
+
 else
   say "Step 5/7: tmux setup..."
   if command -v tmux &>/dev/null; then

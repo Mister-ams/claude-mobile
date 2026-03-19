@@ -23,6 +23,32 @@ const SCROLLBACK_SIZE = 400000;
 const WSL_DISTRO = config.wslDistro || 'Ubuntu-24.04';
 const TMUX_PREFIX = 'cm'; // session names: cm-0, cm-1, ...
 
+let wslAvailable = false;
+let lastError = null; // { message, timestamp }
+
+function setLastError(message) {
+  lastError = { message, timestamp: Date.now() };
+}
+
+let restartCount = 0;
+const RESTART_COUNT_FILE = path.join(__dirname, '.restart-count');
+try {
+  restartCount = parseInt(fs.readFileSync(RESTART_COUNT_FILE, 'utf8').trim()) || 0;
+} catch {}
+restartCount++;
+try { fs.writeFileSync(RESTART_COUNT_FILE, String(restartCount)); } catch {}
+
+function probeWSL() {
+  try {
+    execSync(`wsl -d ${WSL_DISTRO} -- echo 1`, { encoding: 'utf8', timeout: 5000 });
+    wslAvailable = true;
+    return true;
+  } catch (e) {
+    wslAvailable = false;
+    return false;
+  }
+}
+
 function wslExec(cmd) {
   return execSync(`wsl -d ${WSL_DISTRO} -u root -- bash -c "${cmd.replace(/"/g, '\\"')}"`, {
     encoding: 'utf8', timeout: 10000
@@ -933,6 +959,7 @@ function wireSessionProc(session) {
           audit('SESSION', `Reattached to tmux: ${session.tmuxName}`);
         } catch (e) {
           audit('ERROR', `Reattach failed: ${e.message}`);
+          setLastError(`Reattach failed: ${e.message}`);
           sessions.delete(id);
           recentOutput.delete(id);
           broadcastSessions();
@@ -948,20 +975,49 @@ function wireSessionProc(session) {
   });
 }
 
+function createDirectPtySession(name, dir, cols, rows) {
+  const c = Math.max(10, Math.min(500, parseInt(cols, 10) || 50));
+  const r = Math.max(5, Math.min(200, parseInt(rows, 10) || 30));
+  return pty.spawn('cmd.exe', ['/c', 'claude'], {
+    name: 'xterm-256color',
+    cols: c, rows: r,
+    cwd: dir,
+    env: getSafeEnv()
+  });
+}
+
 function createSession(name, dir, cols, rows) {
   if (sessions.size >= MAX_SESSIONS) return null;
   const id = nextId++;
-  const tmux = tmuxName(id);
-  const wslDir = winPathToWsl(dir);
 
-  try {
-    createTmuxSession(tmux, wslDir, cols, rows);
-  } catch (e) {
-    audit('ERROR', `tmux create failed: ${e.message}`);
-    return null;
+  let proc, tmux = null;
+
+  if (wslAvailable) {
+    // Full mode: tmux session persistence via WSL
+    tmux = tmuxName(id);
+    const wslDir = winPathToWsl(dir);
+    try {
+      createTmuxSession(tmux, wslDir, cols, rows);
+      proc = attachToTmux(tmux, 80, 24);
+    } catch (e) {
+      audit('ERROR', `tmux create failed: ${e.message}`);
+      setLastError(`tmux create failed: ${e.message}`);
+      // Fall through to direct pty
+      tmux = null;
+    }
   }
 
-  const proc = attachToTmux(tmux, 80, 24);
+  if (!proc) {
+    // Degraded mode: direct pty (no persistence)
+    try {
+      proc = createDirectPtySession(name, dir, cols, rows);
+      audit('SESSION', `Created (direct pty, no persistence): "${name}" in ${dir}`);
+    } catch (e) {
+      audit('ERROR', `Direct pty failed: ${e.message}`);
+      setLastError(`Direct pty failed: ${e.message}`);
+      return null;
+    }
+  }
 
   const session = {
     id, name, dir, tmuxName: tmux, proc, scrollback: '',
@@ -970,7 +1026,7 @@ function createSession(name, dir, cols, rows) {
 
   wireSessionProc(session);
   sessions.set(id, session);
-  audit('SESSION', `Created: "${name}" in ${dir} (tmux: ${tmux})`);
+  if (tmux) audit('SESSION', `Created: "${name}" in ${dir} (tmux: ${tmux})`);
   saveSessionMeta();
   return session;
 }
@@ -1014,11 +1070,34 @@ function recoverTmuxSessions() {
       console.log(`  Recovered: "${name}" (${tmux})`);
     } catch (e) {
       audit('ERROR', `Recovery failed for ${tmux}: ${e.message}`);
+      setLastError(`Recovery failed for ${tmux}: ${e.message}`);
     }
   }
   // Persist metadata immediately so renames from this session are captured
   if (sessions.size > 0) saveSessionMeta();
 }
+
+// ─── Health check (localhost only) ───────────────────────────────
+app.get('/health', (req, res) => {
+  const ip = req.ip || req.connection.remoteAddress;
+  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+  if (!isLocal) {
+    return res.status(403).json({ error: 'localhost only' });
+  }
+
+  const mem = process.memoryUsage();
+  res.json({
+    status: wslAvailable ? 'ok' : 'degraded',
+    uptime: Math.floor(process.uptime()),
+    sessions: sessions.size,
+    wsl: wslAvailable,
+    memory: {
+      rss: Math.round(mem.rss / 1048576),
+      heap: Math.round(mem.heapUsed / 1048576)
+    },
+    lastError: lastError && (Date.now() - lastError.timestamp < 3600000) ? lastError : null
+  });
+});
 
 // ─── WebSocket ───────────────────────────────────────────────────
 const allClients = new Set();
@@ -1281,6 +1360,7 @@ wss.on('connection', (ws, req) => {
         audit('INPUT', `session=${ws.currentSession} len=${msg.data.length} hash=${inputHash}`, ws._ip);
         try { activeSession.proc.write(msg.data); } catch (e) {
           audit('ERROR', `pty write: ${e.message}`);
+          setLastError(`pty write: ${e.message}`);
         }
         if (activeSession.attention) { activeSession.attention = null; broadcastSessions(); }
         break;
@@ -1514,6 +1594,36 @@ function detectTailscale() {
   return null;
 }
 
+// ─── WSL probe with retry ────────────────────────────────────────
+function initWSL(retries = 6, interval = 5000) {
+  if (probeWSL()) {
+    console.log(`  WSL:      ${WSL_DISTRO} available`);
+    // Periodic re-check so /health detects WSL crashes
+    setInterval(() => { probeWSL(); }, 30000);
+    return;
+  }
+  if (retries <= 0) {
+    console.log('  WSL:      UNAVAILABLE — running in degraded mode (no tmux persistence)');
+    audit('SYSTEM', 'WSL unavailable after retries — degraded mode');
+    // Re-check every 30s in background
+    const recheck = setInterval(() => {
+      if (probeWSL()) {
+        console.log('  WSL: now available — tmux mode enabled');
+        audit('SYSTEM', 'WSL became available — tmux mode enabled');
+        clearInterval(recheck);
+        // Continue periodic health checks
+        setInterval(() => { probeWSL(); }, 30000);
+        recoverTmuxSessions();
+      }
+    }, 30000);
+    return;
+  }
+  console.log(`  WSL:      waiting for ${WSL_DISTRO}... (${retries} retries left)`);
+  setTimeout(() => initWSL(retries - 1, interval), interval);
+}
+
+initWSL();
+
 server.listen(PORT, 'localhost', () => {
   const tsIP = detectTailscale();
   console.log('');
@@ -1543,7 +1653,7 @@ server.listen(PORT, 'localhost', () => {
   console.log(`  Shutdown: auto after 8h idle`);
   console.log(`  Sessions: tmux via WSL (${WSL_DISTRO})`);
   console.log('  ────────────────────────────────');
-  recoverTmuxSessions();
+  if (wslAvailable) recoverTmuxSessions();
   if (sessions.size === 0) autoStartSessions();
-  audit('SYSTEM', `Server started on port ${PORT}`);
+  audit('SYSTEM', `Server started | restart_count: ${restartCount} | wsl: ${wslAvailable}`);
 });

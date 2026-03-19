@@ -8,3 +8,9 @@ config.json
 .session-meta.json
 claude-mobile
 claude-mobile.bat
+.watchdog-state
+.telegram-token
+.restart-count
+pm2-resurrect.cmd
+post-reboot-setup.ps1
+setup-wsl.log
