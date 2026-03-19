@@ -614,8 +614,6 @@
 <script>
 let ws = null, sessions = [], activeSession = null;
 let terms = {}, fits = {}, projects = [];
-let sessionHasMore = {}; // session id -> { has: bool, loaded: int }
-let historyLoading = false;
 let reconnectDelay = 1000;
 let sessionToken = null;
 let refreshTimer = null;
@@ -1233,25 +1231,7 @@ function handle(m) {
       }
       break;
     case 'scrollback':
-      if (terms[m.session]) {
-        terms[m.session].write(m.data);
-        // Track if server has more history available
-        if (m.hasMore) sessionHasMore[m.session] = { has: true, loaded: m.data.length };
-      }
-      break;
-    case 'history':
-      historyLoading = false;
-      if (terms[m.session] && m.data) {
-        const term = terms[m.session];
-        const viewBefore = term.buffer.active.viewportY;
-        const linesBefore = term.buffer.active.length;
-        term.write(m.data);
-        // Scroll back to where user was (approximately)
-        const linesAdded = term.buffer.active.length - linesBefore;
-        term.scrollToLine(viewBefore + linesAdded);
-        sessionHasMore[m.session] = { has: m.hasMore, loaded: m.offset || 0 };
-        showStatus(m.hasMore ? 'History loaded -- scroll up for more' : 'All history loaded', 'var(--dim)');
-      }
+      if (terms[m.session]) terms[m.session].write(m.data);
       break;
     case 'attention':
       const s = sessions.find(x => x.id === m.session);
@@ -1297,7 +1277,7 @@ function makeTerm() {
     fontFamily: "'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace",
     lineHeight: 1.286,
     theme: getTermTheme(),
-    scrollback: 2000,
+    scrollback: 10000,
     convertEol: true,
     disableStdin: true,
     cursorBlink: false,
@@ -1323,20 +1303,6 @@ function switchTo(id) {
     term.open(wrap);
     terms[id] = term;
     fits[id] = fitAddon;
-
-    // Load more history when scrolled to top
-    term.onScroll(() => {
-      if (historyLoading) return;
-      const buf = term.buffer.active;
-      // Near top: viewportY is 0 or close to it
-      if (buf.viewportY <= 5 && sessionHasMore[id]?.has) {
-        historyLoading = true;
-        showStatus('Loading history...', 'var(--dim)');
-        queueSend({ type: 'history', session: id, before: sessionHasMore[id].loaded || 0 });
-        // Reset after timeout in case server doesn't respond
-        setTimeout(() => { historyLoading = false; }, 5000);
-      }
-    });
 
     // Single fit after layout settles
     setTimeout(() => {
@@ -1888,74 +1854,37 @@ if (window.visualViewport) {
   appEl.style.height = window.visualViewport.height + 'px';
   let stableVVH = window.visualViewport.height; // last height we actually reflowed at
   let resizeTimer = null;
-  let pendingHeight = null;
-  let msgFocused = false;
-  msgInput.addEventListener('focus', () => { msgFocused = true; });
-  msgInput.addEventListener('blur', () => {
-    msgFocused = false;
-    // Always snap to correct height on blur -- keyboard may have changed size
-    setTimeout(() => {
-      const h = window.visualViewport.height;
-      appEl.style.height = h + 'px';
-      stableVVH = h;
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      requestAnimationFrame(() => {
-        doResize();
-        if (!userScrolled && activeSession !== null && terms[activeSession]) {
-          terms[activeSession].scrollToBottom();
-        }
-      });
-    }, 300); // Wait for keyboard dismiss animation
-  });
-
+  let resizeRafId = null;
   window.visualViewport.addEventListener('resize', () => {
     const h = window.visualViewport.height;
+
+    // Always update app height immediately (keeps layout correct)
+    appEl.style.height = h + 'px';
+
+    // Pin scroll
+    window.scrollTo(0, 0);
+
     const delta = h - stableVVH;
     const absDelta = Math.abs(delta);
 
-    // Small changes (< 60px) -- prediction bar / autocomplete. Skip entirely.
-    if (absDelta < 60) return;
+    // Small changes (< 50px) -- prediction bar. Update height but skip terminal refit.
+    if (absDelta < 50) return;
 
-    // Pin document scroll (skip while typing -- handled on blur)
-    if (!msgFocused) {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-    }
-
-    // Large change (keyboard open/close) -- always update height, even while focused
-    pendingHeight = h;
-
+    // Large change (keyboard open/close) -- debounce terminal refit only
+    stableVVH = h;
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      requestAnimationFrame(() => {
-        if (pendingHeight !== null) {
-          appEl.style.height = pendingHeight + 'px';
-          const finalDelta = pendingHeight - stableVVH;
-          stableVVH = pendingHeight;
-          pendingHeight = null;
-          doResize();
-          if (finalDelta > 50 && !userScrolled) {
-            requestAnimationFrame(() => {
-              if (activeSession !== null && terms[activeSession]) {
-                terms[activeSession].scrollToBottom();
-              }
-            });
-          }
+      if (resizeRafId) cancelAnimationFrame(resizeRafId);
+      resizeRafId = requestAnimationFrame(() => {
+        doResize();
+        if (delta > 50 && !userScrolled && activeSession !== null && terms[activeSession]) {
+          terms[activeSession].scrollToBottom();
         }
       });
-    }, 250);
+    }, 300);
   });
-  // Pin viewport scroll -- skip when textarea is focused (causes jitter during typing)
-  let vvScrollPending = false;
   window.visualViewport.addEventListener('scroll', () => {
-    if (vvScrollPending || msgFocused) return;
-    vvScrollPending = true;
-    requestAnimationFrame(() => {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      vvScrollPending = false;
-    });
+    window.scrollTo(0, 0);
   });
 }
 
