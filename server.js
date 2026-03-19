@@ -51,11 +51,18 @@ function listTmuxSessions() {
   } catch { return []; }
 }
 
+function ensureTmuxConfig() {
+  // Disable alternate screen on the OUTER terminal (tmux attach itself).
+  // smcup@:rmcup@ strips the alt-screen enter/exit capabilities so tmux
+  // renders into the normal screen buffer, preserving xterm.js scrollback.
+  try { wslExec(`tmux set -g terminal-overrides 'xterm*:smcup@:rmcup@'`); } catch {}
+}
+
 function createTmuxSession(name, wslDir) {
+  ensureTmuxConfig();
   wslExec(`tmux new-session -d -s ${name} -c '${wslDir}' -x 80 -y 24`);
   wslExec(`tmux set-option -t ${name} history-limit 8000`);
-  // Disable alternate screen so xterm.js keeps its scrollback buffer.
-  // Without this, tmux enters alt-screen on attach and xterm.js can't scroll up.
+  // Also disable alt-screen for programs inside tmux (belt + suspenders)
   wslExec(`tmux set-window-option -t ${name} alternate-screen off`);
   // Launch Claude via Windows interop (uses existing Windows auth + Claude install)
   wslExec(`tmux send-keys -t ${name} 'cmd.exe /c claude' Enter`);
@@ -775,6 +782,22 @@ const wss = new WebSocketServer({ server });
 const sessions = new Map();
 let nextId = 0;
 
+// ─── Session metadata persistence (names survive restart) ────────
+const SESSION_META_PATH = path.join(__dirname, '.session-meta.json');
+
+function saveSessionMeta() {
+  const meta = {};
+  for (const [id, s] of sessions) {
+    meta[s.tmuxName || `cm-${id}`] = { name: s.name, dir: s.dir };
+  }
+  try { fs.writeFileSync(SESSION_META_PATH, JSON.stringify(meta, null, 2)); } catch {}
+}
+
+function loadSessionMeta() {
+  try { return JSON.parse(fs.readFileSync(SESSION_META_PATH, 'utf8')); }
+  catch { return {}; }
+}
+
 function stripAnsi(str) {
   return str
     // OSC sequences (both BEL and ST terminated)
@@ -955,6 +978,7 @@ function createSession(name, dir) {
   wireSessionProc(session);
   sessions.set(id, session);
   audit('SESSION', `Created: "${name}" in ${dir} (tmux: ${tmux})`);
+  saveSessionMeta();
   return session;
 }
 
@@ -964,6 +988,8 @@ function recoverTmuxSessions() {
   if (existing.length === 0) return;
 
   console.log(`  Recovering ${existing.length} tmux session(s)...`);
+  ensureTmuxConfig();
+  const meta = loadSessionMeta();
   for (const tmux of existing) {
     const idNum = parseInt(tmux.replace(TMUX_PREFIX + '-', ''));
     if (isNaN(idNum)) continue;
@@ -972,9 +998,10 @@ function recoverTmuxSessions() {
     const wslDir = getTmuxPanePath(tmux);
     const winDir = wslDir ? wslPathToWin(wslDir) : 'unknown';
 
-    // Find project name from config
+    // Restore name from saved metadata, fall back to config match, then generic
+    const saved = meta[tmux];
     const project = config.projects.find(p => p.dir === winDir);
-    const name = project ? project.name : `Recovered-${idNum}`;
+    const name = saved?.name || (project ? project.name : `Recovered-${idNum}`);
 
     try {
       // Ensure alternate-screen is off (may predate this fix)
@@ -1272,6 +1299,7 @@ wss.on('connection', (ws, req) => {
         const name = String(msg.name).slice(0, 50).replace(/[<>"'&]/g, '');
         targetSession.name = name;
         broadcastSessions();
+        saveSessionMeta();
         break;
       }
 
@@ -1286,6 +1314,7 @@ wss.on('connection', (ws, req) => {
         if (ws.currentSession === msg.session) ws.currentSession = null;
         broadcastSessions();
         audit('SESSION', `Closed: "${targetSession.name}" (tmux: ${targetSession.tmuxName})`, ws._ip);
+        saveSessionMeta();
         break;
       }
     }
