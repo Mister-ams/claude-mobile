@@ -1061,6 +1061,28 @@ function recoverTmuxSessions() {
   if (sessions.size > 0) saveSessionMeta();
 }
 
+// ─── Health check (localhost only) ───────────────────────────────
+app.get('/health', (req, res) => {
+  const ip = req.ip || req.connection.remoteAddress;
+  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+  if (!isLocal) {
+    return res.status(403).json({ error: 'localhost only' });
+  }
+
+  const mem = process.memoryUsage();
+  res.json({
+    status: wslAvailable ? 'ok' : 'degraded',
+    uptime: Math.floor(process.uptime()),
+    sessions: sessions.size,
+    wsl: wslAvailable,
+    memory: {
+      rss: Math.round(mem.rss / 1048576),
+      heap: Math.round(mem.heapUsed / 1048576)
+    },
+    lastError: lastError && (Date.now() - lastError.timestamp < 3600000) ? lastError : null
+  });
+});
+
 // ─── WebSocket ───────────────────────────────────────────────────
 const allClients = new Set();
 const MAX_CONNECTIONS_PER_IP = 10;
