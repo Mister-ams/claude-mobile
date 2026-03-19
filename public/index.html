@@ -1238,7 +1238,7 @@ function handle(m) {
 }
 
 async function loadProjects() {
-  try { projects = (await (await fetch('/api/config?st=' + encodeURIComponent(sessionToken))).json()).projects; } catch {}
+  try { projects = (await (await fetch('/api/config', { headers: { 'X-Session-Token': sessionToken } })).json()).projects; } catch {}
 }
 
 function getTermTheme() {
@@ -1749,7 +1749,14 @@ function showAutocomplete(filter) {
   matches.forEach(c => {
     const btn = document.createElement('button');
     btn.className = 'ac-item';
-    btn.innerHTML = `<span class="ac-cmd">${c.cmd}</span><span class="ac-desc">${c.desc}</span>`;
+    const cmdSpan = document.createElement('span');
+    cmdSpan.className = 'ac-cmd';
+    cmdSpan.textContent = c.cmd;
+    const descSpan = document.createElement('span');
+    descSpan.className = 'ac-desc';
+    descSpan.textContent = c.desc;
+    btn.appendChild(cmdSpan);
+    btn.appendChild(descSpan);
     btn.onmousedown = e => e.preventDefault();
     btn.onclick = () => {
       msgInput.value = c.cmd;

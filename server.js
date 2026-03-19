@@ -61,9 +61,9 @@ function ensureTmuxConfig() {
 
 function createTmuxSession(name, wslDir, cols, rows) {
   ensureTmuxConfig();
-  // Use client dimensions if available, otherwise phone-friendly defaults
-  const c = cols || 50;
-  const r = rows || 30;
+  // Sanitize dimensions -- prevent shell injection via string values
+  const c = Math.max(10, Math.min(500, parseInt(cols, 10) || 50));
+  const r = Math.max(5, Math.min(200, parseInt(rows, 10) || 30));
   wslExec(`tmux new-session -d -s ${name} -c '${wslDir}' -x ${c} -y ${r}`);
   wslExec(`tmux set-option -t ${name} history-limit 100000`);
   // Also disable alt-screen for programs inside tmux (belt + suspenders)
@@ -569,7 +569,7 @@ app.post('/api/setup/verify', (req, res) => {
 
 // Auth middleware for HTTP routes
 function requireSession(req, res, next) {
-  const token = req.body?.sessionToken || req.query?.st;
+  const token = req.headers['x-session-token'] || req.body?.sessionToken || req.query?.st;
   if (!validateSessionToken(token, req.ip)) return res.status(401).json({ error: 'Unauthorized' });
   next();
 }
@@ -633,7 +633,11 @@ app.post('/api/passkey/register-verify', requireSession, async (req, res) => {
   }
 });
 
-app.post('/api/passkey/auth-options', async (_req, res) => {
+app.post('/api/passkey/auth-options', async (req, res) => {
+  const ip = req.ip || 'unknown';
+  if (!checkGlobalRate() || !checkIPRate(ip)) {
+    return res.status(429).json({ error: 'Too many attempts' });
+  }
   if (!storedCredentials.length) {
     return res.status(404).json({ error: 'No passkeys registered' });
   }
@@ -653,13 +657,18 @@ app.post('/api/passkey/auth-options', async (_req, res) => {
 });
 
 app.post('/api/passkey/auth-verify', async (req, res) => {
+  const ip = req.ip || 'unknown';
+  if (!checkGlobalRate() || !checkIPRate(ip)) {
+    return res.status(429).json({ error: 'Too many attempts' });
+  }
   try {
     const entry = challenges.get(req.body.expectedChallenge);
     if (!entry || Date.now() > entry.expires) {
+      recordIPFailure(ip);
       return res.status(400).json({ error: 'Challenge expired' });
     }
     const cred = storedCredentials.find(c => c.credentialID === req.body.response.id);
-    if (!cred) return res.status(400).json({ error: 'Unknown credential' });
+    if (!cred) { recordIPFailure(ip); return res.status(400).json({ error: 'Unknown credential' }); }
 
     const verification = await verifyAuthenticationResponse({
       response: req.body.response,
@@ -754,7 +763,7 @@ app.post('/api/upload', express.raw({ type: '*/*', limit: '10mb' }), (req, res) 
 });
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
+const wss = new WebSocketServer({ server, maxPayload: 1024 * 1024 }); // 1MB max message
 
 // ─── Sessions ────────────────────────────────────────────────────
 const sessions = new Map();
@@ -1259,6 +1268,10 @@ wss.on('connection', (ws, req) => {
 
       case 'input': {
         if (!activeSession) break;
+        if (typeof msg.data !== 'string' || msg.data.length > 65536) {
+          secureSend(ws, { type: 'warning', message: 'Input too large (64KB max)' });
+          break;
+        }
         const canary = checkCanary(msg.data);
         if (canary) {
           audit('CANARY', `Suspicious input detected: ${canary}`, ws._ip);
@@ -1328,6 +1341,10 @@ setInterval(() => {
   // Expired session tokens
   for (const [token, entry] of sessionTokens) {
     if (now > entry.expires) sessionTokens.delete(token);
+  }
+  // Expired WebAuthn challenges
+  for (const [id, entry] of challenges) {
+    if (now > entry.expires) challenges.delete(id);
   }
   // Stale IP rate limit entries
   for (const [ip, entry] of authAttempts) {
