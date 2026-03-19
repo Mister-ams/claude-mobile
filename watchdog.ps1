@@ -83,8 +83,10 @@ if ($wslDown) {
     Start-Sleep -Seconds 2
 }
 
-# Restart PM2
-$env:PATH = "C:\Users\abdul\AppData\Roaming\fnm\node-versions\v22.22.1\installation;$env:PATH"
+# Restart PM2 — resolve fnm node path dynamically (survives version upgrades)
+$FnmBase = "$env:USERPROFILE\AppData\Roaming\fnm\node-versions"
+$NodeDir = Get-ChildItem $FnmBase -Directory -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($NodeDir) { $env:PATH = "$($NodeDir.FullName)\installation;$env:PATH" }
 $pmResult = pm2 restart claude-mobile 2>&1
 $restarted = $LASTEXITCODE -eq 0
 
