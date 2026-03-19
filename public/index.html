@@ -1869,10 +1869,8 @@ window.addEventListener('resize', () => {
     lastWidth = w;
     requestAnimationFrame(() => doResize());
   }
-  // Scroll to bottom so cursor stays visible
-  if (activeSession !== null && terms[activeSession]) {
-    terms[activeSession].scrollToBottom();
-  }
+  // Don't scroll on resize -- it forces xterm.js re-render during keyboard animation
+  // and corrupts the terminal. Touch scroll works fine without this.
 });
 
 // ── iOS Prevention ──
