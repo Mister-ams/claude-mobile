@@ -23,6 +23,20 @@ const SCROLLBACK_SIZE = 400000;
 const WSL_DISTRO = config.wslDistro || 'Ubuntu-24.04';
 const TMUX_PREFIX = 'cm'; // session names: cm-0, cm-1, ...
 
+let wslAvailable = false;
+let lastError = null; // { message, timestamp }
+
+function probeWSL() {
+  try {
+    execSync(`wsl -d ${WSL_DISTRO} -- echo 1`, { encoding: 'utf8', timeout: 5000 });
+    wslAvailable = true;
+    return true;
+  } catch (e) {
+    wslAvailable = false;
+    return false;
+  }
+}
+
 function wslExec(cmd) {
   return execSync(`wsl -d ${WSL_DISTRO} -u root -- bash -c "${cmd.replace(/"/g, '\\"')}"`, {
     encoding: 'utf8', timeout: 10000
@@ -1514,6 +1528,36 @@ function detectTailscale() {
   return null;
 }
 
+// ─── WSL probe with retry ────────────────────────────────────────
+function initWSL(retries = 6, interval = 5000) {
+  if (probeWSL()) {
+    console.log(`  WSL:      ${WSL_DISTRO} available`);
+    // Periodic re-check so /health detects WSL crashes
+    setInterval(() => { probeWSL(); }, 30000);
+    return;
+  }
+  if (retries <= 0) {
+    console.log('  WSL:      UNAVAILABLE — running in degraded mode (no tmux persistence)');
+    audit('SYSTEM', 'WSL unavailable after retries — degraded mode');
+    // Re-check every 30s in background
+    const recheck = setInterval(() => {
+      if (probeWSL()) {
+        console.log('  WSL: now available — tmux mode enabled');
+        audit('SYSTEM', 'WSL became available — tmux mode enabled');
+        clearInterval(recheck);
+        // Continue periodic health checks
+        setInterval(() => { probeWSL(); }, 30000);
+        recoverTmuxSessions();
+      }
+    }, 30000);
+    return;
+  }
+  console.log(`  WSL:      waiting for ${WSL_DISTRO}... (${retries} retries left)`);
+  setTimeout(() => initWSL(retries - 1, interval), interval);
+}
+
+initWSL();
+
 server.listen(PORT, 'localhost', () => {
   const tsIP = detectTailscale();
   console.log('');
@@ -1543,7 +1587,7 @@ server.listen(PORT, 'localhost', () => {
   console.log(`  Shutdown: auto after 8h idle`);
   console.log(`  Sessions: tmux via WSL (${WSL_DISTRO})`);
   console.log('  ────────────────────────────────');
-  recoverTmuxSessions();
+  if (wslAvailable) recoverTmuxSessions();
   if (sessions.size === 0) autoStartSessions();
   audit('SYSTEM', `Server started on port ${PORT}`);
 });
