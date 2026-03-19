@@ -1055,9 +1055,6 @@ async function setupTotp() {
   }
 }
 
-// base64url helpers consolidated above (base64urlEncode / base64urlDecode)
-// WebAuthn callers use .buffer for ArrayBuffer where needed
-
 checkAuthStatus();
 
 $('totp-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitTotp(); } });

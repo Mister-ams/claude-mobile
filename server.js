@@ -18,7 +18,6 @@ const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), '
 const PORT = process.env.PORT || config.port || 3456;
 const MAX_SESSIONS = 8;
 const SCROLLBACK_SIZE = 400000;
-const DEBUG_ATTENTION = process.env.DEBUG_ATTENTION === '1';
 
 // ─── tmux session persistence (via WSL) ─────────────────────────
 const WSL_DISTRO = config.wslDistro || 'Ubuntu-24.04';
@@ -431,24 +430,6 @@ function getSafeEnv() {
   return safe;
 }
 
-// ─── Scrollback redaction ────────────────────────────────────────
-const REDACT_PATTERNS = [
-  /Bearer\s+[A-Za-z0-9._\-]+/g,
-  /sk-[A-Za-z0-9]{20,}/g,
-  /ghp_[A-Za-z0-9]{36}/g,
-  /railway-[A-Za-z0-9\-]{20,}/g,
-  /(password|passwd|secret|token|key)\s*[=:]\s*\S+/gi,
-  /-----BEGIN[A-Z ]*PRIVATE KEY-----[\s\S]*?-----END/g,
-];
-
-function redactSecrets(text) {
-  let result = text;
-  for (const pattern of REDACT_PATTERNS) {
-    result = result.replace(pattern, '[REDACTED]');
-  }
-  return result;
-}
-
 // ─── Input canary detection ──────────────────────────────────────
 const CANARY_PATTERNS = [
   /\/etc\/shadow/i,
@@ -822,56 +803,49 @@ function updateRecentOutput(sessionId, data) {
   recentOutput.set(sessionId, combined.length > 4096 ? combined.slice(-4096) : combined);
 }
 
+// Attention rules: { pattern, target (last3/last5/lastLine/perLine), reason, lineCheck? }
+const ATTENTION_RULES = [
+  // Permission prompts -- Claude Code tool approval
+  { pattern: /Allow|Deny|Don't allow|allow this|for this session|always allow/i, target: 'last5', reason: 'permission' },
+  { pattern: /\(y\/n\)/i, target: 'last5', reason: 'permission' },
+  // Question directed at user (near bottom, not a URL/comment)
+  { pattern: /\?\s*$/, target: 'last3', reason: 'question', lineCheck: (lastLine) => !/^\s*(http|\/\/|#)/.test(lastLine) },
+  // Claude Code idle prompt chars
+  { pattern: /^[\s.]*[>\u276f\u2771\u279c][\s.]*$/, target: 'perLine5', reason: 'ready' },
+  { pattern: /^[^a-zA-Z0-9]*[>$%#\u276f\u2771\u279c][^a-zA-Z0-9]*$/, target: 'perLine5', reason: 'ready', lineCheck: (line) => line.length < 10 },
+  // Status bar pattern
+  { pattern: /\d+%\s*(\d+ local)?/i, target: 'lastLine', reason: 'ready', lineCheck: (_ll, last3) => /[│\|]/.test(last3) },
+  // Cost/token summary
+  { pattern: /total cost|tokens used|input:|output:/i, target: 'last3', reason: 'ready' },
+  { pattern: /\$[\d.]+\s*\|\s*[\d.]+[KMkm]?\s*(in|tokens)/i, target: 'last3', reason: 'ready' },
+  // Completion markers
+  { pattern: /(?:crunched|cogitated) for/i, target: 'last5', reason: 'ready' },
+  { pattern: /task completed|changes (saved|committed|applied)|done[.!]?\s*$/i, target: 'last3', reason: 'ready' },
+  // Shell prompt
+  { pattern: /^[\s]*[$%#>][\s]*$/, target: 'lastLine', reason: 'ready' },
+];
+
 function detectAttention(sessionId) {
   const raw = recentOutput.get(sessionId) || '';
   const clean = stripAnsi(raw);
-  // Split, collapse empty lines, take last meaningful lines
   const lines = clean.split('\n').map(l => l.trim()).filter(Boolean);
-  const last10 = lines.slice(-10).join('\n');
-  const last5 = lines.slice(-5).join('\n');
   const lastLine = lines[lines.length - 1] || '';
-
-  // Permission prompts -- Claude Code tool approval
-  if (/Allow|Deny|Don't allow|allow this|for this session|always allow/i.test(last5)) return 'permission';
-
-  // Yes/No prompts
-  if (/\(y\/n\)/i.test(last5)) return 'permission';
-
-  // Question directed at user (line ending with ?)
-  // Only trigger if it's near the bottom of output (last 3 lines)
   const last3 = lines.slice(-3).join('\n');
-  if (/\?\s*$/.test(last3) && !/^\s*(http|\/\/|#)/.test(lastLine)) return 'question';
+  const last5 = lines.slice(-5).join('\n');
 
-  // Claude Code idle prompt -- the ❯ prompt char anywhere in last 5 lines
-  // (status bar lines render BELOW the prompt after ANSI stripping)
-  for (const line of lines.slice(-5)) {
-    if (/^[\s.]*[>\u276f\u2771\u279c][\s.]*$/.test(line)) return 'ready';
-    if (/^[^a-zA-Z0-9]*[>$%#\u276f\u2771\u279c][^a-zA-Z0-9]*$/.test(line) && line.length < 10) return 'ready';
+  for (const rule of ATTENTION_RULES) {
+    if (rule.target === 'perLine5') {
+      for (const line of lines.slice(-5)) {
+        if (rule.pattern.test(line) && (!rule.lineCheck || rule.lineCheck(line, last3))) return rule.reason;
+      }
+    } else {
+      const text = rule.target === 'lastLine' ? lastLine : rule.target === 'last3' ? last3 : last5;
+      if (rule.pattern.test(text) && (!rule.lineCheck || rule.lineCheck(lastLine, last3))) return rule.reason;
+    }
   }
 
-  // Claude Code status bar (only visible when idle/waiting for input)
-  // Pattern: "Opus 4.6 ... │ project-name ██░░░░ NN%"
-  if (/\d+%\s*(\d+ local)?/i.test(lastLine) && /[│\|]/.test(last3)) return 'ready';
-
-  // Claude finished responding -- cost/token summary lines
-  if (/total cost|tokens used|input:|output:/i.test(last3)) return 'ready';
-
-  // Claude Code cost summary line (e.g., "$0.12 | 5.2K in | 1.8K out")
-  if (/\$[\d.]+\s*\|\s*[\d.]+[KMkm]?\s*(in|tokens)/i.test(last3)) return 'ready';
-
-  // "Crunched for Xs" / "Cogitated for Xs" -- Claude just finished thinking
-  if (/(?:crunched|cogitated) for/i.test(last5)) return 'ready';
-
-  // Claude Code "Task completed" or similar completion messages
-  if (/task completed|changes (saved|committed|applied)|done[.!]?\s*$/i.test(last3)) return 'ready';
-
-  // Shell prompt after command completion
-  if (/^[\s]*[$%#>][\s]*$/.test(lastLine)) return 'ready';
-
-  // Always log for diagnostics (written to audit log)
   const preview = lines.slice(-3).map(l => l.substring(0, 80)).join(' | ');
   audit('ATTN-MISS', `session=${sessionId} lines=${lines.length} lastLine=[${lastLine.substring(0, 60)}] preview=[${preview}]`);
-
   return null;
 }
 
@@ -894,6 +868,12 @@ function broadcastSessions() {
 
 function broadcastAttention(sessionId, reason) {
   broadcastAll({ type: 'attention', session: sessionId, reason });
+}
+
+// Auth success: send auth response + session list + timing config
+function completeAuth(ws, token, extra) {
+  secureSend(ws, { type: 'auth', success: true, sessionToken: token, ttl: SESSION_TTL_MS, inactivityMs: INACTIVITY_MS, ...extra });
+  secureSend(ws, { type: 'sessions', sessions: getSessionList() });
 }
 
 // Wire up proc.onData and proc.onExit for a session (shared by create + recover)
@@ -1095,12 +1075,6 @@ wss.on('connection', (ws, req) => {
     if (!ws.encrypted) {
       ws.close(1008, 'Encryption required');
       return;
-    }
-
-    // Auth success helper: send auth + sessions + timing config
-    function completeAuth(ws, token, extra) {
-      secureSend(ws, { type: 'auth', success: true, sessionToken: token, ttl: SESSION_TTL_MS, inactivityMs: INACTIVITY_MS, ...extra });
-      secureSend(ws, { type: 'sessions', sessions: getSessionList() });
     }
 
     // ── Auth via TOTP (backup 2FA) or session token re-auth ──
