@@ -5,7 +5,7 @@ Claude Mobile Bridge -- mobile web interface for Claude Code terminal sessions o
 ## Architecture
 
 ```
-claude-mobile/                    v2.0.0
+claude-mobile/                    v3.0.0
 ├── server.js                     Node.js: Express + WebSocket + node-pty + tmux (WSL) + E2E crypto
 ├── config.json                   Projects, autoStart, tailscaleHostname, port (gitignored)
 ├── config.example.json           Template for config.json

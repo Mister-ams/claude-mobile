@@ -1,6 +1,6 @@
-# Claude Mobile
+# Claude Mobile v3.0.0
 
-Mobile terminal gateway for Claude Code. Access your Claude Code sessions from your iPhone with end-to-end encryption, Face ID authentication, and a permanent tunnel URL.
+Mobile terminal gateway for Claude Code. Access your Claude Code sessions from your iPhone over Tailscale VPN with end-to-end encryption, Face ID authentication, and persistent tmux sessions.
 
 ## Quick Install
 
@@ -10,86 +10,82 @@ cd claude-mobile
 bash install.sh
 ```
 
-The installer handles everything:
-1. Checks Node.js, npm, Claude Code CLI
-2. Installs dependencies
-3. Asks for your project directories
-4. Sets up ngrok (permanent URL for phone access)
-5. Installs PM2 (background daemon)
-6. Starts the server and opens the auth setup page
+The installer walks you through everything -- prerequisites, Tailscale, WSL/tmux, project config, and TOTP setup.
 
-**Requirements**: Node.js 18+, Claude Code CLI, ngrok account (free tier works)
+## Prerequisites
+
+| Prerequisite | Why | Install |
+|---|---|---|
+| Node.js 18+ | Server runtime | [nodejs.org](https://nodejs.org) |
+| Tailscale | VPN tunnel (phone <-> laptop) | `winget install Tailscale.Tailscale` |
+| Claude Code CLI | Terminal sessions | `npm i -g @anthropic-ai/claude-code` |
+| WSL + Ubuntu 24.04 | tmux host (Windows only) | `wsl --install Ubuntu-24.04` |
+| PM2 | Background daemon | `npm i -g pm2` |
+
+Tailscale must be installed on **both** your laptop and iPhone, logged into the same account.
 
 ## Update
 
 ```bash
-cd claude-mobile
 bash update.sh
 ```
 
-Pulls latest code, updates dependencies if needed, restarts PM2. All your credentials and config are preserved.
+Pulls latest, updates deps, restarts PM2. Config and credentials are preserved.
 
 ## What It Does
 
-- Spawns Claude Code on your laptop, streams it to your phone via WebSocket
-- End-to-end encrypted (ECDH + AES-256-GCM) -- your tunnel provider cannot read traffic
+- Spawns Claude Code inside tmux (WSL), streams to your phone via WebSocket
+- End-to-end encrypted (ECDH P-256 + AES-256-GCM) -- Tailscale sees double-encrypted blobs
+- tmux sessions survive server restarts, PM2 crashes, and laptop reboots (WSL stays running)
 - xterm.js terminal with Palantir/Blueprint theme (dark + light mode)
-- Slash command autocomplete (37 commands)
-- Touch scroll zones (tap top/bottom half to scroll)
+- Slash command autocomplete (discovered from .claude/skills/)
+- Touch scroll zones with arrow overlays (left/right when keyboard open)
 - Multi-session support (up to 8 parallel sessions)
-- Pull-up gesture on session counter to create new sessions
-- Attention notifications when Claude needs your input
-- PM2 daemon (sessions survive terminal close)
+- Attention notifications when Claude needs your input (vibration + red dot)
+- Image upload for sharing screenshots with Claude
 
 ## Security
 
-Three-tier transport security with zero-trust authentication.
+### Authentication (4-tier)
 
-### Authentication
-- **Setup**: localhost-only page (physical laptop access required)
-- **Primary auth**: Face ID / passkey (WebAuthn)
-- **Backup auth**: TOTP 6-digit code (Apple Passwords compatible)
-- **Session tokens**: 30-min TTL, IP-bound, auto-rotating
+| Tier | What | Detail |
+|---|---|---|
+| P0 | IP-bound sessions | 30-min TTL, auto-rotated via WebSocket. Per-IP + global rate limiting |
+| P1 | E2E encryption | Ephemeral ECDH P-256, AES-256-GCM, counter-based nonces, anti-replay |
+| P2 | TOFU key pinning | Server P-256 identity key, ECDSA-signed ephemeral keys (SSH-style) |
+| P3 | Inactivity lock | Configurable timeout (default 15min), CSP headers, 8h auto-shutdown |
 
-### Encryption (P0-P2)
-- **P0 -- IP binding**: tokens are locked to the IP that created them
-- **P1 -- E2E encryption**: ephemeral ECDH P-256 key exchange per connection, AES-256-GCM with counter-based nonces, replay protection via monotonic sequence numbers
-- **P2 -- TOFU pinning**: server identity key verified on first connection (SSH-style trust-on-first-use), signed ephemeral keys prevent MITM
-- **Anti-downgrade**: plaintext messages rejected after handshake, 10s encryption timeout
+- **Primary auth**: TOTP (Apple Passwords compatible)
+- **Secondary auth**: WebAuthn passkeys (Face ID)
+- **Setup**: localhost-only `/setup` page (physical laptop access required)
 
 ### Defense in Depth
+
 - Rate limiting: global (20 failures = 10min lockout) + per-IP (5 attempts = 60s lockout)
 - Env whitelist: only safe variables passed to terminal processes
 - Scrollback redaction: API keys, tokens, private keys stripped from replay
-- Input canary: alerts on dangerous command patterns (rm -rf, eval, etc.)
-- Auto-shutdown: 8 hours idle = server stops
+- Input canary: alerts on dangerous command patterns
 - Audit log: all events logged to `~/.claude-mobile-audit.log`
 
-### What Your Tunnel Provider Sees
+## Daily Use
 
-After the E2E handshake, all WebSocket frames are opaque encrypted blobs:
-```json
-{"e":"base64url_encrypted_data...","n":42}
-```
-They cannot read terminal output, inject commands, or steal session tokens.
-
-## After Install
-
-**Daily use (PM2 running in background):**
 ```bash
-# Check status
+# Start (first time after install)
+pm2 start server.js --name claude-mobile && pm2 save
+
+# Status
 pm2 status
 
-# View connection info + server fingerprint
+# Logs
 pm2 logs claude-mobile --lines 20 --nostream
 
-# Restart (keeps auth, clears sessions)
+# Restart (tmux sessions survive)
 pm2 restart claude-mobile
 ```
 
-**On your phone:**
-1. Open `https://your-domain.ngrok-free.dev`
-2. First time: verify the server fingerprint matches your laptop's `/setup` page
+**On your iPhone:**
+1. Open `https://<your-tailscale-hostname>`
+2. First time: verify server fingerprint matches laptop's `/setup` page
 3. Tap "Login with Face ID" or enter TOTP code
 
 ## Manual Setup (without installer)
@@ -97,10 +93,10 @@ pm2 restart claude-mobile
 ```bash
 npm install
 cp config.example.json config.json
-# Edit config.json: add your project paths and ngrok domain
+# Edit config.json: add your project paths and Tailscale hostname
+tailscale serve --bg http://localhost:3456
 node server.js
-# Open http://localhost:3456/setup in your laptop browser
-# Scan the QR code with Apple Passwords to set up TOTP
+# Open http://localhost:3456/setup on laptop to configure TOTP
 ```
 
 ## Configuration
@@ -110,11 +106,14 @@ Edit `config.json` (created by installer, gitignored):
 ```json
 {
   "port": 3456,
-  "ngrokDomain": "your-domain.ngrok-free.dev",
+  "tailscaleHostname": "your-machine.tail12345.ts.net",
+  "inactivityTimeout": 15,
+  "wslDistro": "Ubuntu-24.04",
+  "autoStart": ["My Project"],
+  "defaultDir": "C:\\Users\\YOU\\Projects\\my-project",
   "projects": [
-    { "name": "My Project", "dir": "/path/to/project" }
-  ],
-  "autoStart": ["My Project"]
+    { "name": "My Project", "dir": "C:\\Users\\YOU\\Projects\\my-project" }
+  ]
 }
 ```
 
@@ -122,36 +121,42 @@ Edit `config.json` (created by installer, gitignored):
 
 ```
 claude-mobile/
-  install.sh              Single-file installer
-  update.sh               Pull latest + restart
-  server.js               Express + WS + node-pty + E2E crypto + auth
-  public/index.html       Mobile web UI (xterm.js + Blueprint theme)
-  config.json             Your settings (gitignored)
-  config.example.json     Template config
-  .server-identity-key    E2E identity key (gitignored, auto-generated)
-  .credentials.json       WebAuthn passkeys (gitignored, auto-created)
-  .totp-secret            TOTP secret (gitignored, auto-created)
-  .planning/              Security design docs (requirements, tech-design, audit)
+  server.js               Express + WS + node-pty + tmux + E2E crypto + auth
+  public/index.html        Mobile web UI (xterm.js + Palantir theme)
+  public/vendor/           Bundled xterm.js + addons (no CDN)
+  install.sh               Full setup script
+  update.sh                Pull + deps + PM2 restart
+  config.json              Your settings (gitignored)
+  config.example.json      Template config
+  .server-identity-key     E2E identity key (gitignored, auto-generated)
+  .credentials.json        WebAuthn passkeys (gitignored, auto-created)
+  .totp-secret             TOTP secret (gitignored, auto-created)
+  .session-meta.json       Session names persistence (gitignored)
 ```
 
-## UI Features
+## Rendering Pipeline
 
-- **Theme**: Palantir/Blueprint design system with dark and light modes
-- **Colorblind-safe**: status indicators use shape + color (not color alone)
-- **Touch targets**: 44px minimum (Apple HIG compliant)
-- **Keyboard-aware**: terminal refits when iOS keyboard opens/closes
-- **Session management**: pull-up gesture on counter creates new sessions
-- **Uppercase session names**: all session names are displayed in uppercase
+```
+Claude Code -> tmux (WSL) -> node-pty (wsl.exe attach) -> WebSocket -> xterm.js (canvas)
+```
+
+- Raw ANSI passthrough from tmux to xterm.js -- no server-side processing
+- History restored via `tmux capture-pane -p -e -J -S -10000`
+- tmux alternate screen disabled for scroll history access (minor visual artifacts during active rendering)
+- Sessions created at phone's column width
 
 ## Troubleshooting
 
 | Problem | Fix |
-|---------|-----|
-| ngrok ERR_NGROK_3200 (offline) | Server not running. Start with `pm2 start` or `node server.js` |
-| Stuck on "Connecting securely..." | Delete `.server-identity-key` and restart. Clear site data on phone. |
-| iOS keyboard causes jumping | Update to latest (font-size 16px fix prevents iOS auto-zoom) |
-| TOTP code rejected | Check phone clock is synced. Codes are valid for 90 seconds. |
+|---|---|
+| Phone can't reach server | Check Tailscale is connected on both devices. Run `tailscale status` |
+| Stuck on "Connecting securely..." | Delete `.server-identity-key` and restart. Clear site data on phone |
+| TOTP code rejected | Check phone clock is synced. Codes are valid for 90 seconds |
 | Face ID not offered | Register passkey first: connect via TOTP, accept the passkey prompt |
+| Terminal blank after reconnect | tmux session may have exited. Create a new session from the UI |
+| iOS keyboard causes jumping | Should not happen on v3+. If so, check viewport meta tag intact |
+| Passkeys broken after hostname change | Re-register passkeys (rpID is bound to Tailscale hostname) |
+| WSL not starting | Run `wsl --list` to verify Ubuntu-24.04 is installed |
 
 ## License
 

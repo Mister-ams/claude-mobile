@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────
-# Claude Mobile -- Installer
-# Clones from GitHub, installs deps, configures Tailscale,
-# sets up WSL/tmux for session persistence, and runs setup.
+# Claude Mobile v3.0.0 -- Installer
+# Checks prerequisites, clones repo, configures Tailscale,
+# sets up WSL/tmux, installs deps, and runs TOTP setup.
 # ─────────────────────────────────────────────────────────
 set -e
 
+VERSION="3.0.0"
 REPO="https://github.com/Mister-ams/claude-mobile.git"
 DEFAULT_DIR="$HOME/Projects/claude-mobile"
 PORT=3456
@@ -19,74 +20,92 @@ RED='\033[31m'
 RESET='\033[0m'
 
 say()  { echo -e "${BOLD}${BLUE}>>>${RESET} $1"; }
-ok()   { echo -e "${GREEN}  OK${RESET} $1"; }
-warn() { echo -e "${YELLOW}  !!${RESET} $1"; }
-fail() { echo -e "${RED}  ERROR${RESET} $1"; exit 1; }
+ok()   { echo -e "${GREEN}  [ok]${RESET} $1"; }
+warn() { echo -e "${YELLOW}  [!!]${RESET} $1"; }
+fail() { echo -e "${RED}  [FAIL]${RESET} $1"; exit 1; }
+skip() { echo -e "${DIM}  [--]${RESET} $1"; }
 ask()  { echo -en "${BOLD}${BLUE}>>>${RESET} $1: "; read -r REPLY; }
 
+# ── Banner ───────────────────────────────────────────────
 echo ""
-echo -e "${BOLD}+======================================+${RESET}"
-echo -e "${BOLD}|       Claude Mobile Installer        |${RESET}"
-echo -e "${BOLD}|  Mobile terminal gateway for Claude  |${RESET}"
-echo -e "${BOLD}+======================================+${RESET}"
-echo ""
-echo -e "  ${DIM}Prerequisites:${RESET}"
-echo -e "  ${DIM}  1. Node.js 18+ installed${RESET}"
-echo -e "  ${DIM}  2. Tailscale on this computer + your iPhone${RESET}"
-echo -e "  ${DIM}  3. Both devices on the same Tailscale account${RESET}"
+echo -e "${BOLD}+==========================================+${RESET}"
+echo -e "${BOLD}|         Claude Mobile v${VERSION}             |${RESET}"
+echo -e "${BOLD}|   Mobile terminal gateway for Claude     |${RESET}"
+echo -e "${BOLD}+==========================================+${RESET}"
 echo ""
 
-# ── Step 1: Prerequisites ────────────────────────────────
-say "Step 1/7: Checking prerequisites..."
+# ── Detect platform ─────────────────────────────────────
+IS_WINDOWS=false
+IS_MAC=false
+IS_LINUX=false
+[[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || -n "$WINDIR" ]] && IS_WINDOWS=true
+[[ "$OSTYPE" == "darwin"* ]] && IS_MAC=true
+[[ "$OSTYPE" == "linux-gnu"* ]] && IS_LINUX=true
 
-if ! command -v git &>/dev/null; then
+PLATFORM="unknown"
+$IS_WINDOWS && PLATFORM="Windows"
+$IS_MAC && PLATFORM="macOS"
+$IS_LINUX && PLATFORM="Linux"
+say "Platform: $PLATFORM"
+echo ""
+
+# ════════════════════════════════════════════════════════
+# PHASE 1: PREREQUISITE CHECK
+# ════════════════════════════════════════════════════════
+say "Phase 1/4: Checking prerequisites..."
+echo ""
+PREREQ_PASS=true
+
+# -- git --
+if command -v git &>/dev/null; then
+  ok "git $(git --version | cut -d' ' -f3)"
+else
   fail "git not found. Install git first."
 fi
-ok "git $(git --version | cut -d' ' -f3)"
 
-if ! command -v node &>/dev/null; then
-  fail "Node.js not found. Install from https://nodejs.org (v18+)"
-fi
-NODE_VER=$(node -v | sed 's/v//' | cut -d. -f1)
-if [ "$NODE_VER" -lt 18 ]; then
-  fail "Node.js v$NODE_VER found, v18+ required"
-fi
-ok "Node.js $(node -v)"
-
-if ! command -v npm &>/dev/null; then
-  fail "npm not found"
-fi
-ok "npm $(npm -v)"
-
-if ! command -v claude &>/dev/null; then
-  warn "Claude Code CLI not found in PATH"
-  warn "Install before running: https://claude.ai/claude-code"
+# -- Node.js --
+if command -v node &>/dev/null; then
+  NODE_VER=$(node -v | sed 's/v//' | cut -d. -f1)
+  if [ "$NODE_VER" -ge 18 ]; then
+    ok "Node.js $(node -v)"
+  else
+    warn "Node.js v$NODE_VER found -- v18+ required"
+    echo -e "    ${DIM}Install from https://nodejs.org${RESET}"
+    PREREQ_PASS=false
+  fi
 else
-  ok "Claude Code CLI found"
+  warn "Node.js not found"
+  echo -e "    ${DIM}Install from https://nodejs.org (v18+)${RESET}"
+  PREREQ_PASS=false
 fi
 
-# ── Step 2: Clone repo ───────────────────────────────────
-say "Step 2/7: Getting claude-mobile..."
-
-ask "Install directory (default: $DEFAULT_DIR)"
-INSTALL_DIR="${REPLY:-$DEFAULT_DIR}"
-
-if [ -f "$INSTALL_DIR/server.js" ]; then
-  ok "Already installed at $INSTALL_DIR -- pulling latest"
-  cd "$INSTALL_DIR"
-  git pull origin master --ff-only || git pull origin master --rebase
+# -- npm --
+if command -v npm &>/dev/null; then
+  ok "npm $(npm -v)"
 else
-  PARENT_DIR="$(dirname "$INSTALL_DIR")"
-  mkdir -p "$PARENT_DIR"
-  say "Cloning from GitHub..."
-  git clone "$REPO" "$INSTALL_DIR"
-  cd "$INSTALL_DIR"
-  ok "Cloned to $INSTALL_DIR"
+  warn "npm not found"
+  PREREQ_PASS=false
 fi
 
-# ── Step 3: Tailscale ────────────────────────────────────
-say "Step 3/7: Setting up Tailscale..."
+# -- Claude Code CLI --
+if command -v claude &>/dev/null; then
+  ok "Claude Code CLI"
+else
+  warn "Claude Code CLI not found"
+  echo -e "    ${DIM}Install: npm i -g @anthropic-ai/claude-code${RESET}"
+  echo -e "    ${DIM}You can install this later -- not blocking.${RESET}"
+fi
 
+# -- PM2 --
+if command -v pm2 &>/dev/null; then
+  ok "PM2 $(pm2 -v 2>/dev/null | tail -1)"
+  PM2_INSTALLED=true
+else
+  skip "PM2 not installed (will offer to install in Phase 3)"
+  PM2_INSTALLED=false
+fi
+
+# -- Tailscale --
 TS_CMD=""
 if command -v tailscale &>/dev/null; then
   TS_CMD="tailscale"
@@ -96,103 +115,119 @@ elif [ -f "/mnt/c/Program Files/Tailscale/tailscale.exe" ]; then
   TS_CMD="/mnt/c/Program Files/Tailscale/tailscale.exe"
 fi
 
-if [ -z "$TS_CMD" ]; then
-  echo ""
-  echo -e "  ${RED}Tailscale is required.${RESET}"
-  echo -e "    Windows: ${DIM}winget install Tailscale.Tailscale${RESET}"
-  echo -e "    macOS:   ${DIM}brew install tailscale${RESET}"
-  echo -e "    Linux:   ${DIM}curl -fsSL https://tailscale.com/install.sh | sh${RESET}"
-  echo ""
-  fail "Install Tailscale and run this installer again."
+if [ -n "$TS_CMD" ]; then
+  if "$TS_CMD" status &>/dev/null 2>&1; then
+    ok "Tailscale (connected)"
+  else
+    warn "Tailscale installed but not connected"
+    echo -e "    ${DIM}Run: tailscale up${RESET}"
+    PREREQ_PASS=false
+  fi
+else
+  warn "Tailscale not found"
+  if $IS_WINDOWS; then
+    echo -e "    ${DIM}Install: winget install Tailscale.Tailscale${RESET}"
+  elif $IS_MAC; then
+    echo -e "    ${DIM}Install: brew install tailscale${RESET}"
+  else
+    echo -e "    ${DIM}Install: curl -fsSL https://tailscale.com/install.sh | sh${RESET}"
+  fi
+  PREREQ_PASS=false
 fi
-ok "Tailscale CLI found"
 
-if ! "$TS_CMD" status &>/dev/null 2>&1; then
-  warn "Tailscale is installed but not connected."
-  echo -e "  ${DIM}Run: ${BOLD}tailscale up${RESET}${DIM} then re-run this installer.${RESET}"
-  fail "Connect Tailscale first."
+# -- WSL + tmux (Windows only) --
+WSL_DISTRO="Ubuntu-24.04"
+if $IS_WINDOWS; then
+  if wsl --list --quiet 2>/dev/null | grep -qi "Ubuntu-24.04"; then
+    ok "WSL Ubuntu-24.04"
+    # Check tmux inside WSL
+    if wsl -d "$WSL_DISTRO" -u root -- bash -c "command -v tmux" &>/dev/null 2>&1; then
+      ok "tmux (WSL)"
+    else
+      skip "tmux not yet installed in WSL (will install in Phase 3)"
+    fi
+  else
+    skip "WSL Ubuntu-24.04 not installed (will install in Phase 3)"
+  fi
+elif command -v tmux &>/dev/null; then
+  ok "tmux $(tmux -V 2>/dev/null | cut -d' ' -f2)"
+else
+  warn "tmux not found -- sessions won't persist across restarts"
+  if $IS_MAC; then
+    echo -e "    ${DIM}Install: brew install tmux${RESET}"
+  else
+    echo -e "    ${DIM}Install: sudo apt install tmux${RESET}"
+  fi
 fi
-ok "Tailscale connected"
 
-TS_HOSTNAME=$("$TS_CMD" status --json 2>/dev/null | grep -o '"DNSName":"[^"]*"' | head -1 | sed 's/"DNSName":"//;s/\.$//' | sed 's/"$//')
+echo ""
+if ! $PREREQ_PASS; then
+  echo -e "  ${YELLOW}Some prerequisites are missing.${RESET}"
+  ask "Continue anyway? Remaining steps will install what they can. (y/n)"
+  [[ ! "$REPLY" =~ ^[Yy] ]] && { echo "Exiting."; exit 0; }
+  echo ""
+fi
+
+# ════════════════════════════════════════════════════════
+# PHASE 2: GET CODE + CONFIGURE
+# ════════════════════════════════════════════════════════
+say "Phase 2/4: Getting code + configuring..."
+echo ""
+
+# -- Clone or update repo --
+ask "Install directory (default: $DEFAULT_DIR)"
+INSTALL_DIR="${REPLY:-$DEFAULT_DIR}"
+
+if [ -f "$INSTALL_DIR/server.js" ]; then
+  ok "Already installed at $INSTALL_DIR -- pulling latest"
+  cd "$INSTALL_DIR"
+  git pull origin master --ff-only 2>/dev/null || git pull origin master --rebase 2>/dev/null || warn "Pull failed -- using existing code"
+else
+  PARENT_DIR="$(dirname "$INSTALL_DIR")"
+  mkdir -p "$PARENT_DIR"
+  say "Cloning from GitHub..."
+  git clone "$REPO" "$INSTALL_DIR"
+  cd "$INSTALL_DIR"
+  ok "Cloned to $INSTALL_DIR"
+fi
+
+# -- Tailscale hostname --
+TS_HOSTNAME=""
+if [ -n "$TS_CMD" ]; then
+  TS_HOSTNAME=$("$TS_CMD" status --json 2>/dev/null | grep -o '"DNSName":"[^"]*"' | head -1 | sed 's/"DNSName":"//;s/\.$//' | sed 's/"$//')
+fi
+
 if [ -z "$TS_HOSTNAME" ]; then
-  echo -e "  ${DIM}Could not auto-detect hostname. Find it in Tailscale > Machines.${RESET}"
+  echo -e "  ${DIM}Could not auto-detect. Find it in Tailscale > Machines.${RESET}"
   ask "Tailscale hostname (e.g., my-laptop.tail12345.ts.net)"
   TS_HOSTNAME="$REPLY"
-  [ -z "$TS_HOSTNAME" ] && fail "Hostname required for HTTPS + passkeys."
 fi
-ok "Hostname: $TS_HOSTNAME"
 
-say "Configuring HTTPS proxy..."
-echo -e "  ${DIM}https://$TS_HOSTNAME -> localhost:$PORT${RESET}"
-SERVE_OUTPUT=$("$TS_CMD" serve --bg http://localhost:$PORT 2>&1) && ok "tailscale serve configured" || {
-  if echo "$SERVE_OUTPUT" | grep -qi "not enabled"; then
-    ENABLE_URL=$(echo "$SERVE_OUTPUT" | grep -o 'https://login.tailscale.com/[^ ]*' | head -1)
-    [ -n "$ENABLE_URL" ] && echo -e "  ${GREEN}$ENABLE_URL${RESET}"
-    ask "Press Enter after enabling Tailscale Serve, then we'll retry"
-    "$TS_CMD" serve --bg http://localhost:$PORT 2>/dev/null && ok "tailscale serve configured" || {
-      warn "Configure manually later: tailscale serve --bg http://localhost:$PORT"
-    }
-  else
-    warn "Configure manually later: tailscale serve --bg http://localhost:$PORT"
-  fi
-}
-
-# ── Step 4: Dependencies ─────────────────────────────────
-say "Step 4/7: Installing dependencies..."
-npm install --production 2>&1 | tail -3
-ok "Dependencies installed"
-
-# ── Step 5: WSL + tmux (Windows only) ────────────────────
-IS_WINDOWS=false
-[[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" || -n "$WINDIR" ]] && IS_WINDOWS=true
-
-if $IS_WINDOWS; then
-  say "Step 5/7: Setting up WSL + tmux for session persistence..."
-
-  # Check if Ubuntu-24.04 is already installed
-  WSL_INSTALLED=false
-  if wsl --list --quiet 2>/dev/null | grep -qi "Ubuntu-24.04"; then
-    WSL_INSTALLED=true
-    ok "WSL Ubuntu-24.04 already installed"
-  fi
-
-  if ! $WSL_INSTALLED; then
-    say "Installing WSL Ubuntu-24.04 (this may take a few minutes)..."
-    wsl --install Ubuntu-24.04 --no-launch 2>&1 | tail -3
-    ok "Ubuntu-24.04 installed"
-  fi
-
-  # Install tmux + node inside WSL
-  say "Installing tmux + Node.js in WSL..."
-  wsl -d Ubuntu-24.04 -u root -- bash -c "
-    apt-get update -qq && apt-get install -y -qq tmux curl > /dev/null 2>&1
-    if ! command -v node &>/dev/null; then
-      curl -fsSL https://deb.nodesource.com/setup_22.x | bash - > /dev/null 2>&1
-      apt-get install -y -qq nodejs > /dev/null 2>&1
-    fi
-    if ! command -v pm2 &>/dev/null; then
-      npm install -g pm2 > /dev/null 2>&1
-    fi
-    if ! command -v claude &>/dev/null; then
-      npm install -g @anthropic-ai/claude-code > /dev/null 2>&1
-    fi
-    echo \"tmux \$(tmux -V | cut -d' ' -f2), node \$(node -v), pm2 \$(pm2 -v 2>/dev/null | tail -1)\"
-  " 2>/dev/null && ok "WSL tools installed" || warn "WSL setup had issues -- tmux persistence may not work"
+if [ -n "$TS_HOSTNAME" ]; then
+  ok "Hostname: $TS_HOSTNAME"
 else
-  say "Step 5/7: tmux setup..."
-  if command -v tmux &>/dev/null; then
-    ok "tmux $(tmux -V | cut -d' ' -f2) found"
-  else
-    warn "tmux not found. Install it for session persistence:"
-    echo -e "    macOS: ${DIM}brew install tmux${RESET}"
-    echo -e "    Linux: ${DIM}sudo apt install tmux${RESET}"
-  fi
+  warn "No hostname set -- you'll need to edit config.json manually"
 fi
 
-# ── Step 6: Configure projects ───────────────────────────
-say "Step 6/7: Configure project directories..."
+# -- Configure Tailscale serve --
+if [ -n "$TS_CMD" ] && [ -n "$TS_HOSTNAME" ]; then
+  say "Configuring HTTPS proxy..."
+  echo -e "  ${DIM}https://$TS_HOSTNAME -> localhost:$PORT${RESET}"
+  SERVE_OUTPUT=$("$TS_CMD" serve --bg http://localhost:$PORT 2>&1) && ok "tailscale serve configured" || {
+    if echo "$SERVE_OUTPUT" | grep -qi "not enabled"; then
+      ENABLE_URL=$(echo "$SERVE_OUTPUT" | grep -o 'https://login.tailscale.com/[^ ]*' | head -1)
+      [ -n "$ENABLE_URL" ] && echo -e "  ${GREEN}$ENABLE_URL${RESET}"
+      ask "Press Enter after enabling Tailscale Serve, then we'll retry"
+      "$TS_CMD" serve --bg http://localhost:$PORT 2>/dev/null && ok "tailscale serve configured" || {
+        warn "Configure manually later: tailscale serve --bg http://localhost:$PORT"
+      }
+    else
+      warn "Configure manually later: tailscale serve --bg http://localhost:$PORT"
+    fi
+  }
+fi
 
+# -- config.json --
 if [ -f config.json ]; then
   ok "config.json already exists -- keeping existing config"
 else
@@ -223,6 +258,7 @@ else
   "port": $PORT,
   "tailscaleHostname": "$TS_HOSTNAME",
   "inactivityTimeout": 15,
+  "wslDistro": "$WSL_DISTRO",
   "autoStart": ["$MAIN_NAME"],
   "defaultDir": "$(echo "$MAIN_DIR" | sed 's/\\/\\\\/g')",
   "projects": $PROJECTS
@@ -231,20 +267,71 @@ JSONEOF
   ok "config.json created"
 fi
 
-# PM2 setup
-if ! command -v pm2 &>/dev/null; then
+# ════════════════════════════════════════════════════════
+# PHASE 3: INSTALL DEPENDENCIES
+# ════════════════════════════════════════════════════════
+echo ""
+say "Phase 3/4: Installing dependencies..."
+echo ""
+
+# -- npm deps --
+npm install --production 2>&1 | tail -3
+ok "Node dependencies installed"
+
+# -- PM2 --
+if ! $PM2_INSTALLED; then
   ask "Install PM2 for background running? (recommended) (y/n)"
   if [[ "$REPLY" =~ ^[Yy] ]]; then
     npm install -g pm2 2>&1 | tail -3
     ok "PM2 installed"
+  else
+    skip "PM2 skipped -- you'll need to run server.js manually"
   fi
-else
-  ok "PM2 $(pm2 -v 2>/dev/null | tail -1)"
 fi
 
-# ── Step 7: Start + TOTP setup ───────────────────────────
+# -- WSL + tmux (Windows only) --
+if $IS_WINDOWS; then
+  say "Setting up WSL + tmux..."
+
+  if ! wsl --list --quiet 2>/dev/null | grep -qi "Ubuntu-24.04"; then
+    say "Installing WSL Ubuntu-24.04 (this may take a few minutes)..."
+    wsl --install Ubuntu-24.04 --no-launch 2>&1 | tail -3
+    ok "Ubuntu-24.04 installed"
+  fi
+
+  say "Installing tmux + Claude Code in WSL..."
+  wsl -d "$WSL_DISTRO" -u root -- bash -c "
+    apt-get update -qq && apt-get install -y -qq tmux curl > /dev/null 2>&1
+    if ! command -v node &>/dev/null; then
+      curl -fsSL https://deb.nodesource.com/setup_22.x | bash - > /dev/null 2>&1
+      apt-get install -y -qq nodejs > /dev/null 2>&1
+    fi
+    if ! command -v pm2 &>/dev/null; then
+      npm install -g pm2 > /dev/null 2>&1
+    fi
+    if ! command -v claude &>/dev/null; then
+      npm install -g @anthropic-ai/claude-code > /dev/null 2>&1
+    fi
+    echo \"tmux \$(tmux -V | cut -d' ' -f2), node \$(node -v), pm2 \$(pm2 -v 2>/dev/null | tail -1)\"
+  " 2>/dev/null && ok "WSL tools installed" || warn "WSL setup had issues -- tmux persistence may not work"
+elif ! $IS_WINDOWS; then
+  if ! command -v tmux &>/dev/null; then
+    warn "tmux not installed. Session persistence requires tmux."
+    if $IS_MAC; then
+      echo -e "    ${DIM}brew install tmux${RESET}"
+    else
+      echo -e "    ${DIM}sudo apt install tmux${RESET}"
+    fi
+  fi
+fi
+
+# ════════════════════════════════════════════════════════
+# PHASE 4: START + TOTP SETUP
+# ════════════════════════════════════════════════════════
 echo ""
-say "Step 7/7: Starting server for TOTP setup..."
+say "Phase 4/4: Starting server for TOTP setup..."
+echo ""
+
 node server.js &
 SERVER_PID=$!
 sleep 4
@@ -252,32 +339,35 @@ sleep 4
 if ! kill -0 $SERVER_PID 2>/dev/null; then
   fail "Server failed to start. Check for port conflicts on $PORT"
 fi
-ok "Server running on port $PORT"
+ok "Server running on port $PORT (PID $SERVER_PID)"
 
+# ── Summary ──────────────────────────────────────────────
 echo ""
-echo -e "${BOLD}+========================================================+${RESET}"
-echo -e "${BOLD}|                 FINAL SETUP (2 minutes)                |${RESET}"
-echo -e "${BOLD}+========================================================+${RESET}"
-echo -e "${BOLD}|${RESET}                                                        ${BOLD}|${RESET}"
-echo -e "${BOLD}|${RESET}  ${BOLD}On your laptop:${RESET}                                       ${BOLD}|${RESET}"
-echo -e "${BOLD}|${RESET}    1. Open ${GREEN}http://localhost:$PORT/setup${RESET}                 ${BOLD}|${RESET}"
-echo -e "${BOLD}|${RESET}    2. Scan QR code with iPhone camera                  ${BOLD}|${RESET}"
-echo -e "${BOLD}|${RESET}    3. Enter 6-digit code to verify                     ${BOLD}|${RESET}"
-echo -e "${BOLD}|${RESET}                                                        ${BOLD}|${RESET}"
-echo -e "${BOLD}|${RESET}  ${BOLD}On your iPhone:${RESET}                                       ${BOLD}|${RESET}"
-echo -e "${BOLD}|${RESET}    4. Open ${GREEN}https://$TS_HOSTNAME${RESET}"
-echo -e "${BOLD}|${RESET}    5. Enter TOTP code to log in                        ${BOLD}|${RESET}"
-echo -e "${BOLD}|${RESET}    6. Register Face ID when prompted (optional)        ${BOLD}|${RESET}"
-echo -e "${BOLD}|${RESET}                                                        ${BOLD}|${RESET}"
-echo -e "${BOLD}+========================================================+${RESET}"
-echo ""
-echo -e "  ${DIM}After setup, run in background:${RESET}"
-echo -e "    ${BOLD}pm2 start server.js --name claude-mobile && pm2 save${RESET}"
-echo ""
-echo -e "  ${DIM}Update anytime:${RESET}"
-echo -e "    ${BOLD}bash update.sh${RESET}"
-echo ""
-echo -e "  ${DIM}Press Ctrl+C to stop the server when done with setup.${RESET}"
+echo -e "${BOLD}+============================================================+${RESET}"
+echo -e "${BOLD}|              Claude Mobile v${VERSION} -- Ready                  |${RESET}"
+echo -e "${BOLD}+============================================================+${RESET}"
+echo -e "${BOLD}|${RESET}                                                            ${BOLD}|${RESET}"
+echo -e "${BOLD}|${RESET}  ${BOLD}Step 1: Set up TOTP (on your laptop)${RESET}                      ${BOLD}|${RESET}"
+echo -e "${BOLD}|${RESET}    Open ${GREEN}http://localhost:$PORT/setup${RESET}                       ${BOLD}|${RESET}"
+echo -e "${BOLD}|${RESET}    Scan QR code with Apple Passwords (or any TOTP app)     ${BOLD}|${RESET}"
+echo -e "${BOLD}|${RESET}    Enter the 6-digit code to verify                        ${BOLD}|${RESET}"
+echo -e "${BOLD}|${RESET}                                                            ${BOLD}|${RESET}"
+echo -e "${BOLD}|${RESET}  ${BOLD}Step 2: Connect from your iPhone${RESET}                          ${BOLD}|${RESET}"
+if [ -n "$TS_HOSTNAME" ]; then
+echo -e "${BOLD}|${RESET}    Open ${GREEN}https://$TS_HOSTNAME${RESET}"
+else
+echo -e "${BOLD}|${RESET}    Open ${GREEN}https://<your-tailscale-hostname>${RESET}                  ${BOLD}|${RESET}"
+fi
+echo -e "${BOLD}|${RESET}    Enter TOTP code to log in                               ${BOLD}|${RESET}"
+echo -e "${BOLD}|${RESET}    Register Face ID when prompted (optional)               ${BOLD}|${RESET}"
+echo -e "${BOLD}|${RESET}                                                            ${BOLD}|${RESET}"
+echo -e "${BOLD}|${RESET}  ${BOLD}Step 3: Run in background${RESET}                                 ${BOLD}|${RESET}"
+echo -e "${BOLD}|${RESET}    Press Ctrl+C to stop this foreground server              ${BOLD}|${RESET}"
+echo -e "${BOLD}|${RESET}    Then: ${GREEN}pm2 start server.js --name claude-mobile${RESET}          ${BOLD}|${RESET}"
+echo -e "${BOLD}|${RESET}          ${GREEN}pm2 save${RESET}                                          ${BOLD}|${RESET}"
+echo -e "${BOLD}|${RESET}                                                            ${BOLD}|${RESET}"
+echo -e "${BOLD}|${RESET}  ${DIM}Update anytime: bash update.sh${RESET}                            ${BOLD}|${RESET}"
+echo -e "${BOLD}+============================================================+${RESET}"
 echo ""
 
 wait $SERVER_PID 2>/dev/null

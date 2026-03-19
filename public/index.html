@@ -255,8 +255,13 @@
     .term-wrap {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
       display: none; overflow: hidden;
+      will-change: transform;
     }
     .term-wrap.active { display: block; }
+    .term-wrap.swipe-visible { display: block; }
+    .term-wrap.swipe-animate {
+      transition: transform 0.28s cubic-bezier(0.25, 1, 0.5, 1);
+    }
     .term-wrap .xterm { height: 100% !important; }
     .term-wrap .xterm-viewport {
       overflow-y: scroll !important;
@@ -1453,13 +1458,15 @@ function newSession() {
   queueSend({ type: 'create', name: 'SESSION ' + num, dir: defaultDir, cols, rows });
 }
 
-// ── Safari-style Gesture Navigation ──
+// ── Safari-style Gesture Navigation (with slide animation) ──
 const SWIPE_THRESHOLD = 80;
 const NEW_SESSION_THRESHOLD = 150;
+const SWIPE_ANIM_MS = 280;
 let swipeStartX = 0, swipeStartY = 0, swiping = false, swipeDx = 0;
 const hintL = $('swipe-hint-left');
 const hintR = $('swipe-hint-right');
 const newHint = $('new-session-hint');
+let swipePeekWrap = null; // the term-wrap being peeked during swipe
 
 function getActiveIndex() {
   return sessions.findIndex(s => s.id === activeSession);
@@ -1484,6 +1491,48 @@ function navigateTab(direction) {
   return false;
 }
 
+// Animated slide transition between sessions
+function animatedSwitchTo(targetId, direction) {
+  // direction: -1 = sliding right (prev session), +1 = sliding left (next session)
+  const currentWrap = activeSession !== null ? document.getElementById(`tw-${activeSession}`) : null;
+  const vw = window.innerWidth;
+
+  // Switch session (creates wrap if needed)
+  switchTo(targetId);
+  const targetWrap = document.getElementById(`tw-${targetId}`);
+  if (!targetWrap) return;
+
+  // Position target off-screen, make both visible
+  targetWrap.style.transform = `translateX(${direction * vw}px)`;
+  targetWrap.classList.add('swipe-visible');
+  if (currentWrap && currentWrap !== targetWrap) {
+    currentWrap.classList.add('swipe-visible');
+    currentWrap.style.transform = 'translateX(0)';
+  }
+
+  // Force layout before adding transition class
+  targetWrap.offsetWidth;
+
+  // Animate both
+  targetWrap.classList.add('swipe-animate');
+  targetWrap.style.transform = 'translateX(0)';
+  if (currentWrap && currentWrap !== targetWrap) {
+    currentWrap.classList.add('swipe-animate');
+    currentWrap.style.transform = `translateX(${-direction * vw}px)`;
+  }
+
+  // Cleanup after animation
+  setTimeout(() => {
+    targetWrap.classList.remove('swipe-animate', 'swipe-visible');
+    targetWrap.style.transform = '';
+    if (currentWrap && currentWrap !== targetWrap) {
+      currentWrap.classList.remove('swipe-animate', 'swipe-visible', 'active');
+      currentWrap.style.transform = '';
+      currentWrap.style.display = '';
+    }
+  }, SWIPE_ANIM_MS + 20);
+}
+
 // Gesture navigation -- attached to document, filtered by touch origin
 // Using document-level avoids iOS event bubbling issues with nested elements
 let swipeActive = false;
@@ -1500,6 +1549,7 @@ document.addEventListener('touchstart', e => {
   swipeStartY = t.clientY;
   swiping = false;
   swipeDx = 0;
+  swipePeekWrap = null;
 }, { passive: true });
 
 document.addEventListener('touchmove', e => {
@@ -1514,9 +1564,46 @@ document.addEventListener('touchmove', e => {
   if (!swiping) return;
   swipeDx = dx;
   const idx = getActiveIndex();
+  const vw = window.innerWidth;
+  const activeWrap = activeSession !== null ? document.getElementById(`tw-${activeSession}`) : null;
+
   // Show edge hints
   hintL.classList.toggle('flash', dx > 20 && idx > 0);
   hintR.classList.toggle('flash', dx < -20 && idx < sessions.length - 1);
+
+  // Translate active terminal following finger (damped at edges)
+  if (activeWrap) {
+    const canGoLeft = idx > 0;
+    const canGoRight = idx < sessions.length - 1;
+    let clampedDx = dx;
+    // Rubber-band at edges (no session in that direction)
+    if ((!canGoLeft && dx > 0) || (!canGoRight && dx < 0 && idx === sessions.length - 1 && Math.abs(dx) < NEW_SESSION_THRESHOLD * 0.5)) {
+      clampedDx = dx * 0.3;
+    }
+    activeWrap.style.transform = `translateX(${clampedDx}px)`;
+
+    // Show peek of target session
+    const peekDir = dx > 0 ? -1 : 1; // -1=prev, 1=next
+    const peekIdx = idx + peekDir;
+    const peekSession = (peekIdx >= 0 && peekIdx < sessions.length) ? sessions[peekIdx] : null;
+
+    // Clean up old peek if direction changed
+    if (swipePeekWrap && peekSession && swipePeekWrap.id !== `tw-${peekSession.id}`) {
+      swipePeekWrap.classList.remove('swipe-visible');
+      swipePeekWrap.style.transform = '';
+      swipePeekWrap = null;
+    }
+
+    if (peekSession) {
+      let peekEl = document.getElementById(`tw-${peekSession.id}`);
+      if (peekEl) {
+        peekEl.classList.add('swipe-visible');
+        peekEl.style.transform = `translateX(${peekDir * vw + clampedDx}px)`;
+        swipePeekWrap = peekEl;
+      }
+    }
+  }
+
   // New session pull indicator (swipe left past last tab)
   if (dx < -20 && idx === sessions.length - 1) {
     const pull = Math.min(Math.abs(dx), 200);
@@ -1535,19 +1622,92 @@ function endSwipe() {
   newHint.classList.remove('ready');
   if (!swipeActive) return;
   swipeActive = false;
-  if (!swiping) return;
+
+  const activeWrap = activeSession !== null ? document.getElementById(`tw-${activeSession}`) : null;
   const idx = getActiveIndex();
-  if (swipeDx > SWIPE_THRESHOLD) {
-    navigateTab(-1);
-  } else if (swipeDx < -SWIPE_THRESHOLD) {
-    if (idx === sessions.length - 1 && Math.abs(swipeDx) >= NEW_SESSION_THRESHOLD) {
-      newSession();
-    } else {
-      navigateTab(1);
-    }
+  const vw = window.innerWidth;
+  const committed = Math.abs(swipeDx) > SWIPE_THRESHOLD;
+  const isNewSession = idx === sessions.length - 1 && swipeDx < -NEW_SESSION_THRESHOLD;
+
+  if (!swiping) {
+    // No swipe detected -- clean up any transforms
+    if (activeWrap) activeWrap.style.transform = '';
+    if (swipePeekWrap) { swipePeekWrap.classList.remove('swipe-visible'); swipePeekWrap.style.transform = ''; }
+    swipePeekWrap = null;
+    return;
   }
+
+  if (committed && !isNewSession) {
+    // Animate to completion
+    const direction = swipeDx > 0 ? -1 : 1; // which way are we navigating
+    const targetIdx = idx + direction;
+    if (targetIdx >= 0 && targetIdx < sessions.length) {
+      const targetId = sessions[targetIdx].id;
+
+      // Animate current out
+      if (activeWrap) {
+        activeWrap.classList.add('swipe-animate');
+        activeWrap.style.transform = `translateX(${-direction * vw}px)`;
+      }
+      // Animate peek in
+      if (swipePeekWrap) {
+        swipePeekWrap.classList.add('swipe-animate');
+        swipePeekWrap.style.transform = 'translateX(0)';
+      }
+
+      setTimeout(() => {
+        // Clean up animation classes + transforms
+        if (activeWrap) {
+          activeWrap.classList.remove('swipe-animate', 'active');
+          activeWrap.style.transform = '';
+          activeWrap.style.display = '';
+        }
+        if (swipePeekWrap) {
+          swipePeekWrap.classList.remove('swipe-animate', 'swipe-visible');
+          swipePeekWrap.style.transform = '';
+        }
+        swipePeekWrap = null;
+        // Actually switch session state (no visual change -- already in position)
+        switchTo(targetId);
+      }, SWIPE_ANIM_MS + 20);
+    } else {
+      snapBack(activeWrap);
+    }
+  } else if (isNewSession) {
+    // Snap back then create new session (it will animate in via switchTo)
+    snapBack(activeWrap);
+    newSession();
+  } else {
+    // Snap back to original position
+    snapBack(activeWrap);
+  }
+
   swiping = false;
   swipeDx = 0;
+}
+
+function snapBack(activeWrap) {
+  if (activeWrap) {
+    activeWrap.classList.add('swipe-animate');
+    activeWrap.style.transform = 'translateX(0)';
+    setTimeout(() => {
+      activeWrap.classList.remove('swipe-animate');
+      activeWrap.style.transform = '';
+    }, SWIPE_ANIM_MS + 20);
+  }
+  if (swipePeekWrap) {
+    const vw = window.innerWidth;
+    const peekDir = swipeDx > 0 ? -1 : 1;
+    swipePeekWrap.classList.add('swipe-animate');
+    swipePeekWrap.style.transform = `translateX(${peekDir * vw}px)`;
+    setTimeout(() => {
+      swipePeekWrap.classList.remove('swipe-animate', 'swipe-visible');
+      swipePeekWrap.style.transform = '';
+      swipePeekWrap = null;
+    }, SWIPE_ANIM_MS + 20);
+  } else {
+    swipePeekWrap = null;
+  }
 }
 
 document.addEventListener('touchend', endSwipe, { passive: true });
