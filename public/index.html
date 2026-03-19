@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Claude">
@@ -97,7 +97,7 @@
       -webkit-tap-highlight-color: transparent;
       overscroll-behavior: none;
     }
-    #app { display: none; flex-direction: column; height: 100dvh; position: relative; overflow: hidden; }
+    #app { display: none; flex-direction: column; height: 100dvh; position: relative; overflow: hidden; box-sizing: border-box; }
 
     /* ── Lock Screen Overlay ── */
     #lock-screen {
@@ -1846,43 +1846,34 @@ function updateDiag(cols, rows) {
 
 // On devices with visualViewport (mobile), skip window resize -- handled by vv listener.
 // On desktop (no visualViewport), use window resize directly.
-if (!window.visualViewport) {
-  window.addEventListener('resize', doResize);
-}
+// With interactive-widget=resizes-content, the layout viewport shrinks for
+// the keyboard automatically. 100dvh just works. We only need JS for terminal refit.
+let lastKnownH = window.innerHeight;
+let resizeTimer = null;
+
+// Unified resize handler -- works on both desktop and mobile
+window.addEventListener('resize', () => {
+  const h = window.innerHeight;
+  const delta = Math.abs(h - lastKnownH);
+
+  // Skip small changes (< 50px) -- prediction bar, autocomplete
+  if (delta < 50) return;
+
+  lastKnownH = h;
+
+  // Debounce terminal refit
+  if (resizeTimer) clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    requestAnimationFrame(() => {
+      doResize();
+      if (!userScrolled && activeSession !== null && terms[activeSession]) {
+        terms[activeSession].scrollToBottom();
+      }
+    });
+  }, 300);
+});
+
 if (window.visualViewport) {
-  // Pin app height to visual viewport immediately on load
-  appEl.style.height = window.visualViewport.height + 'px';
-  let stableVVH = window.visualViewport.height; // last height we actually reflowed at
-  let resizeTimer = null;
-  let resizeRafId = null;
-  window.visualViewport.addEventListener('resize', () => {
-    const h = window.visualViewport.height;
-
-    // Always update app height immediately (keeps layout correct)
-    appEl.style.height = h + 'px';
-
-    // Pin scroll
-    window.scrollTo(0, 0);
-
-    const delta = h - stableVVH;
-    const absDelta = Math.abs(delta);
-
-    // Small changes (< 50px) -- prediction bar. Update height but skip terminal refit.
-    if (absDelta < 50) return;
-
-    // Large change (keyboard open/close) -- debounce terminal refit only
-    stableVVH = h;
-    if (resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(() => {
-      if (resizeRafId) cancelAnimationFrame(resizeRafId);
-      resizeRafId = requestAnimationFrame(() => {
-        doResize();
-        if (delta > 50 && !userScrolled && activeSession !== null && terms[activeSession]) {
-          terms[activeSession].scrollToBottom();
-        }
-      });
-    }, 300);
-  });
   window.visualViewport.addEventListener('scroll', () => {
     window.scrollTo(0, 0);
   });
