@@ -97,7 +97,7 @@
       -webkit-tap-highlight-color: transparent;
       overscroll-behavior: none;
     }
-    #app { display: none; flex-direction: column; height: 100dvh; position: relative; overflow: hidden; box-sizing: border-box; }
+    #app { display: none; flex-direction: column; height: 100dvh; position: relative; overflow: hidden; }
 
     /* ── Lock Screen Overlay ── */
     #lock-screen {
@@ -588,7 +588,8 @@
              style="position:absolute;width:0;height:0;opacity:0;overflow:hidden">
       <label id="img-btn" for="img-input" role="button" aria-label="Attach image">Img</label>
       <textarea id="msg" rows="1" placeholder="Type a message..."
-                autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
+                autocomplete="off" autocorrect="off" autocapitalize="none"
+                spellcheck="false" inputmode="text" data-gramm="false"
                 aria-label="Message input"></textarea>
       <button id="send" aria-label="Send message">Enter</button>
     </div>
@@ -1850,43 +1851,21 @@ function updateDiag(cols, rows) {
   el.textContent = `PTY:${cols}x${rows} | VP:${vvW}x${vvH} | Win:${wW}x${wH} | Term:${taH}px`;
 }
 
-// Keyboard handling: update app height to match visible area, but NEVER
-// resize the terminal for keyboard changes. Terminal stays at full-screen
-// dimensions and clips behind the keyboard. Zero jitter.
-// Only refit on orientation change or significant width change.
+// Let iOS manage the keyboard natively via interactive-widget=resizes-content.
+// No JS height management. Only refit terminal on orientation (width) change.
 let lastWidth = window.innerWidth;
 
-if (window.visualViewport) {
-  appEl.style.height = window.visualViewport.height + 'px';
-
-  window.visualViewport.addEventListener('resize', () => {
-    appEl.style.height = window.visualViewport.height + 'px';
-
-    // Only refit terminal on width change (orientation) -- never for height (keyboard)
-    const w = window.visualViewport.width;
-    if (w !== lastWidth) {
-      lastWidth = w;
-      requestAnimationFrame(() => doResize());
-    }
-
-    // Scroll terminal to bottom so cursor stays visible above keyboard
-    if (activeSession !== null && terms[activeSession]) {
-      terms[activeSession].scrollToBottom();
-    }
-  });
-
-  window.visualViewport.addEventListener('scroll', () => {
-    window.scrollTo(0, 0);
-  });
-} else {
-  window.addEventListener('resize', () => {
-    const w = window.innerWidth;
-    if (w !== lastWidth) {
-      lastWidth = w;
-      requestAnimationFrame(() => doResize());
-    }
-  });
-}
+window.addEventListener('resize', () => {
+  const w = window.innerWidth;
+  if (w !== lastWidth) {
+    lastWidth = w;
+    requestAnimationFrame(() => doResize());
+  }
+  // Scroll to bottom so cursor stays visible
+  if (activeSession !== null && terms[activeSession]) {
+    terms[activeSession].scrollToBottom();
+  }
+});
 
 // ── iOS Prevention ──
 // Prevent bounce scroll on non-scrollable areas
