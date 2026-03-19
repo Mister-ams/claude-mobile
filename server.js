@@ -26,6 +26,14 @@ const TMUX_PREFIX = 'cm'; // session names: cm-0, cm-1, ...
 let wslAvailable = false;
 let lastError = null; // { message, timestamp }
 
+let restartCount = 0;
+const RESTART_COUNT_FILE = path.join(__dirname, '.restart-count');
+try {
+  restartCount = parseInt(fs.readFileSync(RESTART_COUNT_FILE, 'utf8').trim()) || 0;
+} catch {}
+restartCount++;
+try { fs.writeFileSync(RESTART_COUNT_FILE, String(restartCount)); } catch {}
+
 function probeWSL() {
   try {
     execSync(`wsl -d ${WSL_DISTRO} -- echo 1`, { encoding: 'utf8', timeout: 5000 });
@@ -1638,5 +1646,5 @@ server.listen(PORT, 'localhost', () => {
   console.log('  ────────────────────────────────');
   if (wslAvailable) recoverTmuxSessions();
   if (sessions.size === 0) autoStartSessions();
-  audit('SYSTEM', `Server started on port ${PORT}`);
+  audit('SYSTEM', `Server started | restart_count: ${restartCount} | wsl: ${wslAvailable}`);
 });
