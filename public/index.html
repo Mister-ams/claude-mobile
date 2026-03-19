@@ -220,7 +220,6 @@
     #term-area {
       flex: 1; min-height: 0; overflow: hidden; position: relative;
       background: var(--bg);
-      border-top: 1px solid rgba(255,255,255,0.03);
     }
     #scroll-zones {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
@@ -247,8 +246,8 @@
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
       display: none; overflow: hidden;
     }
-    .term-wrap.active { display: flex; flex-direction: column; justify-content: flex-end; }
-    .term-wrap .xterm { flex-shrink: 0; }
+    .term-wrap.active { display: block; }
+    .term-wrap .xterm { height: 100% !important; }
     .term-wrap .xterm-viewport {
       overflow-y: scroll !important;
       -webkit-overflow-scrolling: touch !important;
@@ -1891,19 +1890,21 @@ if (window.visualViewport) {
     appEl.style.height = h + 'px';
     stableVVH = h;
 
-    // Debounce terminal refit
+    // Debounce terminal refit -- use rAF to ensure layout is settled before fit()
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
-      doResize();
-      // Keyboard dismissed (large positive delta) -- scroll to bottom
-      if (delta > 50 && !userScrolled) {
-        requestAnimationFrame(() => {
-          if (activeSession !== null && terms[activeSession]) {
-            terms[activeSession].scrollToBottom();
-          }
-        });
-      }
-    }, 200);
+      requestAnimationFrame(() => {
+        doResize();
+        // Keyboard dismissed (large positive delta) -- scroll to bottom
+        if (delta > 50 && !userScrolled) {
+          requestAnimationFrame(() => {
+            if (activeSession !== null && terms[activeSession]) {
+              terms[activeSession].scrollToBottom();
+            }
+          });
+        }
+      });
+    }, 150);
   });
   window.visualViewport.addEventListener('scroll', () => {
     window.scrollTo(0, 0);
