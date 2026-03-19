@@ -2019,10 +2019,6 @@ document.addEventListener('gesturestart', e => e.preventDefault(), { passive: fa
 document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
 document.addEventListener('gestureend', e => e.preventDefault(), { passive: false });
 
-// Prevent shake-to-undo
-window.addEventListener('devicemotion', e => {}, { passive: true });
-// Override the undo manager
-if (document.undoManager) document.undoManager.length = 0;
 
 // ── Send Button Fix (touch-based, not onclick) ──
 const sendBtn = $('send');
