@@ -1866,7 +1866,11 @@ function updateDiag(cols, rows) {
   el.textContent = `PTY:${cols}x${rows} | VP:${vvW}x${vvH} | Win:${wW}x${wH} | Term:${taH}px`;
 }
 
-window.addEventListener('resize', doResize);
+// On devices with visualViewport (mobile), skip window resize -- handled by vv listener.
+// On desktop (no visualViewport), use window resize directly.
+if (!window.visualViewport) {
+  window.addEventListener('resize', doResize);
+}
 if (window.visualViewport) {
   // Pin app height to visual viewport immediately on load
   appEl.style.height = window.visualViewport.height + 'px';
