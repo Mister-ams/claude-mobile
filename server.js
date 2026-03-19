@@ -1286,6 +1286,8 @@ wss.on('connection', (ws, req) => {
         if (targetSession.attention) {
           secureSend(ws, { type: 'attention', session: targetSession.id, reason: targetSession.attention });
         }
+        // Send available commands for this session's project
+        sendCommandsToClient(ws, targetSession.dir);
         break;
       }
 
@@ -1381,6 +1383,121 @@ setInterval(() => {
     }
   }
 }, 60 * 1000);
+
+// ─── Skill Discovery ─────────────────────────────────────────────
+const BUILTIN_COMMANDS = [
+  { cmd: '/help', desc: 'Show help and commands' },
+  { cmd: '/clear', desc: 'Clear conversation context' },
+  { cmd: '/compact', desc: 'Compact context to save space' },
+  { cmd: '/config', desc: 'View/modify configuration' },
+  { cmd: '/cost', desc: 'Show token usage and cost' },
+  { cmd: '/doctor', desc: 'Check Claude Code health' },
+  { cmd: '/init', desc: 'Initialize CLAUDE.md in project' },
+  { cmd: '/login', desc: 'Switch Anthropic account' },
+  { cmd: '/logout', desc: 'Sign out of Anthropic' },
+  { cmd: '/memory', desc: 'Edit CLAUDE.md project memory' },
+  { cmd: '/model', desc: 'Switch AI model' },
+  { cmd: '/permissions', desc: 'View/manage tool permissions' },
+  { cmd: '/pr-comments', desc: 'View PR review comments' },
+  { cmd: '/review', desc: 'Review a pull request' },
+  { cmd: '/status', desc: 'Show account and session status' },
+  { cmd: '/terminal-setup', desc: 'Install shell integration' },
+  { cmd: '/vim', desc: 'Toggle vim keybindings' },
+];
+
+function scanSkillDir(dir) {
+  const skills = [];
+  if (!fs.existsSync(dir)) return skills;
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return skills; }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const skillFile = path.join(dir, entry.name, 'SKILL.md');
+    if (!fs.existsSync(skillFile)) continue;
+    try {
+      const content = fs.readFileSync(skillFile, 'utf8');
+      // Check user-invocable
+      if (!/user-invocable:\s*true/i.test(content)) continue;
+      // Extract description from frontmatter
+      const fmMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
+      if (!fmMatch) continue;
+      const fm = fmMatch[1];
+      const descMatch = fm.match(/description:\s*>-?\s*\n([\s\S]*?)(?=\n\w|\n---)/);
+      let desc = '';
+      if (descMatch) {
+        // Multi-line YAML description: take first meaningful line
+        desc = descMatch[1].split('\n').map(l => l.trim()).filter(Boolean)[0] || '';
+      } else {
+        // Single-line description
+        const singleMatch = fm.match(/description:\s*['"]?(.+?)['"]?\s*$/m);
+        if (singleMatch) desc = singleMatch[1];
+      }
+      // Truncate long descriptions
+      if (desc.length > 80) desc = desc.slice(0, 77) + '...';
+      skills.push({ cmd: '/' + entry.name, desc });
+    } catch {}
+  }
+  return skills;
+}
+
+function scanSkillsForProject(projectDir) {
+  const projectSkills = scanSkillDir(path.join(projectDir, '.claude', 'skills'));
+  const globalSkills = scanSkillDir(path.join(os.homedir(), '.claude', 'skills'));
+  // Project skills override global (by command name)
+  const seen = new Set(projectSkills.map(s => s.cmd));
+  const merged = [...projectSkills, ...globalSkills.filter(s => !seen.has(s.cmd))];
+  merged.sort((a, b) => a.cmd.localeCompare(b.cmd));
+  return [...BUILTIN_COMMANDS, ...merged];
+}
+
+// Cache per project dir, invalidated by watchers
+const commandsCache = new Map(); // projectDir -> { commands, watchers }
+
+function getCommandsForProject(projectDir) {
+  if (commandsCache.has(projectDir)) return commandsCache.get(projectDir).commands;
+  const commands = scanSkillsForProject(projectDir);
+  commandsCache.set(projectDir, { commands, watchers: [] });
+  return commands;
+}
+
+function watchSkillDirs(projectDir) {
+  const entry = commandsCache.get(projectDir);
+  if (!entry || entry.watchers.length > 0) return; // already watching
+  const dirs = [
+    path.join(projectDir, '.claude', 'skills'),
+    path.join(os.homedir(), '.claude', 'skills'),
+  ];
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) continue;
+    try {
+      const watcher = fs.watch(dir, { recursive: true }, () => {
+        // Debounce: skills change in bursts (plugin install)
+        if (entry._debounce) clearTimeout(entry._debounce);
+        entry._debounce = setTimeout(() => {
+          const newCommands = scanSkillsForProject(projectDir);
+          entry.commands = newCommands;
+          audit('SKILLS', `Rescanned ${newCommands.length} commands for ${path.basename(projectDir)}`);
+          // Push to all authenticated clients viewing a session in this project
+          for (const client of allClients) {
+            if (!client.authenticated || client.readyState !== 1) continue;
+            if (client.currentSession === null) continue;
+            const sess = sessions.get(client.currentSession);
+            if (sess && sess.dir === projectDir) {
+              secureSend(client, { type: 'commands', commands: newCommands });
+            }
+          }
+        }, 1000);
+      });
+      entry.watchers.push(watcher);
+    } catch {}
+  }
+}
+
+function sendCommandsToClient(ws, projectDir) {
+  const commands = getCommandsForProject(projectDir);
+  secureSend(ws, { type: 'commands', commands });
+  watchSkillDirs(projectDir);
+}
 
 // ─── Startup ─────────────────────────────────────────────────────
 function autoStartSessions() {

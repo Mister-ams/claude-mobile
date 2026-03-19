@@ -1239,6 +1239,9 @@ function handle(m) {
       if (s) { s.attention = m.reason; renderTabs(); }
       notifyAttention(m.session, m.reason, s?.name);
       break;
+    case 'commands':
+      if (m.commands && Array.isArray(m.commands)) commands = m.commands;
+      break;
     case 'error':
       // Ignore lock/auth errors (handled by lock screen) -- don't block with alert()
       if (/locked|re-authenticate|not authenticated/i.test(m.message)) break;
@@ -1746,51 +1749,24 @@ function qcmd(text) {
   setTimeout(() => qsend('\r'), 50);
 }
 
-const COMMANDS = [
-  // Claude Code native commands
+// Slash commands -- populated dynamically from server on session connect.
+// Server scans .claude/skills/ dirs and merges with built-in commands.
+// Falls back to built-ins only if server hasn't sent commands yet.
+const BUILTIN_COMMANDS = [
   { cmd: '/help', desc: 'Show help and commands' },
   { cmd: '/clear', desc: 'Clear conversation context' },
   { cmd: '/compact', desc: 'Compact context to save space' },
   { cmd: '/config', desc: 'View/modify configuration' },
   { cmd: '/cost', desc: 'Show token usage and cost' },
-  { cmd: '/doctor', desc: 'Check Claude Code health' },
-  { cmd: '/init', desc: 'Initialize CLAUDE.md in project' },
-  { cmd: '/login', desc: 'Switch Anthropic account' },
-  { cmd: '/logout', desc: 'Sign out of Anthropic' },
-  { cmd: '/memory', desc: 'Edit CLAUDE.md project memory' },
   { cmd: '/model', desc: 'Switch AI model' },
-  { cmd: '/permissions', desc: 'View/manage tool permissions' },
-  { cmd: '/pr-comments', desc: 'View PR review comments' },
-  { cmd: '/review', desc: 'Review a pull request' },
   { cmd: '/status', desc: 'Show account and session status' },
-  { cmd: '/terminal-setup', desc: 'Install shell integration' },
-  { cmd: '/vim', desc: 'Toggle vim keybindings' },
-  // DevTeam skills
-  { cmd: '/dt.restart', desc: 'Resume session' },
-  { cmd: '/dt.orchestrate', desc: 'Auto-chain pipeline' },
-  { cmd: '/dt.discovery', desc: 'Scope requirements' },
-  { cmd: '/dt.engineering', desc: 'Technical design' },
-  { cmd: '/dt.planning', desc: 'Task breakdown' },
-  { cmd: '/dt.execute-api', desc: 'Backend executor' },
-  { cmd: '/dt.execute-ui', desc: 'Frontend executor' },
-  { cmd: '/dt.infrastructure-ops', desc: 'Infra executor' },
-  { cmd: '/dt.red-team', desc: 'Security review' },
-  { cmd: '/dt.architect', desc: 'Architecture audit' },
-  { cmd: '/dt.simplify', desc: 'Code cleanup' },
-  { cmd: '/dt.ui', desc: 'Design language' },
-  { cmd: '/dt.document', desc: 'Session handover' },
-  { cmd: '/dt.setup', desc: 'Configure devteam' },
-  // Custom skills
-  { cmd: '/deploy', desc: 'Deploy to Railway' },
-  { cmd: '/document', desc: 'Wrap up session' },
-  { cmd: '/restart-project', desc: 'Deep cold-start' },
-  { cmd: '/quick-restart', desc: 'Fast resume' },
 ];
+let commands = [...BUILTIN_COMMANDS];
 
 const acEl = $('autocomplete');
 
 function showAutocomplete(filter) {
-  const matches = COMMANDS.filter(c => c.cmd.startsWith(filter));
+  const matches = commands.filter(c => c.cmd.startsWith(filter));
   if (!matches.length) { acEl.classList.remove('show'); return; }
   acEl.innerHTML = '';
   matches.forEach(c => {
