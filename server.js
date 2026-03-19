@@ -1272,10 +1272,9 @@ wss.on('connection', (ws, req) => {
         }
         ws.currentSession = msg.session;
         targetSession.clients.add(ws);
-        if (targetSession.scrollback) {
-          const safe = redactSecrets(targetSession.scrollback);
-          secureSend(ws, { type: 'scrollback', session: targetSession.id, data: safe });
-        }
+        // Don't send scrollback -- the live tmux attachment already sends
+        // the current screen state. Scrollback history replays old TUI frames
+        // (cursor positioning, status bar redraws) that corrupt the display.
         if (targetSession.attention) {
           secureSend(ws, { type: 'attention', session: targetSession.id, reason: targetSession.attention });
         }
