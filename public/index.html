@@ -226,9 +226,17 @@
       z-index: 10; display: none; pointer-events: none;
     }
     #term-area:has(.term-wrap.active) #scroll-zones { display: block; pointer-events: auto; }
-    .scroll-zone { position: absolute; left: 0; right: 0; }
-    .scroll-zone-up { top: 0; height: 50%; }
-    .scroll-zone-down { bottom: 0; height: 50%; }
+    .scroll-zone { position: absolute; }
+    /* Default: top/bottom split */
+    .scroll-zone-up { top: 0; left: 0; right: 0; height: 50%; }
+    .scroll-zone-down { bottom: 0; left: 0; right: 0; height: 50%; }
+    /* Keyboard open: left/right split (toggled by JS) */
+    #scroll-zones.horizontal .scroll-zone-up { top: 0; bottom: 0; left: 0; width: 50%; height: auto; right: auto; }
+    #scroll-zones.horizontal .scroll-zone-down { top: 0; bottom: 0; right: 0; width: 50%; height: auto; left: auto; }
+    #scroll-zones.horizontal .scroll-divider {
+      top: 0; bottom: 0; left: 50%; right: auto;
+      width: 1px; height: auto;
+    }
     /* T15: scroll zone divider affordance */
     .scroll-divider {
       position: absolute; left: 16px; right: 16px; top: 50%;
@@ -242,6 +250,8 @@
     }
     .scroll-zone-up .scroll-flash { top: 0; }
     .scroll-zone-down .scroll-flash { bottom: 0; }
+    #scroll-zones.horizontal .scroll-zone-up .scroll-flash { top: 0; bottom: 0; left: 0; width: 6px; height: auto; right: auto; }
+    #scroll-zones.horizontal .scroll-zone-down .scroll-flash { top: 0; bottom: 0; right: 0; width: 6px; height: auto; left: auto; }
     .term-wrap {
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
       display: none; overflow: hidden;
@@ -1832,6 +1842,18 @@ window.addEventListener('resize', () => {
   // Don't scroll on resize -- it forces xterm.js re-render during keyboard animation
   // and corrupts the terminal. Touch scroll works fine without this.
 });
+
+// ── Scroll zone layout: switch to left/right when keyboard shrinks terminal ──
+function updateScrollZoneLayout() {
+  const ta = $('term-area');
+  const sz = $('scroll-zones');
+  if (!ta || !sz) return;
+  sz.classList.toggle('horizontal', ta.clientHeight < 250);
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', updateScrollZoneLayout);
+}
+window.addEventListener('resize', updateScrollZoneLayout);
 
 // ── iOS Prevention ──
 // Prevent bounce scroll on non-scrollable areas
