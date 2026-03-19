@@ -1668,8 +1668,13 @@ function updateSendBtn() {
   $('send').textContent = msgInput.value.trim() ? 'Send' : 'Enter';
 }
 
+let lastMsgHeight = 0;
 function autoGrow() {
-  msgInput.style.height = 'auto';
+  // Only measure if content changed length (avoid unnecessary reflows)
+  const len = msgInput.value.length;
+  if (len === lastMsgHeight) return;
+  lastMsgHeight = len;
+  msgInput.style.height = '0';
   msgInput.style.height = Math.min(msgInput.scrollHeight, 64) + 'px';
 }
 
@@ -1915,9 +1920,16 @@ if (window.visualViewport) {
       });
     }, 250);
   });
+  // Throttle viewport scroll pinning -- fires frequently during typing
+  let vvScrollPending = false;
   window.visualViewport.addEventListener('scroll', () => {
-    window.scrollTo(0, 0);
-    document.documentElement.scrollTop = 0;
+    if (vvScrollPending) return;
+    vvScrollPending = true;
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      vvScrollPending = false;
+    });
   });
 }
 
