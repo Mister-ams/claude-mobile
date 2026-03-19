@@ -614,6 +614,8 @@
 <script>
 let ws = null, sessions = [], activeSession = null;
 let terms = {}, fits = {}, projects = [];
+let sessionHasMore = {}; // session id -> { has: bool, loaded: int }
+let historyLoading = false;
 let reconnectDelay = 1000;
 let sessionToken = null;
 let refreshTimer = null;
@@ -1231,7 +1233,25 @@ function handle(m) {
       }
       break;
     case 'scrollback':
-      if (terms[m.session]) terms[m.session].write(m.data);
+      if (terms[m.session]) {
+        terms[m.session].write(m.data);
+        // Track if server has more history available
+        if (m.hasMore) sessionHasMore[m.session] = { has: true, loaded: m.data.length };
+      }
+      break;
+    case 'history':
+      historyLoading = false;
+      if (terms[m.session] && m.data) {
+        const term = terms[m.session];
+        const viewBefore = term.buffer.active.viewportY;
+        const linesBefore = term.buffer.active.length;
+        term.write(m.data);
+        // Scroll back to where user was (approximately)
+        const linesAdded = term.buffer.active.length - linesBefore;
+        term.scrollToLine(viewBefore + linesAdded);
+        sessionHasMore[m.session] = { has: m.hasMore, loaded: m.offset || 0 };
+        showStatus(m.hasMore ? 'History loaded -- scroll up for more' : 'All history loaded', 'var(--dim)');
+      }
       break;
     case 'attention':
       const s = sessions.find(x => x.id === m.session);
@@ -1277,7 +1297,7 @@ function makeTerm() {
     fontFamily: "'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace",
     lineHeight: 1.286,
     theme: getTermTheme(),
-    scrollback: 100000,
+    scrollback: 2000,
     convertEol: true,
     disableStdin: true,
     cursorBlink: false,
@@ -1303,6 +1323,20 @@ function switchTo(id) {
     term.open(wrap);
     terms[id] = term;
     fits[id] = fitAddon;
+
+    // Load more history when scrolled to top
+    term.onScroll(() => {
+      if (historyLoading) return;
+      const buf = term.buffer.active;
+      // Near top: viewportY is 0 or close to it
+      if (buf.viewportY <= 5 && sessionHasMore[id]?.has) {
+        historyLoading = true;
+        showStatus('Loading history...', 'var(--dim)');
+        queueSend({ type: 'history', session: id, before: sessionHasMore[id].loaded || 0 });
+        // Reset after timeout in case server doesn't respond
+        setTimeout(() => { historyLoading = false; }, 5000);
+      }
+    });
 
     // Single fit after layout settles
     setTimeout(() => {

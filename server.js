@@ -1259,12 +1259,40 @@ wss.on('connection', (ws, req) => {
         ws.currentSession = msg.session;
         targetSession.clients.add(ws);
         if (targetSession.scrollback) {
-          const safe = redactSecrets(targetSession.scrollback);
-          secureSend(ws, { type: 'scrollback', session: targetSession.id, data: safe });
+          // Send only the tail (~50KB) for initial render; client requests more via 'history'
+          const tail = targetSession.scrollback.length > 50000
+            ? targetSession.scrollback.slice(-50000)
+            : targetSession.scrollback;
+          const safe = redactSecrets(tail);
+          secureSend(ws, { type: 'scrollback', session: targetSession.id, data: safe,
+            hasMore: targetSession.scrollback.length > 50000,
+            totalSize: targetSession.scrollback.length });
         }
         if (targetSession.attention) {
           secureSend(ws, { type: 'attention', session: targetSession.id, reason: targetSession.attention });
         }
+        break;
+      }
+
+      case 'history': {
+        // Client requests older scrollback: { type: 'history', session, before }
+        // 'before' is the byte offset from end that the client already has
+        if (!targetSession) break;
+        const sb = targetSession.scrollback;
+        const before = Math.min(msg.before || 0, sb.length);
+        const available = sb.length - before;
+        if (available <= 0) {
+          secureSend(ws, { type: 'history', session: msg.session, data: '', hasMore: false });
+          break;
+        }
+        // Send 50KB chunk before what client already has
+        const chunkSize = 50000;
+        const start = Math.max(0, available - chunkSize);
+        const chunk = sb.slice(start, available);
+        secureSend(ws, { type: 'history', session: msg.session,
+          data: redactSecrets(chunk),
+          hasMore: start > 0,
+          offset: sb.length - start });
         break;
       }
 
