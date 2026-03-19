@@ -247,8 +247,8 @@
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
       display: none; overflow: hidden;
     }
-    .term-wrap.active { display: block; }
-    .term-wrap .xterm { height: 100% !important; }
+    .term-wrap.active { display: flex; flex-direction: column; justify-content: flex-end; }
+    .term-wrap .xterm { flex-shrink: 0; }
     .term-wrap .xterm-viewport {
       overflow-y: scroll !important;
       -webkit-overflow-scrolling: touch !important;
