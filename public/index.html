@@ -584,7 +584,8 @@
       <button id="img-clear" aria-label="Remove image">x</button>
     </div>
     <div id="input-bar">
-      <input type="file" id="img-input" accept="image/*,image/heic" style="display:none">
+      <input type="file" id="img-input" accept="image/*,image/heic"
+             style="position:absolute;width:0;height:0;opacity:0;overflow:hidden">
       <label id="img-btn" for="img-input" role="button" aria-label="Attach image">Img</label>
       <textarea id="msg" rows="1" placeholder="Type a message..."
                 autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false"
@@ -1626,6 +1627,12 @@ const imgName = $('img-name');
 const imgClear = $('img-clear');
 const imgBtn = $('img-btn');
 
+// Direct click handler as fallback for iOS (label-for can fail with hidden inputs)
+imgBtn.addEventListener('click', (e) => {
+  e.preventDefault();
+  imgInput.click();
+});
+
 imgInput.addEventListener('change', async () => {
   const file = imgInput.files[0];
   if (!file) return;
@@ -1920,10 +1927,13 @@ if (window.visualViewport) {
       });
     }, 250);
   });
-  // Throttle viewport scroll pinning -- fires frequently during typing
+  // Pin viewport scroll -- but skip when textarea is focused (causes jitter during typing)
   let vvScrollPending = false;
+  let inputFocused = false;
+  msgInput.addEventListener('focus', () => { inputFocused = true; });
+  msgInput.addEventListener('blur', () => { inputFocused = false; window.scrollTo(0, 0); });
   window.visualViewport.addEventListener('scroll', () => {
-    if (vvScrollPending) return;
+    if (vvScrollPending || inputFocused) return;
     vvScrollPending = true;
     requestAnimationFrame(() => {
       window.scrollTo(0, 0);
@@ -1936,7 +1946,7 @@ if (window.visualViewport) {
 // ── iOS Prevention ──
 // Prevent bounce scroll on non-scrollable areas
 document.addEventListener('touchmove', e => {
-  if (!e.target.closest('#term-area, #qbar, #msg, .xterm-viewport, #tab-switcher, #autocomplete, .switcher-item')) e.preventDefault();
+  if (!e.target.closest('#term-area, #qbar, #msg, #input-bar, #img-btn, .xterm-viewport, #tab-switcher, #autocomplete, .switcher-item')) e.preventDefault();
 }, { passive: false });
 
 // Prevent ALL double-tap zoom (comprehensive)
