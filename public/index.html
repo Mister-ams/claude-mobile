@@ -1904,21 +1904,19 @@ if (window.visualViewport) {
 
   window.visualViewport.addEventListener('resize', () => {
     const h = window.visualViewport.height;
-
-    // While typing: freeze ALL layout changes. iOS handles input visibility.
-    if (msgFocused) return;
-
-    // Pin document scroll to top
-    window.scrollTo(0, 0);
-    document.documentElement.scrollTop = 0;
-
     const delta = h - stableVVH;
     const absDelta = Math.abs(delta);
 
-    // Small changes (< 60px) -- skip entirely
+    // Small changes (< 60px) -- prediction bar / autocomplete. Skip entirely.
     if (absDelta < 60) return;
 
-    // Batch height update into debounced callback
+    // Pin document scroll (skip while typing -- handled on blur)
+    if (!msgFocused) {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+    }
+
+    // Large change (keyboard open/close) -- always update height, even while focused
     pendingHeight = h;
 
     if (resizeTimer) clearTimeout(resizeTimer);
