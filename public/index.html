@@ -1893,13 +1893,20 @@ if (window.visualViewport) {
   msgInput.addEventListener('focus', () => { msgFocused = true; });
   msgInput.addEventListener('blur', () => {
     msgFocused = false;
-    // Snap to correct height on blur
-    const h = window.visualViewport.height;
-    if (Math.abs(h - stableVVH) > 10) {
+    // Always snap to correct height on blur -- keyboard may have changed size
+    setTimeout(() => {
+      const h = window.visualViewport.height;
       appEl.style.height = h + 'px';
       stableVVH = h;
-      requestAnimationFrame(() => doResize());
-    }
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      requestAnimationFrame(() => {
+        doResize();
+        if (!userScrolled && activeSession !== null && terms[activeSession]) {
+          terms[activeSession].scrollToBottom();
+        }
+      });
+    }, 300); // Wait for keyboard dismiss animation
   });
 
   window.visualViewport.addEventListener('resize', () => {
