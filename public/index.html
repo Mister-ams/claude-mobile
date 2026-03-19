@@ -637,7 +637,7 @@ function bytesToHex(bytes) {
 }
 
 function base64urlEncode(buf) {
-  const bytes = new Uint8Array(buf);
+  const bytes = new Uint8Array(buf instanceof ArrayBuffer ? buf : buf.buffer || buf);
   let str = '';
   for (const b of bytes) str += String.fromCharCode(b);
   return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
@@ -819,13 +819,13 @@ const lockPasskeyBtn = $('lock-passkey-btn');
 const lockTotpInput = $('lock-totp-input');
 const lockError = $('lock-error');
 let inactivityTimer = null;
-const INACTIVITY_MS = 15 * 60 * 1000; // 15 min (matches server default)
+let inactivityMs = 15 * 60 * 1000; // default; overridden by server on auth
 
 function resetInactivityTimer() {
   if (inactivityTimer) clearTimeout(inactivityTimer);
   inactivityTimer = setTimeout(() => {
     if (sessionToken) showLockScreen();
-  }, INACTIVITY_MS);
+  }, inactivityMs);
 }
 
 function showLockScreen() {
@@ -919,10 +919,10 @@ async function doPasskeyAuth() {
   const optRes = await fetch('/api/passkey/auth-options', { method: 'POST' });
   if (!optRes.ok) return null;
   const options = await optRes.json();
-  options.challenge = base64urlToBuffer(options.challenge);
+  options.challenge = base64urlDecode(options.challenge);
   if (options.allowCredentials) {
     options.allowCredentials = options.allowCredentials.map(c => ({
-      ...c, id: base64urlToBuffer(c.id)
+      ...c, id: base64urlDecode(c.id)
     }));
   }
   const credential = await navigator.credentials.get({ publicKey: options });
@@ -930,14 +930,14 @@ async function doPasskeyAuth() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      expectedChallenge: bufferToBase64url(options.challenge),
+      expectedChallenge: base64urlEncode(options.challenge),
       response: {
         id: credential.id,
-        rawId: bufferToBase64url(credential.rawId),
+        rawId: base64urlEncode(credential.rawId),
         response: {
-          authenticatorData: bufferToBase64url(credential.response.authenticatorData),
-          clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
-          signature: bufferToBase64url(credential.response.signature),
+          authenticatorData: base64urlEncode(credential.response.authenticatorData),
+          clientDataJSON: base64urlEncode(credential.response.clientDataJSON),
+          signature: base64urlEncode(credential.response.signature),
         },
         type: credential.type,
         clientExtensionResults: credential.getClientExtensionResults(),
@@ -974,11 +974,11 @@ async function registerPasskey() {
       body: JSON.stringify({ sessionToken })
     });
     const options = await optRes.json();
-    options.challenge = base64urlToBuffer(options.challenge);
-    options.user.id = base64urlToBuffer(options.user.id);
+    options.challenge = base64urlDecode(options.challenge);
+    options.user.id = base64urlDecode(options.user.id);
     if (options.excludeCredentials) {
       options.excludeCredentials = options.excludeCredentials.map(c => ({
-        ...c, id: base64urlToBuffer(c.id)
+        ...c, id: base64urlDecode(c.id)
       }));
     }
     const credential = await navigator.credentials.create({ publicKey: options });
@@ -987,13 +987,13 @@ async function registerPasskey() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         sessionToken,
-        expectedChallenge: bufferToBase64url(options.challenge),
+        expectedChallenge: base64urlEncode(options.challenge),
         response: {
           id: credential.id,
-          rawId: bufferToBase64url(credential.rawId),
+          rawId: base64urlEncode(credential.rawId),
           response: {
-            attestationObject: bufferToBase64url(credential.response.attestationObject),
-            clientDataJSON: bufferToBase64url(credential.response.clientDataJSON),
+            attestationObject: base64urlEncode(credential.response.attestationObject),
+            clientDataJSON: base64urlEncode(credential.response.clientDataJSON),
           },
           type: credential.type,
           clientExtensionResults: credential.getClientExtensionResults(),
@@ -1055,21 +1055,8 @@ async function setupTotp() {
   }
 }
 
-function base64urlToBuffer(b64) {
-  const str = b64.replace(/-/g, '+').replace(/_/g, '/');
-  const pad = str.length % 4 === 0 ? '' : '='.repeat(4 - (str.length % 4));
-  const binary = atob(str + pad);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return bytes.buffer;
-}
-
-function bufferToBase64url(buf) {
-  const bytes = new Uint8Array(buf instanceof ArrayBuffer ? buf : buf.buffer || buf);
-  let str = '';
-  for (const b of bytes) str += String.fromCharCode(b);
-  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
+// base64url helpers consolidated above (base64urlEncode / base64urlDecode)
+// WebAuthn callers use .buffer for ArrayBuffer where needed
 
 checkAuthStatus();
 
@@ -1089,7 +1076,7 @@ function doConnect(method, totpCode) {
   };
   ws.onclose = () => {
     dot.className = 'dot off'; e2eReady = false;
-    if (sessionToken) { showStatus('Reconnecting...', 'var(--intent-warn)'); setTimeout(doConnect, reconnectDelay); }
+    if (sessionToken) { showStatus('Reconnecting...', 'var(--intent-warn)'); setTimeout(() => doConnect('reconnect'), reconnectDelay); }
     reconnectDelay = Math.min(reconnectDelay * 2, 30000);
   };
   ws.onerror = () => {
@@ -1109,7 +1096,9 @@ function doConnect(method, totpCode) {
     if (msg.type === 'encrypted' && msg.status === 'ok' && pendingAuth) {
       const { method: m, totpCode: tc } = pendingAuth;
       pendingAuth = null;
-      if (m === 'passkey' && sessionToken) {
+      if (m === 'reconnect' && sessionToken) {
+        queueSend({ type: 'auth', sessionToken });
+      } else if (m === 'passkey' && sessionToken) {
         queueSend({ type: 'auth-passkey', sessionToken });
       } else if (m === 'totp' && tc) {
         queueSend({ type: 'auth', totp: tc });
@@ -1166,10 +1155,11 @@ function handle(m) {
     case 'auth':
       if (m.success) {
         if (m.sessionToken) sessionToken = m.sessionToken;
+        if (m.inactivityMs) inactivityMs = m.inactivityMs;
         $('totp-input').value = '';
         pinScreen.style.display = 'none'; appEl.style.display = 'flex';
         loadProjects();
-        scheduleTokenRefresh();
+        scheduleTokenRefresh(m.ttl);
         resetInactivityTimer();
         if (activeSession !== null) queueSend({ type: 'connect', session: activeSession });
         // Server may send locked=true if token was inactive during disconnect
@@ -1446,7 +1436,7 @@ function renderSwitcher() {
 function newSession() {
   if (!ws || ws.readyState !== 1) return;
   const num = sessions.length + 1;
-  const defaultDir = 'C:\\Users\\MRAL-\\Projects\\loomi-os';
+  const defaultDir = (projects && projects.length) ? projects[0].dir : '';
   // Send screen dimensions so tmux session matches phone width
   const termArea = document.getElementById('term-area');
   const charW = 7.8; // approximate char width at 13px SF Mono
@@ -1751,17 +1741,7 @@ function qcmd(text) {
 
 // Slash commands -- populated dynamically from server on session connect.
 // Server scans .claude/skills/ dirs and merges with built-in commands.
-// Falls back to built-ins only if server hasn't sent commands yet.
-const BUILTIN_COMMANDS = [
-  { cmd: '/help', desc: 'Show help and commands' },
-  { cmd: '/clear', desc: 'Clear conversation context' },
-  { cmd: '/compact', desc: 'Compact context to save space' },
-  { cmd: '/config', desc: 'View/modify configuration' },
-  { cmd: '/cost', desc: 'Show token usage and cost' },
-  { cmd: '/model', desc: 'Switch AI model' },
-  { cmd: '/status', desc: 'Show account and session status' },
-];
-let commands = [...BUILTIN_COMMANDS];
+let commands = [];
 
 const acEl = $('autocomplete');
 

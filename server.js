@@ -21,7 +21,7 @@ const SCROLLBACK_SIZE = 400000;
 const DEBUG_ATTENTION = process.env.DEBUG_ATTENTION === '1';
 
 // ─── tmux session persistence (via WSL) ─────────────────────────
-const WSL_DISTRO = 'Ubuntu-24.04';
+const WSL_DISTRO = config.wslDistro || 'Ubuntu-24.04';
 const TMUX_PREFIX = 'cm'; // session names: cm-0, cm-1, ...
 
 function wslExec(cmd) {
@@ -586,19 +586,20 @@ app.post('/api/setup/verify', (req, res) => {
   }
 });
 
+// Auth middleware for HTTP routes
+function requireSession(req, res, next) {
+  const token = req.body?.sessionToken || req.query?.st;
+  if (!validateSessionToken(token, req.ip)) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+
 // Auth-gated config
-app.get('/api/config', (req, res) => {
-  if (!validateSessionToken(req.query.st, req.ip)) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.get('/api/config', requireSession, (req, res) => {
   res.json({ projects: config.projects, maxSessions: MAX_SESSIONS });
 });
 
 // WebAuthn registration
-app.post('/api/passkey/register-options', async (req, res) => {
-  if (!validateSessionToken(req.body.sessionToken, req.ip)) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.post('/api/passkey/register-options', requireSession, async (req, res) => {
   try {
     const options = await generateRegistrationOptions({
       rpName: RP_NAME, rpID,
@@ -620,10 +621,7 @@ app.post('/api/passkey/register-options', async (req, res) => {
   }
 });
 
-app.post('/api/passkey/register-verify', async (req, res) => {
-  if (!validateSessionToken(req.body.sessionToken, req.ip)) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.post('/api/passkey/register-verify', requireSession, async (req, res) => {
   try {
     const entry = challenges.get(req.body.expectedChallenge);
     if (!entry || Date.now() > entry.expires) {
@@ -715,10 +713,7 @@ app.post('/api/auth/refresh', (_req, res) => {
 });
 
 // Kill switch
-app.post('/api/kill', (req, res) => {
-  if (!validateSessionToken(req.body.sessionToken, req.ip)) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.post('/api/kill', requireSession, (req, res) => {
   audit('SYSTEM', 'Remote kill switch activated', req.ip);
   res.json({ status: 'shutting down' });
   setTimeout(() => process.exit(0), 500);
@@ -735,10 +730,7 @@ app.get('/api/auth/status', (_req, res) => {
 });
 
 // TOTP setup (requires session token -- bootstrap or passkey authed)
-app.post('/api/totp/setup', (req, res) => {
-  if (!validateSessionToken(req.body.sessionToken, req.ip)) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.post('/api/totp/setup', requireSession, (req, res) => {
   if (totpConfigured()) {
     return res.json({ already: true, uri: getTotpUri() });
   }
@@ -747,10 +739,7 @@ app.post('/api/totp/setup', (req, res) => {
   res.json({ uri: getTotpUri(), secret: totpSecret });
 });
 
-app.post('/api/totp/verify-setup', (req, res) => {
-  if (!validateSessionToken(req.body.sessionToken, req.ip)) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
+app.post('/api/totp/verify-setup', requireSession, (req, res) => {
   if (verifyTotp(req.body.code)) {
     audit('AUTH', 'TOTP setup verified');
     res.json({ verified: true });
@@ -893,18 +882,18 @@ function getSessionList() {
   }));
 }
 
-function broadcastSessions() {
-  const obj = { type: 'sessions', sessions: getSessionList() };
+function broadcastAll(obj) {
   for (const client of allClients) {
     if (client.authenticated && client.readyState === 1) secureSend(client, obj);
   }
 }
 
+function broadcastSessions() {
+  broadcastAll({ type: 'sessions', sessions: getSessionList() });
+}
+
 function broadcastAttention(sessionId, reason) {
-  const obj = { type: 'attention', session: sessionId, reason };
-  for (const client of allClients) {
-    if (client.authenticated && client.readyState === 1) secureSend(client, obj);
-  }
+  broadcastAll({ type: 'attention', session: sessionId, reason });
 }
 
 // Wire up proc.onData and proc.onExit for a session (shared by create + recover)
@@ -1108,6 +1097,12 @@ wss.on('connection', (ws, req) => {
       return;
     }
 
+    // Auth success helper: send auth + sessions + timing config
+    function completeAuth(ws, token, extra) {
+      secureSend(ws, { type: 'auth', success: true, sessionToken: token, ttl: SESSION_TTL_MS, inactivityMs: INACTIVITY_MS, ...extra });
+      secureSend(ws, { type: 'sessions', sessions: getSessionList() });
+    }
+
     // ── Auth via TOTP (backup 2FA) or session token re-auth ──
     if (msg.type === 'auth') {
       if (!checkGlobalRate() || !checkIPRate(ws._ip)) {
@@ -1135,8 +1130,7 @@ wss.on('connection', (ws, req) => {
           ws.locked = true;
           audit('AUTH', `Reconnect locked (inactive)`, ws._ip);
         }
-        secureSend(ws, { type: 'auth', success: true, sessionToken: msg.sessionToken, locked, ...authState });
-        secureSend(ws, { type: 'sessions', sessions: getSessionList() });
+        completeAuth(ws, msg.sessionToken, { locked, ...authState });
         if (locked) secureSend(ws, { type: 'lock' });
         return;
       }
@@ -1149,8 +1143,7 @@ wss.on('connection', (ws, req) => {
         authAttempts.delete(ws._ip);
         lastAuthenticatedActivity = Date.now();
         audit('AUTH', `TOTP auth successful`, ws._ip);
-        secureSend(ws, { type: 'auth', success: true, sessionToken: st, ...authState });
-        secureSend(ws, { type: 'sessions', sessions: getSessionList() });
+        completeAuth(ws, st, authState);
         return;
       }
 
@@ -1167,8 +1160,7 @@ wss.on('connection', (ws, req) => {
         ws.authenticated = true;
         ws._sessionToken = msg.sessionToken;
         lastAuthenticatedActivity = Date.now();
-        secureSend(ws, { type: 'auth', success: true, sessionToken: msg.sessionToken, hasPasskey: true });
-        secureSend(ws, { type: 'sessions', sessions: getSessionList() });
+        completeAuth(ws, msg.sessionToken, { hasPasskey: true });
       } else {
         secureSend(ws, { type: 'auth', success: false });
       }
@@ -1260,7 +1252,7 @@ wss.on('connection', (ws, req) => {
           broadcastSessions();
           secureSend(ws, { type: 'created', session: created.id });
         } else {
-          secureSend(ws, { type: 'error', message: 'Max sessions reached (4)' });
+          secureSend(ws, { type: 'error', message: `Max sessions reached (${MAX_SESSIONS})` });
         }
         break;
       }

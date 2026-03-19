@@ -2,6 +2,7 @@
   "port": 3456,
   "tailscaleHostname": "your-machine.tail12345.ts.net",
   "inactivityTimeout": 15,
+  "wslDistro": "Ubuntu-24.04",
   "autoStart": ["My Project"],
   "defaultDir": "",
   "projects": [
