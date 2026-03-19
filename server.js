@@ -759,7 +759,9 @@ if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 app.post('/api/upload', express.raw({ type: '*/*', limit: '10mb' }), (req, res) => {
   const token = req.headers['x-session-token'];
+  audit('UPLOAD', `Attempt: ip=${req.ip} token=${token ? token.slice(0, 8) + '...' : 'NONE'} size=${req.headers['content-length'] || '?'}`, req.ip);
   if (!validateSessionToken(token, req.ip)) {
+    audit('UPLOAD', `Rejected: token invalid or IP mismatch`, req.ip);
     return res.status(401).json({ error: 'Unauthorized' });
   }
   const buf = req.body;

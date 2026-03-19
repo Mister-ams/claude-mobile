@@ -1615,8 +1615,8 @@ imgInput.addEventListener('change', async () => {
     imgBtn.classList.add('has-img');
     imgBtn.textContent = 'Img';
   } catch (e) {
-    const msg = e.message || 'fail';
-    imgBtn.textContent = msg.length > 6 ? msg.slice(0, 6) : msg;
+    console.error('Upload failed:', e);
+    showStatus('Upload failed: ' + (e.message || 'unknown error'), 'var(--intent-danger)');
     imgBtn.style.borderColor = 'var(--intent-danger)';
     imgBtn.style.color = 'var(--intent-danger)';
     setTimeout(() => { imgBtn.textContent = 'Img'; imgBtn.style.borderColor = ''; imgBtn.style.color = ''; }, 3000);
