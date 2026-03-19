@@ -1272,9 +1272,17 @@ wss.on('connection', (ws, req) => {
         }
         ws.currentSession = msg.session;
         targetSession.clients.add(ws);
-        // Don't send scrollback -- the live tmux attachment already sends
-        // the current screen state. Scrollback history replays old TUI frames
-        // (cursor positioning, status bar redraws) that corrupt the display.
+        // Send tmux pane history as plain text (not raw ANSI scrollback).
+        // capture-pane gives us tmux's rendered output -- no TUI cursor
+        // positioning that would corrupt the display.
+        if (targetSession.tmuxName) {
+          try {
+            const history = captureTmuxScrollback(targetSession.tmuxName);
+            if (history) {
+              secureSend(ws, { type: 'scrollback', session: targetSession.id, data: history + '\r\n' });
+            }
+          } catch {}
+        }
         if (targetSession.attention) {
           secureSend(ws, { type: 'attention', session: targetSession.id, reason: targetSession.attention });
         }
