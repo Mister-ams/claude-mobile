@@ -1849,11 +1849,9 @@ if (window.visualViewport) {
     const absDelta = Math.abs(delta);
 
     // Small changes (< 60px) are autocomplete/prediction bar adjustments.
-    // Only update app height (CSS only, no terminal reflow) to keep input visible.
-    if (absDelta < 60) {
-      appEl.style.height = h + 'px';
-      return;
-    }
+    // Do NOT update app height -- it triggers flexbox recalc and xterm re-render.
+    // The app clips behind the bar (overflow:hidden), input stays visible via iOS.
+    if (absDelta < 60) return;
 
     // Significant change (keyboard open/close) -- commit new stable height
     appEl.style.height = h + 'px';
