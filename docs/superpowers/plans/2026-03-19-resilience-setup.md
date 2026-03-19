@@ -10,75 +10,24 @@
 
 **Spec:** `docs/superpowers/specs/2026-03-19-resilience-setup-design.md`
 
+**Execution order:** All code changes first (Tasks 1-8), then automated WSL setup script (Task 9), then run it (Task 10), then verify (Task 11). Code tasks work in degraded mode until WSL is installed — no dependency on system setup.
+
 ---
 
 ## File Map
 
 | File | Action | Responsibility |
 |------|--------|---------------|
-| `server.js` | Modify | Add `wslAvailable` flag, WSL probe with retry, direct-pty fallback in `createSession`, `/health` endpoint (localhost-only), startup audit line |
+| `server.js` | Modify | Add `wslAvailable` flag, WSL probe with retry, direct-pty fallback in `createSession`, `/health` endpoint (localhost-only), startup audit line, `lastError` wiring |
 | `watchdog.ps1` | Create | Health check, PM2 restart, WSL restart, Telegram alerts, consecutive-failure tracking |
+| `setup-wsl.ps1` | Create | Self-executing: WSL install, reboot, post-reboot Ubuntu+tmux+Task Scheduler setup, Telegram confirmation |
 | `install.sh` | Modify | Trim WSL packages to tmux-only, add `.wslconfig` creation, add Task Scheduler + watchdog registration |
-| `update.sh` | Modify | Remove WSL Claude Code update (line 81), add WSL health check |
-| `.gitignore` | Modify | Add `.telegram-token` |
+| `update.sh` | Modify | Remove WSL Claude Code update, add WSL health check |
+| `.gitignore` | Modify | Add `.telegram-token`, `.watchdog-state`, `.restart-count`, `pm2-resurrect.cmd` |
 
 ---
 
-### Task 1: WSL + tmux Installation (Manual — Run Once)
-
-This task is run manually on the machine, not committed to git. It sets up the WSL environment that server.js will use.
-
-**Files:**
-- Create: `~/.wslconfig` (user home, not repo)
-
-- [ ] **Step 1: Create `.wslconfig` with memory cap**
-
-```bash
-cat > /c/Users/abdul/.wslconfig << 'EOF'
-[wsl2]
-memory=1GB
-swap=256MB
-EOF
-```
-
-Verify: `cat /c/Users/abdul/.wslconfig`
-Expected: shows memory=1GB, swap=256MB
-
-- [ ] **Step 2: Install WSL Ubuntu-24.04**
-
-```bash
-wsl --install Ubuntu-24.04 --no-launch
-```
-
-This may require a reboot. After reboot, continue.
-
-- [ ] **Step 3: Initialize Ubuntu and install tmux**
-
-```bash
-wsl -d Ubuntu-24.04 -u root -- bash -c "apt-get update -qq && apt-get install -y -qq tmux > /dev/null 2>&1 && tmux -V"
-```
-
-Expected: `tmux 3.x` version output
-
-- [ ] **Step 4: Verify WSL respects memory cap**
-
-```bash
-wsl -d Ubuntu-24.04 -- free -m | head -2
-```
-
-Expected: total memory ~1024MB (not full system RAM)
-
-- [ ] **Step 5: Verify tmux works**
-
-```bash
-wsl -d Ubuntu-24.04 -u root -- bash -c "tmux new-session -d -s test && tmux has-session -t test && tmux kill-session -t test && echo OK"
-```
-
-Expected: `OK`
-
----
-
-### Task 2: Add WSL Availability Check to server.js
+### Task 1: Add WSL Availability Check to server.js
 
 **Files:**
 - Modify: `server.js:22-30` (after WSL constants, before `wslExec`)
@@ -155,13 +104,13 @@ With:
 
 This prevents a race condition where `initWSL` is still retrying in the background when `server.listen` fires.
 
-- [ ] **Step 4: Run server to verify probe works**
+- [ ] **Step 4: Run server to verify probe works (expect degraded mode since WSL not installed yet)**
 
 ```bash
 cd /c/Users/abdul/claude-mobile && node server.js
 ```
 
-Expected: `WSL: Ubuntu-24.04 available` in startup output (since WSL was installed in Task 1). Ctrl+C to stop.
+Expected: `WSL: UNAVAILABLE — running in degraded mode` in startup output. Ctrl+C to stop. This is correct — WSL will be installed in Task 10.
 
 - [ ] **Step 5: Commit**
 
@@ -171,7 +120,7 @@ cd /c/Users/abdul/claude-mobile && git add server.js && git commit -m "feat: add
 
 ---
 
-### Task 3: Add Direct-PTY Fallback to `createSession`
+### Task 2: Add Direct-PTY Fallback to `createSession`
 
 **Files:**
 - Modify: `server.js:951-976` (`createSession` function)
@@ -242,13 +191,13 @@ function createSession(name, dir, cols, rows) {
 }
 ```
 
-- [ ] **Step 3: Test with WSL available — verify tmux session created**
+- [ ] **Step 3: Test — restart PM2 and verify degraded mode works**
 
 ```bash
 cd /c/Users/abdul/claude-mobile && pm2 restart claude-mobile && sleep 3 && pm2 logs claude-mobile --lines 10 --nostream
 ```
 
-Expected: startup log shows `WSL: Ubuntu-24.04 available`. Open phone, create session — should see `Created: "..." (tmux: cm-0)` in logs.
+Expected: startup log shows `WSL: UNAVAILABLE — running in degraded mode`. Sessions still creatable from phone (direct pty).
 
 - [ ] **Step 4: Commit**
 
@@ -258,7 +207,7 @@ cd /c/Users/abdul/claude-mobile && git add server.js && git commit -m "feat: add
 
 ---
 
-### Task 4: Add `/health` Endpoint (Localhost-Only)
+### Task 3: Add `/health` Endpoint (Localhost-Only)
 
 **Files:**
 - Modify: `server.js` (after existing `app.post('/api/upload', ...)` route, before WebSocket section)
@@ -301,7 +250,7 @@ app.get('/health', (req, res) => {
 curl.exe http://localhost:3456/health
 ```
 
-Expected: JSON with `status`, `uptime`, `sessions`, `wsl: true`, `memory`
+Expected: JSON with `status: "degraded"` (WSL not installed yet), `uptime`, `sessions`, `wsl: false`, `memory`
 
 - [ ] **Step 4: Verify Tailscale request is blocked**
 
@@ -319,7 +268,7 @@ cd /c/Users/abdul/claude-mobile && git add server.js && git commit -m "feat: add
 
 ---
 
-### Task 5: Add Startup Audit Line
+### Task 4: Add Startup Audit Line
 
 **Files:**
 - Modify: `server.js:1548` (inside `server.listen` callback, after `audit('SYSTEM', ...)`)
@@ -352,7 +301,7 @@ Replace `audit('SYSTEM', `Server started on port ${PORT}`);` with:
 pm2 restart claude-mobile && sleep 3 && tail -5 /c/Users/abdul/.claude-mobile-audit.log
 ```
 
-Expected: last line shows `[SYSTEM] Server started | restart_count: N | wsl: true`
+Expected: last line shows `[SYSTEM] Server started | restart_count: N | wsl: false`
 
 - [ ] **Step 4: Commit**
 
@@ -362,7 +311,7 @@ cd /c/Users/abdul/claude-mobile && git add server.js && git commit -m "feat: add
 
 ---
 
-### Task 6: Wire `lastError` into Error Paths
+### Task 5: Wire `lastError` into Error Paths
 
 **Files:**
 - Modify: `server.js` (existing `audit('ERROR', ...)` calls)
@@ -411,10 +360,11 @@ cd /c/Users/abdul/claude-mobile && git add server.js && git commit -m "feat: wir
 
 ---
 
-### Task 7: Create Watchdog Script
+### Task 6: Create Watchdog Script
 
 **Files:**
 - Create: `watchdog.ps1`
+- Modify: `.gitignore`
 
 - [ ] **Step 1: Create `watchdog.ps1`**
 
@@ -430,6 +380,7 @@ $StateFile = "$PSScriptRoot\.watchdog-state"
 $TokenFile = "$PSScriptRoot\.telegram-token"
 $ChatId = "496270209"
 $Timeout = 10
+$Pm2Path = "C:\Users\abdul\AppData\Roaming\fnm\node-versions\v22.22.1\installation\pm2"
 
 # ── Load state ──
 $state = @{ failures = 0; alertSent = $false }
@@ -505,6 +456,7 @@ if ($wslDown) {
 }
 
 # Restart PM2
+$env:PATH = "C:\Users\abdul\AppData\Roaming\fnm\node-versions\v22.22.1\installation;$env:PATH"
 $pmResult = pm2 restart claude-mobile 2>&1
 $restarted = $LASTEXITCODE -eq 0
 
@@ -519,7 +471,7 @@ if ($restarted) {
 Save-State
 ```
 
-- [ ] **Step 2: Add `.watchdog-state` to `.gitignore`**
+- [ ] **Step 2: Update `.gitignore`**
 
 Append to `.gitignore`:
 
@@ -530,40 +482,15 @@ Append to `.gitignore`:
 pm2-resurrect.cmd
 ```
 
-- [ ] **Step 3: Create `.telegram-token` file (manual — not committed)**
+- [ ] **Step 3: Test watchdog with server running**
 
 ```bash
-echo "YOUR_BOT_TOKEN_HERE" > /c/Users/abdul/claude-mobile/.telegram-token
-```
-
-Replace `YOUR_BOT_TOKEN_HERE` with the actual bot token for `@Bmw_x5_abdulla_bot`.
-
-- [ ] **Step 4: Test watchdog with server running**
-
-```powershell
-powershell -ExecutionPolicy Bypass -File C:\Users\abdul\claude-mobile\watchdog.ps1
+powershell -ExecutionPolicy Bypass -File C:\\Users\\abdul\\claude-mobile\\watchdog.ps1
 ```
 
 Expected: exits cleanly (server is healthy). Check that `.watchdog-state` was created with `failures: 0`.
 
-- [ ] **Step 5: Test watchdog with server stopped**
-
-```bash
-pm2 stop claude-mobile
-```
-
-Run watchdog twice (simulates 2 consecutive failures):
-```powershell
-powershell -ExecutionPolicy Bypass -File C:\Users\abdul\claude-mobile\watchdog.ps1
-powershell -ExecutionPolicy Bypass -File C:\Users\abdul\claude-mobile\watchdog.ps1
-```
-
-Expected: second run triggers `pm2 restart` and sends Telegram alert. Then:
-```bash
-pm2 start claude-mobile
-```
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 cd /c/Users/abdul/claude-mobile && git add watchdog.ps1 .gitignore && git commit -m "feat: add watchdog script with Telegram alerts"
@@ -571,84 +498,7 @@ cd /c/Users/abdul/claude-mobile && git add watchdog.ps1 .gitignore && git commit
 
 ---
 
-### Task 8: Register Task Scheduler Jobs
-
-This task creates the two scheduled tasks. Run manually — not committed.
-
-- [ ] **Step 1: Create pm2-resurrect wrapper script**
-
-Task Scheduler runs with a minimal PATH that won't include fnm's shim directory. Create a wrapper that sets up the correct environment:
-
-Create `C:\Users\abdul\claude-mobile\pm2-resurrect.cmd`:
-
-```bat
-@echo off
-set PATH=C:\Users\abdul\AppData\Roaming\fnm\node-versions\v22.22.1\installation;%PATH%
-pm2 resurrect
-```
-
-- [ ] **Step 2: Register ClaudeMobile auto-start task**
-
-```bash
-schtasks //Create //TN "ClaudeMobile" //TR "C:\\Users\\abdul\\claude-mobile\\pm2-resurrect.cmd" //SC ONLOGON //RL HIGHEST //F
-```
-
-Note: `//` syntax is for bash on Windows (escapes `/` for schtasks).
-
-Verify:
-```bash
-schtasks //Query //TN "ClaudeMobile"
-```
-
-Expected: shows the task with trigger `At log on`.
-
-- [ ] **Step 3: Register ClaudeMobileWatchdog task (every 5 minutes)**
-
-```bash
-schtasks //Create //TN "ClaudeMobileWatchdog" //TR "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\\Users\\abdul\\claude-mobile\\watchdog.ps1" //SC MINUTE //MO 5 //RL HIGHEST //F
-```
-
-Verify:
-```bash
-schtasks //Query //TN "ClaudeMobileWatchdog"
-```
-
-Expected: shows the task with 5-minute interval.
-
-- [ ] **Step 4: Verify auto-start works by simulating reboot**
-
-```bash
-pm2 stop claude-mobile && pm2 save && pm2 kill
-```
-
-Then manually trigger the task:
-```bash
-schtasks //Run //TN "ClaudeMobile"
-```
-
-Wait 5 seconds, then:
-```bash
-pm2 list
-```
-
-Expected: claude-mobile is running.
-
-- [ ] **Step 5: Configure PM2 memory limit**
-
-```bash
-pm2 delete claude-mobile && pm2 start /c/Users/abdul/claude-mobile/server.js --name claude-mobile --max-memory-restart 750M && pm2 save
-```
-
-Verify:
-```bash
-pm2 describe claude-mobile | grep "max memory"
-```
-
-Expected: shows `750M`.
-
----
-
-### Task 9: Update `install.sh`
+### Task 7: Update `install.sh`
 
 **Files:**
 - Modify: `install.sh:146-191` (Step 5: WSL + tmux section)
@@ -696,7 +546,13 @@ WSLEOF
 
   # Register Task Scheduler jobs
   say "Registering auto-start task..."
-  schtasks //Create //TN "ClaudeMobile" //TR "pm2 resurrect" //SC ONLOGON //RL HIGHEST //F > /dev/null 2>&1 \
+  PM2_PATH="$(cygpath -w "$(dirname "$(which pm2)")")"
+  cat > "$INSTALL_DIR/pm2-resurrect.cmd" << CMDEOF
+@echo off
+set PATH=$PM2_PATH;%PATH%
+pm2 resurrect
+CMDEOF
+  schtasks //Create //TN "ClaudeMobile" //TR "$(cygpath -w "$INSTALL_DIR/pm2-resurrect.cmd")" //SC ONLOGON //RL HIGHEST //F > /dev/null 2>&1 \
     && ok "ClaudeMobile auto-start registered" \
     || warn "Could not register auto-start task"
 
@@ -734,7 +590,7 @@ cd /c/Users/abdul/claude-mobile && git add install.sh && git commit -m "feat: up
 
 ---
 
-### Task 10: Update `update.sh`
+### Task 8: Update `update.sh`
 
 **Files:**
 - Modify: `update.sh:78-83` (WSL update section)
@@ -776,6 +632,213 @@ Expected: no output.
 ```bash
 cd /c/Users/abdul/claude-mobile && git add update.sh && git commit -m "refactor: replace WSL Claude update with WSL health check in update.sh"
 ```
+
+---
+
+### Task 9: Create Self-Executing WSL Setup Script
+
+**Files:**
+- Create: `setup-wsl.ps1`
+
+This script handles everything: WSL install, reboot, and post-reboot automation. User runs ONE command, approves ONE UAC prompt, walks away.
+
+- [ ] **Step 1: Create `setup-wsl.ps1`**
+
+```powershell
+#Requires -RunAsAdministrator
+# Claude Mobile — WSL Setup (self-executing)
+# 1. Creates .wslconfig
+# 2. Enables WSL + installs Ubuntu-24.04
+# 3. Registers a one-time post-reboot task to finish setup
+# 4. Reboots
+#
+# After reboot, the one-time task:
+#   - Installs tmux in WSL
+#   - Creates pm2-resurrect.cmd
+#   - Registers ClaudeMobile + ClaudeMobileWatchdog scheduled tasks
+#   - Configures PM2 with memory limit
+#   - Sends Telegram "setup complete" message
+#   - Deletes itself
+
+$ErrorActionPreference = "Stop"
+$ProjectDir = "C:\Users\abdul\claude-mobile"
+$FnmNodeDir = "C:\Users\abdul\AppData\Roaming\fnm\node-versions\v22.22.1\installation"
+
+Write-Host ""
+Write-Host "  ======================================" -ForegroundColor Cyan
+Write-Host "  Claude Mobile — WSL Setup" -ForegroundColor Cyan
+Write-Host "  ======================================" -ForegroundColor Cyan
+Write-Host ""
+
+# ── Step 1: .wslconfig ──
+$wslconfig = "$env:USERPROFILE\.wslconfig"
+if (-not (Test-Path $wslconfig)) {
+    @"
+[wsl2]
+memory=1GB
+swap=256MB
+"@ | Set-Content $wslconfig -Encoding UTF8
+    Write-Host "  [OK] .wslconfig created (1GB cap, 256MB swap)" -ForegroundColor Green
+} else {
+    Write-Host "  [OK] .wslconfig already exists" -ForegroundColor Green
+}
+
+# ── Step 2: Install WSL ──
+Write-Host "  Installing WSL + Ubuntu-24.04..." -ForegroundColor Cyan
+Write-Host "  (This may take several minutes)" -ForegroundColor DarkGray
+wsl --install Ubuntu-24.04 --no-launch 2>&1 | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+
+# ── Step 3: Register post-reboot task ──
+$postRebootScript = @"
+`$ErrorActionPreference = "SilentlyContinue"
+`$ProjectDir = "$ProjectDir"
+`$FnmNodeDir = "$FnmNodeDir"
+`$env:PATH = "`$FnmNodeDir;`$env:PATH"
+
+# Wait for WSL to be ready (up to 2 minutes)
+`$ready = `$false
+for (`$i = 0; `$i -lt 24; `$i++) {
+    `$result = wsl -d Ubuntu-24.04 -- echo 1 2>&1
+    if (`$LASTEXITCODE -eq 0) { `$ready = `$true; break }
+    Start-Sleep -Seconds 5
+}
+if (-not `$ready) {
+    # Log failure and exit
+    "WSL not ready after 2 minutes" | Out-File "`$ProjectDir\setup-wsl.log" -Append
+    exit 1
+}
+
+# Install tmux
+wsl -d Ubuntu-24.04 -u root -- bash -c "apt-get update -qq && apt-get install -y -qq tmux > /dev/null 2>&1"
+"tmux installed" | Out-File "`$ProjectDir\setup-wsl.log" -Append
+
+# Create pm2-resurrect.cmd
+@"
+@echo off
+set PATH=`$FnmNodeDir;%PATH%
+pm2 resurrect
+"@ | Set-Content "`$ProjectDir\pm2-resurrect.cmd" -Encoding ASCII
+
+# Register ClaudeMobile auto-start
+schtasks /Create /TN "ClaudeMobile" /TR "`$ProjectDir\pm2-resurrect.cmd" /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null
+"ClaudeMobile task registered" | Out-File "`$ProjectDir\setup-wsl.log" -Append
+
+# Register ClaudeMobileWatchdog (every 5 min)
+`$watchdogCmd = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File `$ProjectDir\watchdog.ps1"
+schtasks /Create /TN "ClaudeMobileWatchdog" /TR `$watchdogCmd /SC MINUTE /MO 5 /RL HIGHEST /F 2>&1 | Out-Null
+"Watchdog task registered" | Out-File "`$ProjectDir\setup-wsl.log" -Append
+
+# Configure PM2 with memory limit
+pm2 delete claude-mobile 2>&1 | Out-Null
+pm2 start "`$ProjectDir\server.js" --name claude-mobile --max-memory-restart 750M 2>&1 | Out-Null
+pm2 save 2>&1 | Out-Null
+"PM2 configured with 750M limit" | Out-File "`$ProjectDir\setup-wsl.log" -Append
+
+# Send Telegram confirmation
+`$tokenFile = "`$ProjectDir\.telegram-token"
+if (Test-Path `$tokenFile) {
+    `$token = (Get-Content `$tokenFile -Raw).Trim()
+    `$body = @{ chat_id = "496270209"; text = "Claude Mobile setup complete — WSL + tmux + auto-start + watchdog all configured"; parse_mode = "HTML" } | ConvertTo-Json
+    curl.exe -s -X POST "https://api.telegram.org/bot`$token/sendMessage" -H "Content-Type: application/json" -d `$body 2>&1 | Out-Null
+}
+
+# Clean up: delete this one-time task
+schtasks /Delete /TN "ClaudeMobilePostSetup" /F 2>&1 | Out-Null
+"Setup complete" | Out-File "`$ProjectDir\setup-wsl.log" -Append
+"@
+
+$postRebootPath = "$ProjectDir\post-reboot-setup.ps1"
+$postRebootScript | Set-Content $postRebootPath -Encoding UTF8
+
+$taskCmd = "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File $postRebootPath"
+schtasks /Create /TN "ClaudeMobilePostSetup" /TR $taskCmd /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null
+Write-Host "  [OK] Post-reboot task registered" -ForegroundColor Green
+
+# ── Step 4: Reboot ──
+Write-Host ""
+Write-Host "  Setup will complete automatically after reboot." -ForegroundColor Yellow
+Write-Host "  You'll receive a Telegram message when done." -ForegroundColor Yellow
+Write-Host ""
+$confirm = Read-Host "  Reboot now? (y/n)"
+if ($confirm -eq "y" -or $confirm -eq "Y") {
+    Write-Host "  Rebooting in 5 seconds..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 5
+    Restart-Computer -Force
+} else {
+    Write-Host "  Reboot manually when ready. Setup will complete on next login." -ForegroundColor Yellow
+}
+```
+
+- [ ] **Step 2: Add setup files to `.gitignore`**
+
+Append to `.gitignore`:
+
+```
+post-reboot-setup.ps1
+setup-wsl.log
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /c/Users/abdul/claude-mobile && git add setup-wsl.ps1 .gitignore && git commit -m "feat: add self-executing WSL setup script with post-reboot automation"
+```
+
+---
+
+### Task 10: Run WSL Setup
+
+- [ ] **Step 1: Ensure `.telegram-token` exists**
+
+```bash
+test -f /c/Users/abdul/claude-mobile/.telegram-token && echo "exists" || echo "MISSING — create it first"
+```
+
+If missing, create it with the bot token for `@Bmw_x5_abdulla_bot`.
+
+- [ ] **Step 2: Run the setup script (triggers UAC + reboot)**
+
+```bash
+powershell -Command "Start-Process powershell -ArgumentList '-ExecutionPolicy Bypass -File C:\Users\abdul\claude-mobile\setup-wsl.ps1' -Verb RunAs"
+```
+
+This opens an elevated PowerShell window, installs WSL, and prompts for reboot.
+
+- [ ] **Step 3: After reboot — verify post-reboot task ran**
+
+```bash
+cat /c/Users/abdul/claude-mobile/setup-wsl.log
+```
+
+Expected: shows tmux installed, tasks registered, PM2 configured, setup complete.
+
+- [ ] **Step 4: Verify WSL + tmux**
+
+```bash
+wsl -d Ubuntu-24.04 -u root -- bash -c "tmux -V && echo OK"
+```
+
+Expected: `tmux 3.x` and `OK`
+
+- [ ] **Step 5: Verify scheduled tasks**
+
+```bash
+schtasks //Query //TN "ClaudeMobile" && schtasks //Query //TN "ClaudeMobileWatchdog"
+```
+
+Expected: both tasks shown.
+
+- [ ] **Step 6: Verify PM2 running with memory limit**
+
+```bash
+pm2 list && pm2 describe claude-mobile | grep "max memory"
+```
+
+Expected: claude-mobile online, 750M memory limit.
+
+- [ ] **Step 7: Check Telegram for confirmation message**
+
+Expected: received "Claude Mobile setup complete" message.
 
 ---
 
@@ -826,7 +889,6 @@ Verify: returns JSON with all fields populated, `wsl: true`, `status: ok`.
 
 - [ ] **Step 7: Final commit — mark spec as complete**
 
-Update spec status from `Draft` to `Complete`:
 ```bash
 cd /c/Users/abdul/claude-mobile && sed -i 's/^**Status:** Draft/**Status:** Complete/' docs/superpowers/specs/2026-03-19-resilience-setup-design.md && git add docs/ && git commit -m "docs: mark resilience setup spec as complete"
 ```
