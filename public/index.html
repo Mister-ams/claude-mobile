@@ -1165,6 +1165,7 @@ function handle(m) {
     case 'auth':
       if (m.success) {
         if (m.sessionToken) sessionToken = m.sessionToken;
+        $('totp-input').value = '';
         pinScreen.style.display = 'none'; appEl.style.display = 'flex';
         loadProjects();
         scheduleTokenRefresh();
