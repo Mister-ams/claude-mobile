@@ -1872,6 +1872,7 @@ if (window.visualViewport) {
   appEl.style.height = window.visualViewport.height + 'px';
   let stableVVH = window.visualViewport.height; // last height we actually reflowed at
   let resizeTimer = null;
+  let pendingHeight = null;
   window.visualViewport.addEventListener('resize', () => {
     const h = window.visualViewport.height;
     // Pin document scroll to top to prevent iOS pushing content offscreen
@@ -1882,29 +1883,33 @@ if (window.visualViewport) {
     const absDelta = Math.abs(delta);
 
     // Small changes (< 60px) are autocomplete/prediction bar adjustments.
-    // Do NOT update app height -- it triggers flexbox recalc and xterm re-render.
-    // The app clips behind the bar (overflow:hidden), input stays visible via iOS.
     if (absDelta < 60) return;
 
-    // Significant change (keyboard open/close) -- commit new stable height
-    appEl.style.height = h + 'px';
-    stableVVH = h;
+    // Don't update height immediately -- batch it into the debounced callback.
+    // This avoids multiple forced layouts during the keyboard animation.
+    pendingHeight = h;
 
-    // Debounce terminal refit -- use rAF to ensure layout is settled before fit()
     if (resizeTimer) clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
       requestAnimationFrame(() => {
-        doResize();
-        // Keyboard dismissed (large positive delta) -- scroll to bottom
-        if (delta > 50 && !userScrolled) {
-          requestAnimationFrame(() => {
-            if (activeSession !== null && terms[activeSession]) {
-              terms[activeSession].scrollToBottom();
-            }
-          });
+        // Single layout pass: update height + refit terminal together
+        if (pendingHeight !== null) {
+          appEl.style.height = pendingHeight + 'px';
+          const finalDelta = pendingHeight - stableVVH;
+          stableVVH = pendingHeight;
+          pendingHeight = null;
+          doResize();
+          // Keyboard dismissed (large positive delta) -- scroll to bottom
+          if (finalDelta > 50 && !userScrolled) {
+            requestAnimationFrame(() => {
+              if (activeSession !== null && terms[activeSession]) {
+                terms[activeSession].scrollToBottom();
+              }
+            });
+          }
         }
       });
-    }, 150);
+    }, 250);
   });
   window.visualViewport.addEventListener('scroll', () => {
     window.scrollTo(0, 0);
