@@ -61,7 +61,7 @@ function ensureTmuxConfig() {
 function createTmuxSession(name, wslDir) {
   ensureTmuxConfig();
   wslExec(`tmux new-session -d -s ${name} -c '${wslDir}' -x 80 -y 24`);
-  wslExec(`tmux set-option -t ${name} history-limit 8000`);
+  wslExec(`tmux set-option -t ${name} history-limit 100000`);
   // Also disable alt-screen for programs inside tmux (belt + suspenders)
   wslExec(`tmux set-window-option -t ${name} alternate-screen off`);
   // Launch Claude via Windows interop (uses existing Windows auth + Claude install)
@@ -80,7 +80,7 @@ function attachToTmux(name, cols, rows) {
 
 function captureTmuxScrollback(name) {
   try {
-    return wslExec(`tmux capture-pane -t ${name} -p -S -2000`);
+    return wslExec(`tmux capture-pane -t ${name} -p -S -10000`);
   } catch { return ''; }
 }
 
