@@ -1367,14 +1367,18 @@ setInterval(() => {
   }
 }, 60 * 1000);
 
-// ─── Skill Discovery ─────────────────────────────────────────────
+// ─── Skill & Command Discovery ───────────────────────────────────
+// Mirrors Claude Code's discovery: skills/ (SKILL.md dirs) + commands/ (.md files).
+// Subdirectories in commands/ become namespaced: commands/gsd/add-phase.md -> /gsd:add-phase
 const BUILTIN_COMMANDS = [
   { cmd: '/help', desc: 'Show help and commands' },
   { cmd: '/clear', desc: 'Clear conversation context' },
   { cmd: '/compact', desc: 'Compact context to save space' },
   { cmd: '/config', desc: 'View/modify configuration' },
+  { cmd: '/context', desc: 'View context window usage' },
   { cmd: '/cost', desc: 'Show token usage and cost' },
   { cmd: '/doctor', desc: 'Check Claude Code health' },
+  { cmd: '/fast', desc: 'Toggle fast mode (same model, faster output)' },
   { cmd: '/init', desc: 'Initialize CLAUDE.md in project' },
   { cmd: '/login', desc: 'Switch Anthropic account' },
   { cmd: '/logout', desc: 'Sign out of Anthropic' },
@@ -1383,11 +1387,28 @@ const BUILTIN_COMMANDS = [
   { cmd: '/permissions', desc: 'View/manage tool permissions' },
   { cmd: '/pr-comments', desc: 'View PR review comments' },
   { cmd: '/review', desc: 'Review a pull request' },
+  { cmd: '/skills', desc: 'List all available skills' },
   { cmd: '/status', desc: 'Show account and session status' },
   { cmd: '/terminal-setup', desc: 'Install shell integration' },
   { cmd: '/vim', desc: 'Toggle vim keybindings' },
 ];
 
+// Extract description from YAML frontmatter (single-line or multi-line)
+function extractDescription(content) {
+  const fmMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
+  if (!fmMatch) return '';
+  const fm = fmMatch[1];
+  // Multi-line YAML description (description: >- or description: >)
+  const multiMatch = fm.match(/description:\s*>-?\s*\n([\s\S]*?)(?=\n\w|\n---)/);
+  if (multiMatch) {
+    return multiMatch[1].split('\n').map(l => l.trim()).filter(Boolean)[0] || '';
+  }
+  // Single-line description
+  const singleMatch = fm.match(/description:\s*['"]?(.+?)['"]?\s*$/m);
+  return singleMatch ? singleMatch[1] : '';
+}
+
+// Scan skills/ directory: each subdirectory with SKILL.md becomes a skill
 function scanSkillDir(dir) {
   const skills = [];
   if (!fs.existsSync(dir)) return skills;
@@ -1399,23 +1420,9 @@ function scanSkillDir(dir) {
     if (!fs.existsSync(skillFile)) continue;
     try {
       const content = fs.readFileSync(skillFile, 'utf8');
-      // Check user-invocable
-      if (!/user-invocable:\s*true/i.test(content)) continue;
-      // Extract description from frontmatter
-      const fmMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
-      if (!fmMatch) continue;
-      const fm = fmMatch[1];
-      const descMatch = fm.match(/description:\s*>-?\s*\n([\s\S]*?)(?=\n\w|\n---)/);
-      let desc = '';
-      if (descMatch) {
-        // Multi-line YAML description: take first meaningful line
-        desc = descMatch[1].split('\n').map(l => l.trim()).filter(Boolean)[0] || '';
-      } else {
-        // Single-line description
-        const singleMatch = fm.match(/description:\s*['"]?(.+?)['"]?\s*$/m);
-        if (singleMatch) desc = singleMatch[1];
-      }
-      // Truncate long descriptions
+      // Skip only if explicitly marked non-invocable (Claude Code defaults to invocable)
+      if (/user-invocable:\s*false/i.test(content)) continue;
+      let desc = extractDescription(content);
       if (desc.length > 80) desc = desc.slice(0, 77) + '...';
       skills.push({ cmd: '/' + entry.name, desc });
     } catch {}
@@ -1423,12 +1430,62 @@ function scanSkillDir(dir) {
   return skills;
 }
 
-function scanSkillsForProject(projectDir) {
+// Scan commands/ directory: .md files become commands, subdirectories become namespaces.
+// commands/foo.md -> /foo
+// commands/gsd/add-phase.md -> /gsd:add-phase
+function scanCommandDir(dir) {
+  const commands = [];
+  if (!fs.existsSync(dir)) return commands;
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return commands; }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      // Namespace: subdir/*.md -> /subdir:name
+      const subdir = path.join(dir, entry.name);
+      let subEntries;
+      try { subEntries = fs.readdirSync(subdir, { withFileTypes: true }); } catch { continue; }
+      for (const sub of subEntries) {
+        if (!sub.isFile() || !sub.name.endsWith('.md')) continue;
+        try {
+          const content = fs.readFileSync(path.join(subdir, sub.name), 'utf8');
+          const cmdName = sub.name.replace(/\.md$/, '');
+          // Use name from frontmatter if present, otherwise derive from path
+          const nameMatch = content.match(/^---\s*\n[\s\S]*?name:\s*['"]?(.+?)['"]?\s*$/m);
+          const cmd = nameMatch ? '/' + nameMatch[1] : '/' + entry.name + ':' + cmdName;
+          let desc = extractDescription(content);
+          if (desc.length > 80) desc = desc.slice(0, 77) + '...';
+          commands.push({ cmd, desc });
+        } catch {}
+      }
+    } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      // Top-level: foo.md -> /foo
+      try {
+        const content = fs.readFileSync(path.join(dir, entry.name), 'utf8');
+        const cmdName = entry.name.replace(/\.md$/, '');
+        const nameMatch = content.match(/^---\s*\n[\s\S]*?name:\s*['"]?(.+?)['"]?\s*$/m);
+        const cmd = nameMatch ? '/' + nameMatch[1] : '/' + cmdName;
+        let desc = extractDescription(content);
+        if (desc.length > 80) desc = desc.slice(0, 77) + '...';
+        commands.push({ cmd, desc });
+      } catch {}
+    }
+  }
+  return commands;
+}
+
+function scanAllForProject(projectDir) {
   const projectSkills = scanSkillDir(path.join(projectDir, '.claude', 'skills'));
   const globalSkills = scanSkillDir(path.join(os.homedir(), '.claude', 'skills'));
-  // Project skills override global (by command name)
-  const seen = new Set(projectSkills.map(s => s.cmd));
-  const merged = [...projectSkills, ...globalSkills.filter(s => !seen.has(s.cmd))];
+  const projectCommands = scanCommandDir(path.join(projectDir, '.claude', 'commands'));
+  const globalCommands = scanCommandDir(path.join(os.homedir(), '.claude', 'commands'));
+  // Project overrides global (by command name)
+  const seen = new Set([...projectSkills, ...projectCommands].map(s => s.cmd));
+  const merged = [
+    ...projectSkills,
+    ...projectCommands,
+    ...globalSkills.filter(s => !seen.has(s.cmd)),
+    ...globalCommands.filter(s => !seen.has(s.cmd)),
+  ];
   merged.sort((a, b) => a.cmd.localeCompare(b.cmd));
   return [...BUILTIN_COMMANDS, ...merged];
 }
@@ -1438,7 +1495,7 @@ const commandsCache = new Map(); // projectDir -> { commands, watchers }
 
 function getCommandsForProject(projectDir) {
   if (commandsCache.has(projectDir)) return commandsCache.get(projectDir).commands;
-  const commands = scanSkillsForProject(projectDir);
+  const commands = scanAllForProject(projectDir);
   commandsCache.set(projectDir, { commands, watchers: [] });
   return commands;
 }
@@ -1448,7 +1505,9 @@ function watchSkillDirs(projectDir) {
   if (!entry || entry.watchers.length > 0) return; // already watching
   const dirs = [
     path.join(projectDir, '.claude', 'skills'),
+    path.join(projectDir, '.claude', 'commands'),
     path.join(os.homedir(), '.claude', 'skills'),
+    path.join(os.homedir(), '.claude', 'commands'),
   ];
   for (const dir of dirs) {
     if (!fs.existsSync(dir)) continue;
@@ -1457,7 +1516,7 @@ function watchSkillDirs(projectDir) {
         // Debounce: skills change in bursts (plugin install)
         if (entry._debounce) clearTimeout(entry._debounce);
         entry._debounce = setTimeout(() => {
-          const newCommands = scanSkillsForProject(projectDir);
+          const newCommands = scanAllForProject(projectDir);
           entry.commands = newCommands;
           audit('SKILLS', `Rescanned ${newCommands.length} commands for ${path.basename(projectDir)}`);
           // Push to all authenticated clients viewing a session in this project

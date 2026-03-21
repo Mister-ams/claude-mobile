@@ -1924,7 +1924,7 @@ let commands = [];
 const acEl = $('autocomplete');
 
 function showAutocomplete(filter) {
-  const matches = commands.filter(c => c.cmd.startsWith(filter));
+  const matches = commands.filter(c => c.cmd.startsWith(filter)).slice(0, 15);
   if (!matches.length) { acEl.classList.remove('show'); return; }
   acEl.innerHTML = '';
   matches.forEach(c => {
