@@ -627,6 +627,8 @@
 
 <script src="/vendor/xterm.min.js"></script>
 <script src="/vendor/addon-fit.min.js"></script>
+<script src="/vendor/addon-webgl.min.js"></script>
+<script src="/vendor/addon-canvas.min.js"></script>
 <script>
 let ws = null, sessions = [], activeSession = null;
 let terms = {}, fits = {}, projects = [];
@@ -1318,6 +1320,18 @@ function switchTo(id) {
     term.open(wrap);
     terms[id] = term;
     fits[id] = fitAddon;
+
+    // GPU-accelerated rendering: WebGL -> Canvas -> DOM fallback
+    try {
+      const webgl = new WebglAddon.WebglAddon();
+      webgl.onContextLost(() => {
+        webgl.dispose();
+        try { term.loadAddon(new CanvasAddon.CanvasAddon()); } catch {}
+      });
+      term.loadAddon(webgl);
+    } catch {
+      try { term.loadAddon(new CanvasAddon.CanvasAddon()); } catch {}
+    }
 
     // Single fit after layout settles
     setTimeout(() => {
