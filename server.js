@@ -82,6 +82,15 @@ function attachToTmux(name, cols, rows) {
   });
 }
 
+function getTmuxDimensions(name) {
+  try {
+    const out = wslExec(`tmux display-message -t ${name} -p '#{window_width} #{window_height}'`);
+    const [cols, rows] = out.split(' ').map(Number);
+    if (cols > 0 && rows > 0) return { cols, rows };
+  } catch {}
+  return { cols: 50, rows: 30 };
+}
+
 function captureTmuxScrollback(name) {
   try {
     return wslExec(`tmux capture-pane -t ${name} -p -e -J -S -10000`);
@@ -928,7 +937,8 @@ function wireSessionProc(session) {
       setTimeout(() => {
         if (!sessions.has(id)) return; // cleaned up already
         try {
-          session.proc = attachToTmux(session.tmuxName, 80, 24);
+          const dims = getTmuxDimensions(session.tmuxName);
+          session.proc = attachToTmux(session.tmuxName, dims.cols, dims.rows);
           wireSessionProc(session);
           audit('SESSION', `Reattached to tmux: ${session.tmuxName}`);
         } catch (e) {
@@ -961,7 +971,7 @@ function createSession(name, dir, cols, rows) {
     return null;
   }
 
-  const proc = attachToTmux(tmux, 80, 24);
+  const proc = attachToTmux(tmux, cols || 50, rows || 30);
 
   const session = {
     id, name, dir, tmuxName: tmux, proc, scrollback: '',
@@ -999,7 +1009,8 @@ function recoverTmuxSessions() {
     try {
       // Ensure alternate-screen is off (may predate this fix)
       try { wslExec(`tmux set-window-option -t ${tmux} alternate-screen off`); } catch {}
-      const proc = attachToTmux(tmux, 80, 24);
+      const dims = getTmuxDimensions(tmux);
+      const proc = attachToTmux(tmux, dims.cols, dims.rows);
       const scrollback = captureTmuxScrollback(tmux);
 
       const session = {
