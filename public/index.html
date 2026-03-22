@@ -1477,7 +1477,7 @@ function newSession() {
   const charW = 7.8; // approximate char width at 13px SF Mono
   const lineH = 13 * 1.286; // fontSize * lineHeight
   const cols = Math.floor((termArea?.clientWidth || 320) / charW);
-  const rows = Math.floor((termArea?.clientHeight || 400) / lineH);
+  const rows = 200;
   queueSend({ type: 'create', name: 'SESSION ' + num, dir: defaultDir, cols, rows });
 }
 
