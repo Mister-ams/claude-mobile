@@ -5,7 +5,7 @@ Claude Mobile Bridge -- mobile web interface for Claude Code terminal sessions o
 ## Architecture
 
 ```
-claude-mobile/                    v3.1.0
+claude-mobile/                    v3.1.1
 ├── server.js                     Node.js: Express + WebSocket + node-pty + dtach (WSL) + E2E crypto
 ├── config.json                   Projects, autoStart, tailscaleHostname, port (gitignored)
 ├── config.example.json           Template for config.json
@@ -78,7 +78,8 @@ Setup: open `http://localhost:3456/setup` on laptop to configure TOTP.
 
 ## Current State
 
-v3.1.0-alpha (tag: v3.1.0-alpha, 902755e). dtach migration complete (replaced tmux).
+v3.1.1 (tag: v3.1.1, 667019f). dtach migration complete (replaced tmux).
 Chunked scrollback writes. Server-side history replay on reconnect.
-Alpha testing in progress. Active track in `.planning/`:
+Keyboard clipping fix (no terminal refit on keyboard open/close).
+Active track in `.planning/`:
 - **v4-thin-viewer**: thin viewer architecture (executing, 0/4 waves)
