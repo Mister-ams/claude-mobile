@@ -2058,9 +2058,19 @@ window.addEventListener('resize', () => {
 // scrollToBottom(), no PTY resize. Keyboard open/close is purely visual.
 if (window.visualViewport) {
   const appEl = document.getElementById('app');
+  let kbTimer = null;
   const onViewport = () => {
     appEl.style.height = window.visualViewport.height + 'px';
     window.scrollTo(0, 0);
+    // After keyboard animation settles, refit terminal to match visible rows.
+    // This updates xterm's scroll range so content can be scrolled fully.
+    // No scrollToBottom, no PTY resize -- user scrolls manually.
+    clearTimeout(kbTimer);
+    kbTimer = setTimeout(() => {
+      if (activeSession !== null && fits[activeSession]) {
+        try { fits[activeSession].fit(); } catch {}
+      }
+    }, 400);
   };
   window.visualViewport.addEventListener('resize', onViewport);
   window.visualViewport.addEventListener('scroll', onViewport);
