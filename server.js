@@ -14,7 +14,19 @@ const {
 const { TOTP, Secret } = require('otpauth');
 
 // ─── Config ──────────────────────────────────────────────────────
-const config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
+let config;
+try {
+  config = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.json'), 'utf8'));
+} catch (e) {
+  if (e.code === 'ENOENT') {
+    process.stderr.write('config.json not found. Copy config.example.json to config.json and edit it.\n');
+  } else if (e instanceof SyntaxError) {
+    process.stderr.write('config.json is malformed: ' + e.message + '\n');
+  } else {
+    process.stderr.write('Failed to read config.json: ' + e.message + '\n');
+  }
+  process.exit(1);
+}
 const PORT = process.env.PORT || config.port || 3456;
 const MAX_SESSIONS = 8;
 const SCROLLBACK_SIZE = 400000;
@@ -52,7 +64,10 @@ function listDtachSessions() {
       const match = p.match(/cm-(\d+)\.dtach$/);
       return match ? parseInt(match[1]) : null;
     }).filter(id => id !== null);
-  } catch { return []; }
+  } catch (e) {
+    audit('ERROR', 'listDtachSessions failed (WSL may be down): ' + e.message);
+    return [];
+  }
 }
 
 // Create dtach session as daemon (dtach -n), then attach via node-pty.
@@ -93,7 +108,9 @@ function killDtachSession(id) {
     const pid = wslExec(`lsof -t ${socket} 2>/dev/null || true`);
     if (pid) wslExec(`kill ${pid} 2>/dev/null || true`);
     wslExec(`rm -f ${socket}`);
-  } catch {}
+  } catch (e) {
+    audit('WARN', 'killDtachSession failed for ' + id + ': ' + e.message);
+  }
 }
 
 // ─── Auth: No tokens. Setup via localhost only. ──────────────────
@@ -116,7 +133,12 @@ function loadTotpSecret() {
   try {
     const data = JSON.parse(fs.readFileSync(TOTP_PATH, 'utf8'));
     totpSecret = data.secret;
-  } catch {}
+  } catch (e) {
+    if (e.code !== 'ENOENT') {
+      audit('ERROR', 'loadTotpSecret failed (file may be corrupt): ' + e.message);
+      process.stderr.write('TOTP secret file corrupt or unreadable: ' + e.message + '\n');
+    }
+  }
 }
 
 function totpConfigured() { return !!totpSecret; }
@@ -156,7 +178,12 @@ function loadOrCreateIdentityKey() {
   try {
     identityKeys = JSON.parse(fs.readFileSync(IDENTITY_KEY_PATH, 'utf8'));
     return;
-  } catch {}
+  } catch (e) {
+    if (e.code !== 'ENOENT') {
+      audit('SECURITY', 'Identity key file corrupt, generating new keypair -- clients will see key change warning: ' + e.message);
+      process.stderr.write('Identity key file corrupt: ' + e.message + '\n');
+    }
+  }
   // Generate new P-256 EC keypair
   const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', {
     namedCurve: 'prime256v1',
@@ -177,16 +204,21 @@ loadOrCreateIdentityKey();
 // Convert DER-encoded ECDSA signature to IEEE P1363 (raw r||s) for Web Crypto
 function derToP1363(derSig, keySize) {
   const n = keySize; // 32 bytes for P-256
+  if (derSig[0] !== 0x30) throw new Error('Invalid DER: expected SEQUENCE tag 0x30');
   let offset = 2; // skip SEQUENCE tag + length
   if (derSig[1] & 0x80) offset += (derSig[1] & 0x7f); // long-form length
   // Read r
+  if (derSig[offset] !== 0x02) throw new Error('Invalid DER: expected INTEGER tag 0x02 for r');
   offset++; // INTEGER tag
   let rLen = derSig[offset++];
+  if (rLen & 0x80) throw new Error('Invalid DER: multi-byte length on r integer not supported');
   const rBytes = derSig.subarray(offset, offset + rLen);
   offset += rLen;
   // Read s
+  if (derSig[offset] !== 0x02) throw new Error('Invalid DER: expected INTEGER tag 0x02 for s');
   offset++; // INTEGER tag
   let sLen = derSig[offset++];
+  if (sLen & 0x80) throw new Error('Invalid DER: multi-byte length on s integer not supported');
   const sBytes = derSig.subarray(offset, offset + sLen);
   // Pad/trim to fixed size (remove leading zeros, pad to n bytes)
   const r = rBytes.length > n ? rBytes.subarray(rBytes.length - n) : Buffer.concat([Buffer.alloc(n - rBytes.length), rBytes]);
@@ -401,7 +433,9 @@ const AUDIT_PATH = path.join(os.homedir(), '.claude-mobile-audit.log');
 function audit(category, message, ip) {
   const ts = new Date().toISOString();
   const line = `${ts} [${category}] ${ip ? `(${ip}) ` : ''}${message}\n`;
-  try { fs.appendFileSync(AUDIT_PATH, line); } catch {}
+  try { fs.appendFileSync(AUDIT_PATH, line); } catch (e) {
+    process.stderr.write('audit write failed: ' + e.message + '\n');
+  }
   console.log(`  [audit] ${category}: ${message}`);
 }
 
@@ -461,10 +495,19 @@ let storedCredentials = [];
 
 try {
   storedCredentials = JSON.parse(fs.readFileSync(CRED_PATH, 'utf8'));
-} catch {}
+} catch (e) {
+  if (e.code !== 'ENOENT') {
+    audit('ERROR', 'Credentials file corrupt or unreadable: ' + e.message);
+    process.stderr.write('Credentials file corrupt: ' + e.message + '\n');
+  }
+}
 
 function saveCredentials() {
-  fs.writeFileSync(CRED_PATH, JSON.stringify(storedCredentials, null, 2));
+  try {
+    fs.writeFileSync(CRED_PATH, JSON.stringify(storedCredentials, null, 2));
+  } catch (e) {
+    audit('ERROR', 'Credential save failed: ' + e.message);
+  }
 }
 
 // Active challenges for WebAuthn
