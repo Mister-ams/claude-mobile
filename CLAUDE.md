@@ -5,11 +5,11 @@ Claude Mobile Bridge -- mobile web interface for Claude Code terminal sessions o
 ## Architecture
 
 ```
-claude-mobile/                    v3.0.0
-├── server.js                     Node.js: Express + WebSocket + node-pty + tmux (WSL) + E2E crypto
+claude-mobile/                    v3.1.0
+├── server.js                     Node.js: Express + WebSocket + node-pty + dtach (WSL) + E2E crypto
 ├── config.json                   Projects, autoStart, tailscaleHostname, port (gitignored)
 ├── config.example.json           Template for config.json
-├── install.sh                    Full setup script (WSL, tmux, PM2, Tailscale serve)
+├── install.sh                    Full setup script (WSL, dtach, PM2, Tailscale serve)
 ├── update.sh                     Pull + deps + PM2 restart
 ├── public/
 │   ├── index.html                Self-contained mobile web UI (xterm.js, custom input, Palantir theme)
@@ -21,13 +21,16 @@ claude-mobile/                    v3.0.0
 
 ## How it works
 
-- Claude Code runs inside tmux (WSL Ubuntu-24.04) for session persistence across server restarts
-- node-pty spawns `wsl.exe` to attach to tmux sessions; raw ANSI streams over WebSocket to xterm.js
-- History restored via `tmux capture-pane -p -e -J -S -10000` (rendered text + colors, joined lines)
-- Raw scrollback buffer MUST NOT be sent to client -- replays old TUI cursor positioning, corrupts display
+- Claude Code runs inside dtach (WSL Ubuntu-24.04) for session persistence across server restarts
+- dtach detaches/reattaches pty sessions without terminal emulation -- xterm.js gets raw pty output
+- node-pty spawns `wsl.exe` to attach to dtach sessions; raw ANSI streams over WebSocket to xterm.js
+- Server-side 400KB ring buffer (`session.scrollback`) captures all pty output for history replay
+- On reconnect, server sends buffer to client; client uses `term.reset()` + chunked writes (50 lines/batch)
 - Tailscale VPN provides zero-public-surface networking; `tailscale serve` proxies HTTPS -> localhost:3456
-- PM2 manages the daemon; tmux sessions survive PM2/node restarts (live in WSL)
+- PM2 manages the daemon; dtach sessions survive PM2/node restarts (live in WSL as socket files)
 - Attention detection (5s debounce) triggers Web Notifications + vibration on permission prompts, questions, idle prompt
+- GPU-accelerated rendering: WebGL -> Canvas -> DOM fallback chain (v3.0.2)
+- Slash command discovery: scans skills/ + commands/ directories (v3.0.1)
 
 ## Security (4-tier)
 
@@ -43,7 +46,9 @@ claude-mobile/                    v3.0.0
 - xterm.js `disableStdin: true` -- all input via textarea, avoids iOS keyboard bugs
 - `interactive-widget=resizes-content` in viewport meta -- iOS manages keyboard natively, no JS height management
 - Terminal refits on WIDTH change only (orientation). Height changes: zero JS interaction with xterm.js
-- tmux alternate screen disabled (`smcup@:rmcup@` + `alternate-screen off`) for scroll history access
+- dtach for process persistence -- no terminal emulation layer, no alternate screen issues
+- `session.scrollback` (400KB ring buffer) replaces tmux capture-pane for history replay
+- Chunked scrollback writes (50-line batches via term.write callback) prevent xterm.js parser corruption
 - Claude launched via `cmd.exe /c claude` (Windows interop from WSL) -- uses existing Windows auth
 - Sessions created at phone's column width (client sends cols/rows on create)
 - No bracketed paste -- Claude Code TUI ignores \r after paste sequences; send plain text + \r
@@ -61,13 +66,18 @@ Setup: open `http://localhost:3456/setup` on laptop to configure TOTP.
 
 ## Gotchas
 
-- NEVER send raw `session.scrollback` to client -- use `tmux capture-pane` for history
 - No JS should change `appEl.style.height` or call `scrollToBottom` on resize events
 - `doResize()` must check `proposeDimensions()` before `fit()` -- skip if cols/rows unchanged
-- Dots appear during active Claude Code work (alternate screen off trade-off) -- settles when done
-- WSL Ubuntu-24.04 must be running for tmux sessions to work
-- tmux sessions named `cm-{id}` -- do not manually create with that prefix
+- WSL Ubuntu-24.04 must be running for dtach sessions to work
+- dtach sessions use socket files at `/tmp/cm-{id}.dtach` -- do not manually create with that prefix
+- After PM2 restart, scrollback buffer starts empty and rebuilds from live output
 - `.session-meta.json` persists session names across restarts
 - config.json is gitignored; config.example.json is the template
 - Port 3456 must be free (PM2 manages lifecycle; `pm2 stop claude-mobile` to free it)
 - Passkeys must be re-registered if tailscaleHostname changes (rpID binding)
+
+## Current State
+
+v3.1.0. dtach migration complete (replaced tmux). Chunked scrollback writes.
+Server-side history replay on reconnect. Active track in `.planning/`:
+- **v4-thin-viewer**: thin viewer architecture (executing, 0/4 waves)
