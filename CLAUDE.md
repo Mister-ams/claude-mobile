@@ -78,6 +78,7 @@ Setup: open `http://localhost:3456/setup` on laptop to configure TOTP.
 
 ## Current State
 
-v3.1.0. dtach migration complete (replaced tmux). Chunked scrollback writes.
-Server-side history replay on reconnect. Active track in `.planning/`:
+v3.1.0-alpha (tag: v3.1.0-alpha, 902755e). dtach migration complete (replaced tmux).
+Chunked scrollback writes. Server-side history replay on reconnect.
+Alpha testing in progress. Active track in `.planning/`:
 - **v4-thin-viewer**: thin viewer architecture (executing, 0/4 waves)

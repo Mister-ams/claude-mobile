@@ -1,0 +1,25 @@
+schema_version: 1
+feature: scrollback-and-dtach
+plan: .planning/plan-scrollback-and-dtach.md
+tech_design: .planning/tech-design-scrollback-and-dtach.md
+status: completed
+updated: 2026-03-23
+
+sprint:
+  current: 1
+  total: 1
+
+wave:
+  current: 3
+  total: 3
+
+completed:
+  - T01: Chunked scrollback writes (025d5da)
+  - T02: Install dtach in WSL (1cff5ca)
+  - T03: Replace tmux with dtach (b1ffb4f)
+  - T04: Server-side buffer replay (b1ffb4f)
+  - T05: dtach session recovery (b1ffb4f)
+  - T06: Remove diagnostic logging (0402d88)
+  - T07: Update CLAUDE.md (3928195)
+blocked: []
+retrospective: []
