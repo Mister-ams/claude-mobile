@@ -55,23 +55,17 @@ function listDtachSessions() {
   } catch { return []; }
 }
 
-// Create new dtach session AND attach in one step via node-pty.
-// dtach -c creates the session with the pty already connected -- avoids
-// "no stdin data" termination that happens with dtach -n (no terminal).
-function createAndAttachDtach(id, wslDir, cols, rows) {
+// Create dtach session as daemon (dtach -n), then attach via node-pty.
+// dtach -n runs bash as a daemon -- survives PM2/node restarts.
+// cmd.exe can't run under dtach -n directly (Windows interop needs a
+// real terminal), so we create a bash shell first, attach, then send
+// the claude command via the pty.
+function createDtachDaemon(id, wslDir) {
   const socket = dtachSocket(id);
-  const c = Math.max(10, Math.min(500, parseInt(cols, 10) || 50));
-  const r = Math.max(5, Math.min(200, parseInt(rows, 10) || 30));
-  return pty.spawn('wsl.exe', [
-    '-d', WSL_DISTRO, '-u', 'root', '--',
-    'bash', '-c', `cd '${wslDir}' && dtach -c ${socket} -z bash -c 'cmd.exe /c claude'`
-  ], {
-    name: 'xterm-256color', cols: c, rows: r,
-    env: getSafeEnv()
-  });
+  wslExec(`cd '${wslDir}' && TERM=xterm-256color dtach -n ${socket} -z bash`);
 }
 
-// Attach to an existing dtach session (recovery, reconnect after PTY exit)
+// Attach to an existing dtach session via node-pty
 function attachToDtach(id, cols, rows) {
   const socket = dtachSocket(id);
   return pty.spawn('wsl.exe', [
@@ -953,13 +947,28 @@ function createSession(name, dir, cols, rows) {
   const id = nextId++;
   const wslDir = winPathToWsl(dir);
 
-  let proc;
   try {
-    proc = createAndAttachDtach(id, wslDir, cols, rows);
+    createDtachDaemon(id, wslDir);
   } catch (e) {
     audit('ERROR', `dtach create failed: ${e.message}`);
     return null;
   }
+
+  // Brief pause for socket to appear
+  try { execSync('timeout /t 1 /nobreak >nul 2>&1', { timeout: 3000 }); } catch {}
+
+  let proc;
+  try {
+    proc = attachToDtach(id, cols || 50, rows || 30);
+  } catch (e) {
+    audit('ERROR', `dtach attach failed: ${e.message}`);
+    return null;
+  }
+
+  // Send claude command via pty (bash is running inside dtach)
+  setTimeout(() => {
+    try { proc.write('cmd.exe /c claude\r'); } catch {}
+  }, 500);
 
   const session = {
     id, name, dir, proc, scrollback: '',
@@ -975,13 +984,19 @@ function createSession(name, dir, cols, rows) {
 
 // Recover existing dtach sessions after server restart
 function recoverDtachSessions() {
-  const existing = listDtachSessions();
+  let existing;
+  try {
+    existing = listDtachSessions();
+    console.log(`  dtach scan: found ${existing.length} socket(s): ${JSON.stringify(existing)}`);
+  } catch (e) {
+    console.log(`  dtach scan failed: ${e.message}`);
+    return;
+  }
   if (existing.length === 0) return;
 
   console.log(`  Recovering ${existing.length} dtach session(s)...`);
   const meta = loadSessionMeta();
   for (const idNum of existing) {
-    // Restore name and dir from saved metadata, fall back to generic
     const metaKey = `cm-${idNum}`;
     const saved = meta[metaKey];
     const name = saved?.name || `Recovered-${idNum}`;
@@ -989,6 +1004,7 @@ function recoverDtachSessions() {
 
     try {
       const proc = attachToDtach(idNum, 80, 24);
+      console.log(`  dtach attach: pid=${proc.pid} for ${metaKey}`);
 
       const session = {
         id: idNum, name, dir, proc,
@@ -1001,10 +1017,10 @@ function recoverDtachSessions() {
       if (idNum >= nextId) nextId = idNum + 1;
       console.log(`  Recovered: "${name}" (${metaKey})`);
     } catch (e) {
+      console.log(`  Recovery FAILED for ${metaKey}: ${e.message}`);
       audit('ERROR', `Recovery failed for ${metaKey}: ${e.message}`);
     }
   }
-  // Persist metadata immediately so renames from this session are captured
   if (sessions.size > 0) saveSessionMeta();
 }
 
