@@ -804,7 +804,10 @@ async function secureReceive(rawData) {
         { name: 'AES-GCM', iv, additionalData: seqBuf }, e2eKey, ciphertext);
       e2eRecvSeq = parsed.n;
       return JSON.parse(new TextDecoder().decode(decrypted));
-    } catch { return null; }
+    } catch (err) {
+      console.error('DECRYPT FAILED:', err.message, 'payload:', parsed.e?.length, 'bytes, seq:', parsed.n);
+      return null;
+    }
   }
   // Plaintext after encryption = anti-downgrade violation
   if (e2eReady) return null;
@@ -1099,8 +1102,10 @@ function doConnect(method, totpCode) {
   ws.onmessage = async (e) => {
     // Safari may deliver WebSocket data as Blob instead of string
     const rawData = typeof e.data === 'string' ? e.data : await e.data.text();
+    console.log('WS raw:', rawData.length, 'bytes');
     const msg = await secureReceive(rawData);
-    if (!msg) return;
+    if (!msg) { console.warn('secureReceive returned null for', rawData.length, 'byte message'); return; }
+    console.log('MSG:', msg.type, msg.data ? msg.data.length + 'b' : '');
     // Handle key-exchange first
     if (msg.type === 'key-exchange') {
       await handleKeyExchange(msg);
@@ -1245,7 +1250,11 @@ function handle(m) {
       }
       break;
     case 'scrollback':
-      if (terms[m.session]) terms[m.session].write(m.data);
+      console.log('SCROLLBACK received:', m.data ? m.data.length + ' bytes' : 'no data', 'session:', m.session, 'term exists:', !!terms[m.session]);
+      if (terms[m.session]) {
+        terms[m.session].write(m.data);
+        console.log('SCROLLBACK written to xterm.js');
+      }
       break;
     case 'attention':
       const s = sessions.find(x => x.id === m.session);

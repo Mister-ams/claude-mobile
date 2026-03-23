@@ -1264,10 +1264,13 @@ wss.on('connection', (ws, req) => {
         if (targetSession.tmuxName) {
           try {
             const history = captureTmuxScrollback(targetSession.tmuxName);
+            audit('SCROLLBACK', `captured ${history ? history.length : 0} bytes, ${history ? history.split('\n').length : 0} lines for ${targetSession.tmuxName}`);
             if (history) {
+              audit('SCROLLBACK', `sending ${history.length} bytes to client`);
               secureSend(ws, { type: 'scrollback', session: targetSession.id, data: history + '\r\n' });
+              audit('SCROLLBACK', `secureSend completed`);
             }
-          } catch {}
+          } catch (e) { audit('ERROR', `scrollback failed: ${e.message}`); }
         }
         if (targetSession.attention) {
           secureSend(ws, { type: 'attention', session: targetSession.id, reason: targetSession.attention });
