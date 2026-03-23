@@ -1,0 +1,18 @@
+schema_version: 1
+feature: v4-thin-viewer
+plan: .planning/plan-v4-thin-viewer.md
+tech_design: .planning/tech-design-v4-thin-viewer.md
+status: executing
+updated: 2026-03-23
+
+sprint:
+  current: 1
+  total: 1
+
+wave:
+  current: 0
+  total: 4
+
+completed: []
+blocked: []
+retrospective: []

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────
-# Claude Mobile v3.0.0 -- Installer
+# Claude Mobile v3.1.3 -- Installer
 # Checks prerequisites, clones repo, configures Tailscale,
-# sets up WSL/tmux, installs deps, and runs TOTP setup.
+# sets up WSL/dtach, installs deps, and runs TOTP setup.
 # ─────────────────────────────────────────────────────────
 set -e
 
-VERSION="3.0.0"
+VERSION="3.1.3"
 REPO="https://github.com/Mister-ams/claude-mobile.git"
 DEFAULT_DIR="$HOME/Projects/claude-mobile"
 PORT=3456

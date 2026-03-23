@@ -1,6 +1,6 @@
-# Claude Mobile v3.0.0
+# Claude Mobile v3.1.3
 
-Mobile terminal gateway for Claude Code. Access your Claude Code sessions from your iPhone over Tailscale VPN with end-to-end encryption, Face ID authentication, and persistent tmux sessions.
+Mobile terminal gateway for Claude Code. Access your Claude Code sessions from your iPhone over Tailscale VPN with end-to-end encryption, Face ID authentication, and persistent dtach sessions.
 
 ## Quick Install
 
@@ -10,7 +10,7 @@ cd claude-mobile
 bash install.sh
 ```
 
-The installer walks you through everything -- prerequisites, Tailscale, WSL/tmux, project config, and TOTP setup.
+The installer walks you through everything -- prerequisites, Tailscale, WSL/dtach, project config, and TOTP setup.
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@ The installer walks you through everything -- prerequisites, Tailscale, WSL/tmux
 | Node.js 18+ | Server runtime | [nodejs.org](https://nodejs.org) |
 | Tailscale | VPN tunnel (phone <-> laptop) | `winget install Tailscale.Tailscale` |
 | Claude Code CLI | Terminal sessions | `npm i -g @anthropic-ai/claude-code` |
-| WSL + Ubuntu 24.04 | tmux host (Windows only) | `wsl --install Ubuntu-24.04` |
+| WSL + Ubuntu 24.04 | dtach host (Windows only) | `wsl --install Ubuntu-24.04` |
 | PM2 | Background daemon | `npm i -g pm2` |
 
 Tailscale must be installed on **both** your laptop and iPhone, logged into the same account.
@@ -34,12 +34,15 @@ Pulls latest, updates deps, restarts PM2. Config and credentials are preserved.
 
 ## What It Does
 
-- Spawns Claude Code inside tmux (WSL), streams to your phone via WebSocket
+- Spawns Claude Code inside dtach (WSL), streams to your phone via WebSocket
 - End-to-end encrypted (ECDH P-256 + AES-256-GCM) -- Tailscale sees double-encrypted blobs
-- tmux sessions survive server restarts, PM2 crashes, and laptop reboots (WSL stays running)
+- dtach daemon sessions survive server restarts and PM2 crashes
+- Server-side 400KB scrollback buffer replays history on phone reconnect
+- GPU-accelerated rendering (WebGL -> Canvas -> DOM fallback chain)
 - xterm.js terminal with Palantir/Blueprint theme (dark + light mode)
 - Slash command autocomplete (discovered from .claude/skills/)
-- Touch scroll zones with arrow overlays (left/right when keyboard open)
+- Touch scroll zones with arrow overlays (left/right split)
+- Keyboard-aware layout: debounced refit for full scroll range, manual scroll
 - Multi-session support (up to 8 parallel sessions)
 - Attention notifications when Claude needs your input (vibration + red dot)
 - Image upload for sharing screenshots with Claude
@@ -79,7 +82,7 @@ pm2 status
 # Logs
 pm2 logs claude-mobile --lines 20 --nostream
 
-# Restart (tmux sessions survive)
+# Restart (dtach sessions survive)
 pm2 restart claude-mobile
 ```
 
@@ -121,9 +124,9 @@ Edit `config.json` (created by installer, gitignored):
 
 ```
 claude-mobile/
-  server.js               Express + WS + node-pty + tmux + E2E crypto + auth
+  server.js               Express + WS + node-pty + dtach + E2E crypto + auth
   public/index.html        Mobile web UI (xterm.js + Palantir theme)
-  public/vendor/           Bundled xterm.js + addons (no CDN)
+  public/vendor/           Bundled xterm.js + addons (WebGL, Canvas, fit)
   install.sh               Full setup script
   update.sh                Pull + deps + PM2 restart
   config.json              Your settings (gitignored)
@@ -137,12 +140,14 @@ claude-mobile/
 ## Rendering Pipeline
 
 ```
-Claude Code -> tmux (WSL) -> node-pty (wsl.exe attach) -> WebSocket -> xterm.js (canvas)
+Claude Code -> dtach (WSL daemon) -> node-pty (wsl.exe attach) -> WebSocket -> xterm.js (WebGL)
 ```
 
-- Raw ANSI passthrough from tmux to xterm.js -- no server-side processing
-- History restored via `tmux capture-pane -p -e -J -S -10000`
-- tmux alternate screen disabled for scroll history access (minor visual artifacts during active rendering)
+- dtach provides pty persistence without terminal emulation overhead
+- Raw ANSI passthrough from dtach to xterm.js -- no server-side processing
+- Server-side 400KB ring buffer captures all pty output for history replay
+- On reconnect: server sends buffer, client uses chunked writes (50-line batches + term.reset)
+- GPU-accelerated rendering: WebGL primary, Canvas fallback, DOM last resort
 - Sessions created at phone's column width
 
 ## Troubleshooting
@@ -153,10 +158,33 @@ Claude Code -> tmux (WSL) -> node-pty (wsl.exe attach) -> WebSocket -> xterm.js 
 | Stuck on "Connecting securely..." | Delete `.server-identity-key` and restart. Clear site data on phone |
 | TOTP code rejected | Check phone clock is synced. Codes are valid for 90 seconds |
 | Face ID not offered | Register passkey first: connect via TOTP, accept the passkey prompt |
-| Terminal blank after reconnect | tmux session may have exited. Create a new session from the UI |
-| iOS keyboard causes jumping | Should not happen on v3+. If so, check viewport meta tag intact |
+| Terminal blank after reconnect | dtach session may have exited. Create a new session from the UI |
+| Keyboard clipping | Should not happen on v3.1+. If so, check viewport meta tag intact |
 | Passkeys broken after hostname change | Re-register passkeys (rpID is bound to Tailscale hostname) |
 | WSL not starting | Run `wsl --list` to verify Ubuntu-24.04 is installed |
+| Sessions lost on restart | Check `wsl -d Ubuntu-24.04 -u root -- ls /tmp/cm-*.dtach` for sockets |
+
+## Changelog
+
+### v3.1.3 (2026-03-23)
+- **dtach migration**: replaced tmux with dtach for session persistence
+- **Daemon mode**: dtach -n creates daemon sessions that survive PM2 restarts
+- **Server-side history**: 400KB ring buffer replays on reconnect (no history loss)
+- **Chunked scrollback**: 50-line batched writes prevent xterm.js parser corruption
+- **Keyboard fix**: debounced fit() after animation, manual scroll, no clipping
+- **Cleanup**: removed diagnostic logging, streamlined installer for dtach
+
+### v3.0.2 (2026-03-22)
+- GPU-accelerated rendering (WebGL -> Canvas -> DOM fallback)
+
+### v3.0.1 (2026-03-22)
+- Slash command discovery (skills/ + commands/ directories)
+- Scroll and keyboard stability fixes
+
+### v3.0.0 (2026-03-20)
+- Installer overhaul (4-phase, platform detection)
+- Safari-style swipe navigation between sessions
+- README rewrite
 
 ## License
 
