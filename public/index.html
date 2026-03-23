@@ -2041,12 +2041,8 @@ function updateDiag(cols, rows) {
   el.textContent = `PTY:${cols}x${rows} | VP:${vvW}x${vvH} | Win:${wW}x${wH} | Term:${taH}px`;
 }
 
-// iOS keyboard: interactive-widget=resizes-content doesn't work reliably in
-// standalone/PWA mode. Use visualViewport to resize #app + pin scroll so the
-// keyboard doesn't overlay the input bar. doResize() is width-gated so the
-// terminal won't refit -- flex just compresses #term-area.
+// Width-only resize handler (orientation changes, not keyboard)
 let lastWidth = window.innerWidth;
-
 window.addEventListener('resize', () => {
   const w = window.innerWidth;
   if (w !== lastWidth) {
@@ -2055,38 +2051,16 @@ window.addEventListener('resize', () => {
   }
 });
 
-// Keyboard: terminal size is fixed (phone screen doesn't change). Don't resize
-// anything. Just float the input area above the keyboard using position:fixed.
-// Two terminal states: full-screen (keyboard closed) and keyboard-screen.
-// Resize #app to visualViewport height, flex layout compresses #term-area,
-// debounced refit adapts terminal row count. No floating, no padding hacks.
+// iOS keyboard: resize #app so flex compresses #term-area and the input bar
+// stays visible above the keyboard. Terminal dimensions do NOT change --
+// xterm.js keeps its cols/rows, bottom rows are hidden behind keyboard,
+// user scrolls within xterm.js viewport to see content. No fit(), no
+// scrollToBottom(), no PTY resize. Keyboard open/close is purely visual.
 if (window.visualViewport) {
   const appEl = document.getElementById('app');
-  const fullH = window.visualViewport.height;
-  let refitTimer = null;
-  let kbState = false;
   const onViewport = () => {
-    const h = window.visualViewport.height;
-    const kbOpen = h < fullH - 50;
-    appEl.style.height = h + 'px';
+    appEl.style.height = window.visualViewport.height + 'px';
     window.scrollTo(0, 0);
-    if (kbOpen !== kbState) {
-      kbState = kbOpen;
-      // Debounce refit -- wait for keyboard animation to settle
-      clearTimeout(refitTimer);
-      refitTimer = setTimeout(() => {
-        if (activeSession !== null && fits[activeSession]) {
-          try {
-            fits[activeSession].fit();
-            terms[activeSession]?.scrollToBottom();
-            const dims = fits[activeSession].proposeDimensions();
-            if (dims && ws && ws.readyState === 1) {
-              queueSend({ type: 'resize', cols: dims.cols, rows: dims.rows });
-            }
-          } catch {}
-        }
-      }, 350);
-    }
   };
   window.visualViewport.addEventListener('resize', onViewport);
   window.visualViewport.addEventListener('scroll', onViewport);
