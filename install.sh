@@ -135,28 +135,28 @@ else
   PREREQ_PASS=false
 fi
 
-# -- WSL + tmux (Windows only) --
+# -- WSL + dtach (Windows only) --
 WSL_DISTRO="Ubuntu-24.04"
 if $IS_WINDOWS; then
   if wsl --list --quiet 2>/dev/null | grep -qi "Ubuntu-24.04"; then
     ok "WSL Ubuntu-24.04"
-    # Check tmux inside WSL
-    if wsl -d "$WSL_DISTRO" -u root -- bash -c "command -v tmux" &>/dev/null 2>&1; then
-      ok "tmux (WSL)"
+    # Check dtach inside WSL
+    if wsl -d "$WSL_DISTRO" -u root -- bash -c "command -v dtach" &>/dev/null 2>&1; then
+      ok "dtach (WSL)"
     else
-      skip "tmux not yet installed in WSL (will install in Phase 3)"
+      skip "dtach not yet installed in WSL (will install in Phase 3)"
     fi
   else
     skip "WSL Ubuntu-24.04 not installed (will install in Phase 3)"
   fi
-elif command -v tmux &>/dev/null; then
-  ok "tmux $(tmux -V 2>/dev/null | cut -d' ' -f2)"
+elif command -v dtach &>/dev/null; then
+  ok "dtach"
 else
-  warn "tmux not found -- sessions won't persist across restarts"
+  warn "dtach not found -- sessions won't persist across restarts"
   if $IS_MAC; then
-    echo -e "    ${DIM}Install: brew install tmux${RESET}"
+    echo -e "    ${DIM}Install: brew install dtach${RESET}"
   else
-    echo -e "    ${DIM}Install: sudo apt install tmux${RESET}"
+    echo -e "    ${DIM}Install: sudo apt install dtach${RESET}"
   fi
 fi
 
@@ -289,9 +289,9 @@ if ! $PM2_INSTALLED; then
   fi
 fi
 
-# -- WSL + tmux (Windows only) --
+# -- WSL + dtach (Windows only) --
 if $IS_WINDOWS; then
-  say "Setting up WSL + tmux..."
+  say "Setting up WSL + dtach..."
 
   if ! wsl --list --quiet 2>/dev/null | grep -qi "Ubuntu-24.04"; then
     say "Installing WSL Ubuntu-24.04 (this may take a few minutes)..."
@@ -299,9 +299,9 @@ if $IS_WINDOWS; then
     ok "Ubuntu-24.04 installed"
   fi
 
-  say "Installing tmux + Claude Code in WSL..."
+  say "Installing dtach + Claude Code in WSL..."
   wsl -d "$WSL_DISTRO" -u root -- bash -c "
-    apt-get update -qq && apt-get install -y -qq tmux curl > /dev/null 2>&1
+    apt-get update -qq && apt-get install -y -qq dtach curl > /dev/null 2>&1
     if ! command -v node &>/dev/null; then
       curl -fsSL https://deb.nodesource.com/setup_22.x | bash - > /dev/null 2>&1
       apt-get install -y -qq nodejs > /dev/null 2>&1
@@ -312,15 +312,15 @@ if $IS_WINDOWS; then
     if ! command -v claude &>/dev/null; then
       npm install -g @anthropic-ai/claude-code > /dev/null 2>&1
     fi
-    echo \"tmux \$(tmux -V | cut -d' ' -f2), node \$(node -v), pm2 \$(pm2 -v 2>/dev/null | tail -1)\"
-  " 2>/dev/null && ok "WSL tools installed" || warn "WSL setup had issues -- tmux persistence may not work"
+    echo \"dtach installed, node \$(node -v), pm2 \$(pm2 -v 2>/dev/null | tail -1)\"
+  " 2>/dev/null && ok "WSL tools installed" || warn "WSL setup had issues -- dtach persistence may not work"
 elif ! $IS_WINDOWS; then
-  if ! command -v tmux &>/dev/null; then
-    warn "tmux not installed. Session persistence requires tmux."
+  if ! command -v dtach &>/dev/null; then
+    warn "dtach not installed. Session persistence requires dtach."
     if $IS_MAC; then
-      echo -e "    ${DIM}brew install tmux${RESET}"
+      echo -e "    ${DIM}brew install dtach${RESET}"
     else
-      echo -e "    ${DIM}sudo apt install tmux${RESET}"
+      echo -e "    ${DIM}sudo apt install dtach${RESET}"
     fi
   fi
 fi
