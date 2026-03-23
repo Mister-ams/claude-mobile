@@ -55,15 +55,23 @@ function listDtachSessions() {
   } catch { return []; }
 }
 
-function createDtachSession(id, wslDir, cols, rows) {
+// Create new dtach session AND attach in one step via node-pty.
+// dtach -c creates the session with the pty already connected -- avoids
+// "no stdin data" termination that happens with dtach -n (no terminal).
+function createAndAttachDtach(id, wslDir, cols, rows) {
   const socket = dtachSocket(id);
   const c = Math.max(10, Math.min(500, parseInt(cols, 10) || 50));
   const r = Math.max(5, Math.min(200, parseInt(rows, 10) || 30));
-  // dtach -n creates a new session in background (-z disables suspend)
-  // TERM must be set for Claude Code TUI rendering
-  wslExec(`cd '${wslDir}' && TERM=xterm-256color dtach -n ${socket} -z bash -c 'cmd.exe /c claude'`);
+  return pty.spawn('wsl.exe', [
+    '-d', WSL_DISTRO, '-u', 'root', '--',
+    'bash', '-c', `cd '${wslDir}' && dtach -c ${socket} -z bash -c 'cmd.exe /c claude'`
+  ], {
+    name: 'xterm-256color', cols: c, rows: r,
+    env: getSafeEnv()
+  });
 }
 
+// Attach to an existing dtach session (recovery, reconnect after PTY exit)
 function attachToDtach(id, cols, rows) {
   const socket = dtachSocket(id);
   return pty.spawn('wsl.exe', [
@@ -78,14 +86,10 @@ function attachToDtach(id, cols, rows) {
 function dtachSessionAlive(id) {
   const socket = dtachSocket(id);
   try {
-    // Check socket file exists and process is alive
-    wslExec(`test -S ${socket} && dtach -a ${socket} -E 2>/dev/null`);
+    // Check socket file exists (dtach cleans up on process exit)
+    wslExec(`test -S ${socket}`);
     return true;
-  } catch {
-    // Socket file might exist but be stale -- check if it's there at all
-    try { wslExec(`test -S ${socket}`); return true; }
-    catch { return false; }
-  }
+  } catch { return false; }
 }
 
 function killDtachSession(id) {
@@ -949,17 +953,13 @@ function createSession(name, dir, cols, rows) {
   const id = nextId++;
   const wslDir = winPathToWsl(dir);
 
+  let proc;
   try {
-    createDtachSession(id, wslDir, cols, rows);
+    proc = createAndAttachDtach(id, wslDir, cols, rows);
   } catch (e) {
     audit('ERROR', `dtach create failed: ${e.message}`);
     return null;
   }
-
-  // Brief delay to let dtach socket appear before attaching
-  try { execSync('timeout /t 1 /nobreak >nul 2>&1', { timeout: 3000 }); } catch {}
-
-  const proc = attachToDtach(id, cols || 50, rows || 30);
 
   const session = {
     id, name, dir, proc, scrollback: '',
