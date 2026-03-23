@@ -1259,9 +1259,23 @@ function handle(m) {
       break;
     case 'scrollback':
       clientLog('SCROLLBACK recv:' + (m.data ? m.data.length + 'bytes' : 'nodata') + ' session:' + m.session + ' term:' + !!terms[m.session]);
-      if (terms[m.session]) {
-        terms[m.session].write(m.data);
-        clientLog('SCROLLBACK written to xterm');
+      if (terms[m.session] && m.data) {
+        const term = terms[m.session];
+        term.reset();
+        const lines = m.data.split('\n');
+        const CHUNK = 50;
+        let i = 0;
+        function writeNextChunk() {
+          if (i >= lines.length) {
+            term.scrollToBottom();
+            clientLog('SCROLLBACK chunked write complete: ' + lines.length + ' lines');
+            return;
+          }
+          const chunk = lines.slice(i, i + CHUNK).join('\n');
+          i += CHUNK;
+          term.write(chunk + '\n', writeNextChunk);
+        }
+        writeNextChunk();
       }
       break;
     case 'attention':
