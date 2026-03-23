@@ -1110,10 +1110,8 @@ function doConnect(method, totpCode) {
   ws.onmessage = async (e) => {
     // Safari may deliver WebSocket data as Blob instead of string
     const rawData = typeof e.data === 'string' ? e.data : await e.data.text();
-    clientLog('WS raw:' + rawData.length + 'bytes');
     const msg = await secureReceive(rawData);
-    if (!msg) { clientLog('secureReceive NULL for ' + rawData.length + 'byte msg'); return; }
-    clientLog('MSG:' + msg.type + (msg.data ? ' ' + msg.data.length + 'b' : ''));
+    if (!msg) return;
     // Handle key-exchange first
     if (msg.type === 'key-exchange') {
       await handleKeyExchange(msg);
@@ -1258,7 +1256,6 @@ function handle(m) {
       }
       break;
     case 'scrollback':
-      clientLog('SCROLLBACK recv:' + (m.data ? m.data.length + 'bytes' : 'nodata') + ' session:' + m.session + ' term:' + !!terms[m.session]);
       if (terms[m.session] && m.data) {
         const term = terms[m.session];
         term.reset();
@@ -1268,7 +1265,6 @@ function handle(m) {
         function writeNextChunk() {
           if (i >= lines.length) {
             term.scrollToBottom();
-            clientLog('SCROLLBACK chunked write complete: ' + lines.length + ' lines');
             return;
           }
           const chunk = lines.slice(i, i + CHUNK).join('\n');

@@ -1279,10 +1279,7 @@ wss.on('connection', (ws, req) => {
         break;
       }
 
-      case 'client-log': {
-        audit('CLIENT', msg.message, ws._ip);
-        break;
-      }
+      case 'client-log': break; // kept for backward compat with older clients
 
       case 'rename': {
         if (!targetSession || !msg.name) break;
