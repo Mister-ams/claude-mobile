@@ -1269,7 +1269,8 @@ function handle(m) {
           }
           const chunk = lines.slice(i, i + CHUNK).join('\n');
           i += CHUNK;
-          term.write(chunk + '\n', writeNextChunk);
+          const separator = (i < lines.length) ? '\n' : '';
+          term.write(chunk + separator, writeNextChunk);
         }
         writeNextChunk();
       }

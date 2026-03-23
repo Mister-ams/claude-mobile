@@ -77,7 +77,8 @@ function listDtachSessions() {
 // the claude command via the pty.
 function createDtachDaemon(id, wslDir) {
   const socket = dtachSocket(id);
-  wslExec(`cd '${wslDir}' && TERM=xterm-256color dtach -n ${socket} -z bash`);
+  const safeDir = wslDir.replace(/'/g, "'\\''");
+  wslExec(`cd '${safeDir}' && TERM=xterm-256color dtach -n ${socket} -z bash`);
 }
 
 // Attach to an existing dtach session via node-pty
@@ -281,6 +282,10 @@ function completeKeyExchange(ws, clientEphPubHex) {
 function secureSend(ws, obj) {
   if (!ws.encrypted || !ws._sessionKey) {
     // Pre-encryption: only key-exchange messages allowed
+    if (obj.type !== 'key-exchange') {
+      audit('SECURITY', 'Dropped pre-encryption message: ' + (obj.type || 'unknown'), ws._ip);
+      return;
+    }
     ws.send(JSON.stringify(obj));
     return;
   }
@@ -302,14 +307,20 @@ function secureSend(ws, obj) {
 function secureReceive(ws, rawStr) {
   let parsed;
   try { parsed = JSON.parse(rawStr); } catch { return null; }
-  // Key exchange messages are always plaintext
-  if (parsed.type === 'key-exchange') return parsed;
+  // Key exchange messages are always plaintext -- but block after encryption established
+  if (parsed.type === 'key-exchange') {
+    if (ws.encrypted) {
+      audit('SECURITY', 'key-exchange after encryption established -- rejected', ws._ip);
+      return null;
+    }
+    return parsed;
+  }
   // Encrypted message
   if (parsed.e) {
     if (!ws.encrypted || !ws._sessionKey) return null;
-    // Replay protection: sequence must be strictly increasing
-    if (parsed.n <= ws._recvSeq) {
-      audit('SECURITY', `Replay detected: seq ${parsed.n} <= ${ws._recvSeq}`, ws._ip);
+    // Replay protection: sequence must be strictly sequential (no gaps)
+    if (parsed.n !== ws._recvSeq + 1) {
+      audit('SECURITY', `Sequence violation: expected ${ws._recvSeq + 1}, got ${parsed.n}`, ws._ip);
       return null;
     }
     try {
@@ -364,8 +375,10 @@ function validateSessionToken(token, callerIP) {
   const entry = sessionTokens.get(token);
   if (!entry) return false;
   if (Date.now() > entry.expires) { sessionTokens.delete(token); return false; }
-  // Skip IP check if token was issued with unknown IP (WS behind proxy)
-  if (callerIP && entry.ip && entry.ip !== 'unknown' && entry.ip !== callerIP) {
+  // IP binding: validate when both IPs are known
+  if (entry.ip === 'unknown') {
+    audit('WARN', 'Token validated without IP binding (issued with unknown IP)', callerIP);
+  } else if (callerIP && entry.ip && entry.ip !== callerIP) {
     audit('SECURITY', `Token IP mismatch: expected ${entry.ip}, got ${callerIP}`, callerIP);
     return false;
   }
@@ -397,6 +410,8 @@ function checkGlobalRate() {
 }
 
 function recordGlobalFailure(ip) {
+  const cutoff = Date.now() - GLOBAL_RATE_WINDOW;
+  globalFailures = globalFailures.filter(t => t > cutoff);
   globalFailures.push(Date.now());
   if (globalFailures.length >= GLOBAL_RATE_MAX) {
     globalLockUntil = Date.now() + GLOBAL_LOCKOUT_MS;
@@ -904,7 +919,11 @@ function getSessionList() {
 
 function broadcastAll(obj) {
   for (const client of allClients) {
-    if (client.authenticated && client.readyState === 1) secureSend(client, obj);
+    if (client.authenticated && client.readyState === 1) {
+      try { secureSend(client, obj); } catch (e) {
+        audit('WARN', 'broadcastAll send failed: ' + e.message, client._ip);
+      }
+    }
   }
 }
 
@@ -925,8 +944,10 @@ function completeAuth(ws, token, extra) {
 // Wire up proc.onData and proc.onExit for a session (shared by create + recover)
 function wireSessionProc(session) {
   const { id } = session;
+  const gen = ++session.generation;
 
   session.proc.onData((data) => {
+    if (session.generation !== gen) return; // stale handler from previous proc
     session.scrollback += data;
     if (session.scrollback.length > SCROLLBACK_SIZE) {
       session.scrollback = session.scrollback.slice(-SCROLLBACK_SIZE);
@@ -958,6 +979,7 @@ function wireSessionProc(session) {
   });
 
   session.proc.onExit(() => {
+    if (session.generation !== gen) return; // stale handler from previous proc
     // PTY (wsl.exe) exited -- check if dtach session is still alive
     if (dtachSessionAlive(id)) {
       // dtach survived (e.g., server restart) -- reattach after short delay
@@ -1010,11 +1032,13 @@ function createSession(name, dir, cols, rows) {
 
   // Send claude command via pty (bash is running inside dtach)
   setTimeout(() => {
-    try { proc.write('cmd.exe /c claude\r'); } catch {}
+    try { proc.write('cmd.exe /c claude\r'); } catch (e) {
+      audit('ERROR', 'Claude launch write failed for session ' + id + ': ' + e.message);
+    }
   }, 500);
 
   const session = {
-    id, name, dir, proc, scrollback: '',
+    id, name, dir, proc, scrollback: '', generation: 0,
     attention: null, attentionTimer: null, clients: new Set()
   };
 
@@ -1050,7 +1074,7 @@ function recoverDtachSessions() {
       console.log(`  dtach attach: pid=${proc.pid} for ${metaKey}`);
 
       const session = {
-        id: idNum, name, dir, proc,
+        id: idNum, name, dir, proc, generation: 0,
         scrollback: '', // rebuilds from live output
         attention: null, attentionTimer: null, clients: new Set()
       };
@@ -1103,7 +1127,7 @@ wss.on('connection', (ws, req) => {
   initKeyExchange(ws);
 
   // Anti-downgrade: close if not encrypted within 10 seconds
-  const encryptionTimeout = setTimeout(() => {
+  ws._encryptionTimeout = setTimeout(() => {
     if (!ws.encrypted) {
       audit('SECURITY', 'Encryption timeout -- closing connection', ws._ip);
       ws.close(1008, 'Encryption required');
@@ -1118,7 +1142,7 @@ wss.on('connection', (ws, req) => {
     if (msg.type === 'key-exchange') {
       if (msg.ephemeral && !ws.encrypted) {
         if (completeKeyExchange(ws, msg.ephemeral)) {
-          clearTimeout(encryptionTimeout);
+          clearTimeout(ws._encryptionTimeout);
           secureSend(ws, { type: 'encrypted', status: 'ok' });
         } else {
           ws.close(1008, 'Key exchange failed');
@@ -1271,7 +1295,7 @@ wss.on('connection', (ws, req) => {
 
     switch (msg.type) {
       case 'create': {
-        const dir = msg.dir || config.projects[0].dir;
+        const dir = msg.dir || config.projects?.[0]?.dir || '';
         const allowedDirs = config.projects.map(p => p.dir);
         if (!allowedDirs.includes(dir)) {
           secureSend(ws, { type: 'error', message: 'Directory not in allowed project list' });
@@ -1367,6 +1391,7 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('close', () => {
+    clearTimeout(ws._encryptionTimeout);
     allClients.delete(ws);
     if (ws.currentSession !== null) {
       sessions.get(ws.currentSession)?.clients.delete(ws);
