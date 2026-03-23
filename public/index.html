@@ -633,6 +633,7 @@
 let ws = null, sessions = [], activeSession = null;
 let terms = {}, fits = {}, projects = [];
 let reconnectDelay = 1000;
+let reconnectTimer = null;
 let sessionToken = null;
 let refreshTimer = null;
 
@@ -791,7 +792,7 @@ async function secureSend(obj) {
 }
 
 function queueSend(obj) {
-  sendQueue = sendQueue.then(() => secureSend(obj)).catch(() => {});
+  sendQueue = sendQueue.then(() => secureSend(obj)).catch(e => clientLog('queueSend error: ' + e.message));
 }
 
 async function secureReceive(rawData) {
@@ -1035,7 +1036,7 @@ async function registerPasskey() {
       $('passkey-btn').style.display = 'block';
     }
   } catch (e) {
-    console.error('Passkey registration failed:', e);
+    showStatus('Passkey registration failed: ' + e.message, 'var(--intent-danger)');
   }
 }
 
@@ -1079,7 +1080,7 @@ async function setupTotp() {
       await verifyCode();
     }
   } catch (e) {
-    console.error('TOTP setup failed:', e);
+    showStatus('TOTP setup failed: ' + e.message, 'var(--intent-danger)');
   }
 }
 
@@ -1101,7 +1102,7 @@ function doConnect(method, totpCode) {
   };
   ws.onclose = () => {
     dot.className = 'dot off'; e2eReady = false;
-    if (sessionToken) { showStatus('Reconnecting...', 'var(--intent-warn)'); setTimeout(() => doConnect('reconnect'), reconnectDelay); }
+    if (sessionToken) { showStatus('Reconnecting...', 'var(--intent-warn)'); clearTimeout(reconnectTimer); reconnectTimer = setTimeout(() => doConnect('reconnect'), reconnectDelay); }
     reconnectDelay = Math.min(reconnectDelay * 2, 30000);
   };
   ws.onerror = () => {
@@ -1292,7 +1293,9 @@ function handle(m) {
 }
 
 async function loadProjects() {
-  try { projects = (await (await fetch('/api/config', { headers: { 'X-Session-Token': sessionToken } })).json()).projects; } catch {}
+  try { projects = (await (await fetch('/api/config', { headers: { 'X-Session-Token': sessionToken } })).json()).projects; } catch (e) {
+    clientLog('loadProjects failed: ' + e.message);
+  }
 }
 
 function getTermTheme() {

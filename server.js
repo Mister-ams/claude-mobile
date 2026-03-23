@@ -433,8 +433,9 @@ function checkIPRate(ip) {
 }
 
 function recordIPFailure(ip) {
-  const entry = authAttempts.get(ip) || { count: 0, lockUntil: null };
+  const entry = authAttempts.get(ip) || { count: 0, lockUntil: null, lastAttempt: 0 };
   entry.count++;
+  entry.lastAttempt = Date.now();
   if (entry.count >= MAX_AUTH_ATTEMPTS) {
     entry.lockUntil = Date.now() + AUTH_LOCKOUT_MS;
     audit('AUTH', `IP ${ip} locked out for 60s after ${entry.count} failures`);
@@ -742,6 +743,10 @@ app.post('/api/passkey/auth-verify', async (req, res) => {
       audit('AUTH', `Passkey authentication successful`, ip);
       res.json({ verified: true, sessionToken });
     } else {
+      const ip = req.ip || 'unknown';
+      recordIPFailure(ip);
+      recordGlobalFailure(ip);
+      audit('AUTH', 'Passkey authentication failed', ip);
       res.json({ verified: false });
     }
   } catch (e) {
@@ -806,7 +811,8 @@ app.post('/api/upload', express.raw({ type: '*/*', limit: '10mb' }), (req, res) 
     return res.status(400).json({ error: 'No file data received' });
   }
   const ct = req.headers['content-type'] || '';
-  const ext = ct.includes('png') ? '.png' : ct.includes('jpeg') || ct.includes('jpg') ? '.jpg' : ct.includes('webp') ? '.webp' : '.png';
+  const EXT_MAP = { png: '.png', jpeg: '.jpg', jpg: '.jpg', webp: '.webp', gif: '.gif' };
+  const ext = Object.entries(EXT_MAP).find(([k]) => ct.includes(k))?.[1] || '.png';
   const filename = `screenshot-${Date.now()}${ext}`;
   const filepath = path.join(UPLOAD_DIR, filename);
   fs.writeFileSync(filepath, buf);
@@ -950,7 +956,11 @@ function wireSessionProc(session) {
     if (session.generation !== gen) return; // stale handler from previous proc
     session.scrollback += data;
     if (session.scrollback.length > SCROLLBACK_SIZE) {
-      session.scrollback = session.scrollback.slice(-SCROLLBACK_SIZE);
+      let start = session.scrollback.length - SCROLLBACK_SIZE;
+      // Skip forward past a broken surrogate pair or partial ANSI escape
+      const code = session.scrollback.charCodeAt(start);
+      if (code >= 0xDC00 && code <= 0xDFFF) start++; // low surrogate without high
+      session.scrollback = session.scrollback.slice(start);
     }
     updateRecentOutput(id, data);
 
@@ -980,6 +990,7 @@ function wireSessionProc(session) {
 
   session.proc.onExit(() => {
     if (session.generation !== gen) return; // stale handler from previous proc
+    if (!session.proc) return; // session already closed via 'close' message
     // PTY (wsl.exe) exited -- check if dtach session is still alive
     if (dtachSessionAlive(id)) {
       // dtach survived (e.g., server restart) -- reattach after short delay
@@ -1019,14 +1030,21 @@ function createSession(name, dir, cols, rows) {
     return null;
   }
 
-  // Brief pause for socket to appear
-  try { execSync('timeout /t 1 /nobreak >nul 2>&1', { timeout: 3000 }); } catch {}
-
-  let proc;
-  try {
-    proc = attachToDtach(id, cols || 50, rows || 30);
-  } catch (e) {
-    audit('ERROR', `dtach attach failed: ${e.message}`);
+  // Wait for dtach socket to appear (retry with delay, cross-platform)
+  let proc = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      if (dtachSessionAlive(id)) {
+        proc = attachToDtach(id, cols || 50, rows || 30);
+        break;
+      }
+    } catch {}
+    // Brief synchronous delay between retries
+    const start = Date.now();
+    while (Date.now() - start < 300) {} // 300ms
+  }
+  if (!proc) {
+    audit('ERROR', `dtach attach failed after 5 retries`);
     return null;
   }
 
@@ -1135,7 +1153,9 @@ wss.on('connection', (ws, req) => {
   }, 10000);
 
   ws.on('message', (raw) => {
-    const msg = secureReceive(ws, raw.toString());
+    let msg;
+    try {
+    msg = secureReceive(ws, raw.toString());
     if (!msg) return;
 
     // ── Key exchange (E2E handshake) ──
@@ -1377,7 +1397,9 @@ wss.on('connection', (ws, req) => {
         if (!targetSession) break;
         // Kill dtach session first (destroys the running process)
         killDtachSession(msg.session);
-        try { targetSession.proc.kill(); } catch {}
+        const proc = targetSession.proc;
+        targetSession.proc = null; // prevent onExit from double-broadcasting
+        try { proc.kill(); } catch {}
         if (targetSession.attentionTimer) clearTimeout(targetSession.attentionTimer);
         recentOutput.delete(msg.session);
         sessions.delete(msg.session);
@@ -1387,6 +1409,10 @@ wss.on('connection', (ws, req) => {
         saveSessionMeta();
         break;
       }
+    }
+    } catch (e) {
+      audit('ERROR', 'Message handler error: ' + e.message, ws._ip);
+      try { ws.close(1011, 'Internal error'); } catch {}
     }
   });
 
@@ -1411,9 +1437,13 @@ setInterval(() => {
   for (const [id, entry] of challenges) {
     if (now > entry.expires) challenges.delete(id);
   }
-  // Stale IP rate limit entries
+  // Stale IP rate limit entries (locked or idle)
   for (const [ip, entry] of authAttempts) {
-    if (entry.lockUntil && now > entry.lockUntil + 60000) authAttempts.delete(ip);
+    if (entry.lockUntil && now > entry.lockUntil + 60000) {
+      authAttempts.delete(ip);
+    } else if (!entry.lockUntil && entry.lastAttempt && now > entry.lastAttempt + AUTH_LOCKOUT_MS) {
+      authAttempts.delete(ip);
+    }
   }
   // Per-client: expiry + inactivity lock
   for (const ws of allClients) {
