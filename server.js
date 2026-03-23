@@ -1314,6 +1314,11 @@ wss.on('connection', (ws, req) => {
         break;
       }
 
+      case 'client-log': {
+        audit('CLIENT', msg.message, ws._ip);
+        break;
+      }
+
       case 'rename': {
         if (!targetSession || !msg.name) break;
         const name = String(msg.name).slice(0, 50).replace(/[<>"'&]/g, '');

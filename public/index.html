@@ -636,6 +636,14 @@ let reconnectDelay = 1000;
 let sessionToken = null;
 let refreshTimer = null;
 
+// ── Client Diagnostic Logging (sent back to server via WS) ──
+function clientLog(msg) {
+  console.log(msg);
+  if (ws && ws.readyState === 1 && e2eReady) {
+    try { queueSend({ type: 'client-log', message: String(msg).slice(0, 500) }); } catch {}
+  }
+}
+
 // ── E2E Encryption State ──
 let e2eKey = null; // CryptoKey for AES-256-GCM
 let e2eSendSeq = 0, e2eRecvSeq = 0;
@@ -805,7 +813,7 @@ async function secureReceive(rawData) {
       e2eRecvSeq = parsed.n;
       return JSON.parse(new TextDecoder().decode(decrypted));
     } catch (err) {
-      console.error('DECRYPT FAILED:', err.message, 'payload:', parsed.e?.length, 'bytes, seq:', parsed.n);
+      clientLog('DECRYPT FAILED: ' + err.message + ' payload:' + (parsed.e?.length || '?') + 'bytes seq:' + parsed.n);
       return null;
     }
   }
@@ -1102,10 +1110,10 @@ function doConnect(method, totpCode) {
   ws.onmessage = async (e) => {
     // Safari may deliver WebSocket data as Blob instead of string
     const rawData = typeof e.data === 'string' ? e.data : await e.data.text();
-    console.log('WS raw:', rawData.length, 'bytes');
+    clientLog('WS raw:' + rawData.length + 'bytes');
     const msg = await secureReceive(rawData);
-    if (!msg) { console.warn('secureReceive returned null for', rawData.length, 'byte message'); return; }
-    console.log('MSG:', msg.type, msg.data ? msg.data.length + 'b' : '');
+    if (!msg) { clientLog('secureReceive NULL for ' + rawData.length + 'byte msg'); return; }
+    clientLog('MSG:' + msg.type + (msg.data ? ' ' + msg.data.length + 'b' : ''));
     // Handle key-exchange first
     if (msg.type === 'key-exchange') {
       await handleKeyExchange(msg);
@@ -1250,10 +1258,10 @@ function handle(m) {
       }
       break;
     case 'scrollback':
-      console.log('SCROLLBACK received:', m.data ? m.data.length + ' bytes' : 'no data', 'session:', m.session, 'term exists:', !!terms[m.session]);
+      clientLog('SCROLLBACK recv:' + (m.data ? m.data.length + 'bytes' : 'nodata') + ' session:' + m.session + ' term:' + !!terms[m.session]);
       if (terms[m.session]) {
         terms[m.session].write(m.data);
-        console.log('SCROLLBACK written to xterm.js');
+        clientLog('SCROLLBACK written to xterm');
       }
       break;
     case 'attention':
