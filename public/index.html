@@ -2058,15 +2058,9 @@ window.addEventListener('resize', () => {
 // scrollToBottom(), no PTY resize. Keyboard open/close is purely visual.
 if (window.visualViewport) {
   const appEl = document.getElementById('app');
-  const fullH = window.visualViewport.height;
   const onViewport = () => {
-    const h = window.visualViewport.height;
-    appEl.style.height = h + 'px';
+    appEl.style.height = window.visualViewport.height + 'px';
     window.scrollTo(0, 0);
-    // Keyboard opened -- scroll terminal to show latest output
-    if (h < fullH - 50 && activeSession !== null && terms[activeSession]) {
-      terms[activeSession].scrollToBottom();
-    }
   };
   window.visualViewport.addEventListener('resize', onViewport);
   window.visualViewport.addEventListener('scroll', onViewport);
