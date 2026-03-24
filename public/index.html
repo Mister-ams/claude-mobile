@@ -1788,8 +1788,7 @@ function sendMsg() {
   lastSent = t;
   clearPrompt();
   setTimeout(() => {
-    qsend(t);
-    setTimeout(() => qsend('\r'), 50);
+    qsend(t + '\r');
   }, 80);
   msgInput.value = '';
   autoGrow();
