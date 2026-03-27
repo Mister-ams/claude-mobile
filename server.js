@@ -35,6 +35,41 @@ const SCROLLBACK_SIZE = 400000;
 const WSL_DISTRO = config.wslDistro || 'Ubuntu-24.04';
 const DTACH_PREFIX = 'cm'; // socket files: /tmp/cm-0.dtach, cm-1.dtach, ...
 
+let wslAvailable = false;
+let lastError = null; // { message, timestamp }
+
+function setLastError(message) {
+  lastError = { message, timestamp: Date.now() };
+}
+
+function probeWSL() {
+  try {
+    execSync(`wsl -d ${WSL_DISTRO} -- echo 1`, { encoding: 'utf8', timeout: 5000 });
+    wslAvailable = true;
+    return true;
+  } catch (e) {
+    wslAvailable = false;
+    setLastError(`WSL probe failed: ${e.message}`);
+    return false;
+  }
+}
+
+function initWSL() {
+  if (probeWSL()) {
+    console.log(`[init] WSL (${WSL_DISTRO}) available`);
+    return;
+  }
+  console.warn(`[init] WSL not available, retrying in 5s...`);
+  const retryInterval = setInterval(() => {
+    if (probeWSL()) {
+      console.log(`[init] WSL (${WSL_DISTRO}) now available`);
+      clearInterval(retryInterval);
+    }
+  }, 5000);
+  // Stop retrying after 2 minutes
+  setTimeout(() => clearInterval(retryInterval), 120000);
+}
+
 function wslExec(cmd) {
   return execSync(`wsl -d ${WSL_DISTRO} -u root -- bash -c "${cmd.replace(/"/g, '\\"')}"`, {
     encoding: 'utf8', timeout: 10000
@@ -550,9 +585,11 @@ app.use((_req, res, next) => {
     "form-action 'self'",
   ].join('; '));
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   next();
 });
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), { etag: false, lastModified: false }));
 
 // ─── Localhost-only setup page ─────────────────────────────────
 app.get('/setup', (req, res) => {
@@ -818,6 +855,24 @@ app.post('/api/upload', express.raw({ type: '*/*', limit: '10mb' }), (req, res) 
   fs.writeFileSync(filepath, buf);
   audit('UPLOAD', `Image uploaded: ${filename}`, req.ip);
   res.json({ path: filepath, filename });
+});
+
+app.get('/health', (req, res) => {
+  if (!isLocalhost(req)) {
+    return res.status(403).json({ error: 'localhost only' });
+  }
+  const mem = process.memoryUsage();
+  res.json({
+    status: wslAvailable ? 'ok' : 'degraded',
+    uptime: Math.floor(process.uptime()),
+    sessions: sessions.size,
+    wsl: wslAvailable,
+    memory: {
+      rss: Math.round(mem.rss / 1048576),
+      heap: Math.round(mem.heapUsed / 1048576)
+    },
+    lastError: lastError && (Date.now() - lastError.timestamp < 3600000) ? lastError : null
+  });
 });
 
 const server = http.createServer(app);
@@ -1697,6 +1752,7 @@ server.listen(PORT, 'localhost', () => {
   console.log(`  Shutdown: auto after 8h idle`);
   console.log(`  Sessions: dtach via WSL (${WSL_DISTRO})`);
   console.log('  ────────────────────────────────');
+  initWSL();
   recoverDtachSessions();
   if (sessions.size === 0) autoStartSessions();
   audit('SYSTEM', `Server started on port ${PORT}`);
