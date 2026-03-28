@@ -594,7 +594,47 @@ app.use(express.static(path.join(__dirname, 'public'), { etag: false, lastModifi
 // ─── Localhost-only setup page ─────────────────────────────────
 app.get('/setup', (req, res) => {
   if (!isLocalhost(req)) return res.status(403).send('Setup only available from localhost');
-  if (isSetupComplete()) return res.send(`<h2>Setup already complete.</h2><p>TOTP configured. Use your phone to connect.</p><p style="margin-top:16px;font-family:monospace;font-size:12px;color:#8b949e">Server fingerprint:<br><code style="color:#58a6ff">${identityKeys.fingerprint}</code></p>`);
+  if (isSetupComplete()) return res.send(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Claude Mobile Setup</title>
+<style>body{font-family:system-ui;background:#0d1117;color:#e6edf3;display:flex;flex-direction:column;align-items:center;padding:40px;gap:20px}
+h1{font-size:22px}p{color:#8b949e;text-align:center;max-width:400px;line-height:1.6}.step{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:24px;text-align:center;max-width:400px;width:100%}
+.step h2{font-size:16px;margin-bottom:12px}#qr{margin:16px auto;display:none}input{padding:12px;font-size:20px;text-align:center;width:180px;background:#0d1117;border:1px solid #30363d;border-radius:8px;color:#e6edf3;letter-spacing:8px}
+button{padding:12px 24px;background:#ffd700;color:#0d1117;border:none;border-radius:8px;font-weight:700;font-size:16px;cursor:pointer;margin-top:12px}
+button:hover{opacity:0.9}button.danger{background:#f85149;color:#fff}.ok{color:#3fb950;font-weight:600}.err{color:#f85149}
+#verify-section{display:none}</style></head>
+<body><h1>Claude Mobile Setup</h1>
+<p>TOTP is configured. Use your phone to connect via the Tailscale URL.</p>
+<p style="font-size:12px;color:#8b949e">Server fingerprint: <code style="color:#58a6ff">${identityKeys.fingerprint.slice(0, 16)}...</code></p>
+<div class="step"><h2>Reset Authenticator</h2>
+<p>If your TOTP codes aren't working, reset to generate a new QR code.</p>
+<button class="danger" onclick="resetTotp()">Reset Authenticator</button>
+<div id="qr"></div>
+<code id="secret" style="font-size:14px;background:#0d1117;padding:8px;border-radius:4px;display:block;margin:8px 0;letter-spacing:2px"></code>
+<div id="verify-section">
+<p>Scan the QR code above, then enter the 6-digit code to confirm:</p>
+<input type="tel" id="code" maxlength="6" placeholder="000000">
+<br><button onclick="verifyReset()">Verify & Complete Reset</button>
+</div>
+<p id="result"></p></div>
+<script>
+async function resetTotp(){
+  const r=await fetch('/api/totp/reset',{method:'POST'});
+  const d=await r.json();
+  if(d.error){document.getElementById('result').className='err';document.getElementById('result').textContent=d.error;return}
+  if(d.qr){document.getElementById('qr').innerHTML='<img src="'+d.qr+'" width="200" height="200">';document.getElementById('qr').style.display='block'}
+  if(d.secret)document.getElementById('secret').textContent=d.secret;
+  document.getElementById('verify-section').style.display='block';
+}
+async function verifyReset(){
+  const code=document.getElementById('code').value.trim();
+  if(code.length!==6)return;
+  const r=await fetch('/api/totp/verify-reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+  const d=await r.json();
+  document.getElementById('result').className=d.verified?'ok':'err';
+  document.getElementById('result').textContent=d.verified?'Re-enrollment complete. Your new authenticator is active.':'Code incorrect. Try again.';
+}
+document.getElementById('code')?.addEventListener('keydown',e=>{if(e.key==='Enter')verifyReset()});
+</script></body></html>`);
   res.send(`<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Claude Mobile Setup</title>
 <style>body{font-family:system-ui;background:#0d1117;color:#e6edf3;display:flex;flex-direction:column;align-items:center;padding:40px;gap:20px}
@@ -828,6 +868,33 @@ app.post('/api/totp/verify-setup', requireSession, (req, res) => {
     audit('AUTH', 'TOTP setup verified');
     res.json({ verified: true });
   } else {
+    res.json({ verified: false });
+  }
+});
+
+// ─── TOTP Re-enrollment (localhost-only) ──────────────────────
+
+app.post('/api/totp/reset', async (req, res) => {
+  if (!isLocalhost(req)) return res.status(403).json({ error: 'Localhost only' });
+  generateTotpSecret();
+  const uri = getTotpUri();
+  const QRCode = require('qrcode');
+  const qr = await QRCode.toDataURL(uri);
+  audit('SETUP', 'TOTP reset initiated from localhost');
+  res.json({ qr, secret: totpSecret, uri });
+});
+
+app.post('/api/totp/verify-reset', express.json(), (req, res) => {
+  if (!isLocalhost(req)) return res.status(403).json({ error: 'Localhost only' });
+  if (verifyTotp(req.body.code)) {
+    // Clear all lockouts
+    authAttempts.clear();
+    globalFailures = [];
+    globalLockUntil = 0;
+    audit('SETUP', 'TOTP re-enrollment complete');
+    res.json({ verified: true });
+  } else {
+    audit('SETUP', 'TOTP re-enrollment verification failed');
     res.json({ verified: false });
   }
 });
