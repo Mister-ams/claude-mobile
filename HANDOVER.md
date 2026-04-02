@@ -1,44 +1,41 @@
 # HANDOVER -- Claude Mobile
 
-Session: 2026-03-24
+Session: 2026-04-03
 
 ## Completed This Session
 
-- Cold-started project from MEMORY only (no prior HANDOVER.md, not in project-index.md)
-- Fixed doc staleness: added claude-mobile to project-index.md, archived scrollback-and-dtach planning files
-- Corrected CLAUDE.md commit ref
-- Ran full dt.review (4 agents) on v3.1.3 codebase (4252 LOC) -- 31 findings (19 must-fix, 12 should-fix)
-- Planned and executed 19 must-fix findings: plan-v3.1.3-hardening.md, 18 tasks, 4 waves, 2 sprints. Tagged v3.1.4 (fccc5fc)
-- Planned and executed 12 should-fix findings: plan-v3.1.4-should-fix.md, 12 tasks, 3 waves, 1 sprint. Tagged v3.1.5 (6fb7873)
-- Fixed input clipping bug (6f59c55): text and \r sent as two separate pty writes 50ms apart caused race in pipeline (client->WS->server->wsl.exe->dtach->Claude TUI). Changed to single atomic qsend(t + '\r') in index.html:1790
-- All pushed to GitHub. PM2 tested locally -- stable, 4 sessions recovered, clipping confirmed fixed by user
+- Cold-started project (10 days since last session, 2026-03-24)
+- Full context gathering: HANDOVER.md, MEMORY, git state, active specs
+- Identified 3 staleness issues: HANDOVER head commit drift, 3 completed planning artifacts not archived, untracked .playwright-cli/ and gen-icon.html
+- Identified blocker: v4 tech-design references tmux capture-pane but current stack uses dtach (migrated in v3.1.3)
+- Fixed CLAUDE.md head commit pointer (6f59c55 -> fdcb50a)
+- No code changes -- context-only session
 
 ## Key Decisions
 
-- 18 empty catch blocks in server.js silently swallowed errors -- all fixed with structured error handling
-- secureReceive accepted sequence gaps (counter advancement attack) -- fixed to strict sequential
-- secureSend had no type filter on plaintext fallback -- restricted to handshake-only messages pre-encryption
-- JS strings are UTF-16 not raw bytes -- scrollback truncation targets surrogate pairs, not UTF-8 continuation bytes
-- Input clipping was a pty pipeline race -- text and Enter as separate writes had variable latency
+- v4-thin-viewer tech-design has tmux vs dtach architecture mismatch -- must reconcile before Wave 0
+- Completed planning artifacts (plan-v3.1.3-hardening, plan-v3.1.4-should-fix, audit-v3.1.3-review) need archiving
 
 ## Next Action
 
-v4-thin-viewer Wave 1 kickoff (0/4 waves complete).
-Active spec at .planning/plan-v4-thin-viewer.md.
+Reconcile v4 tech-design tmux/dtach mismatch, then Wave 0 kickoff (T01: ANSI-to-HTML converter, T02: ANSI color CSS classes).
 
 ## State
 
 - Branch: master
-- Last commit: 6f59c55 (fix: send text and Enter as single atomic pty write)
+- Last commit: fdcb50a (docs: sync project documentation -- v3.1.5 audit hardening + input clipping fix)
 - Tag: v3.1.5 at 6fb7873
-- Uncommitted: none (planning artifacts are untracked/gitignored)
+- Uncommitted: 0 tracked; planning artifacts + SESSION.md untracked
 - All changes pushed to origin/master
 
 ## Context Pointers
 
+- v4 tech-design: .planning/tech-design-v4-thin-viewer.md
+- v4 plan: .planning/plan-v4-thin-viewer.md
 - Audit findings: .planning/audit-v3.1.3-review.md
-- Must-fix plan: .planning/plan-v3.1.3-hardening.md
-- Should-fix plan: .planning/plan-v3.1.4-should-fix.md
-- v4 thin viewer plan: .planning/plan-v4-thin-viewer.md
-- CLAUDE.md: project architecture, security tiers, gotchas
 - MEMORY: project_otg.md (version history, stack, all features)
+- CLAUDE.md: architecture, security tiers, gotchas
+
+## Open Questions
+
+- v4 tech-design assumes tmux capture-pane but stack migrated to dtach in v3.1.3. Need to decide: reintroduce tmux alongside dtach, or redesign thin viewer to work with dtach + server-side ANSI capture.

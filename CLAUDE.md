@@ -79,10 +79,8 @@ Setup: open `http://localhost:3456/setup` on laptop to configure TOTP.
 
 ## Current State
 
-v3.1.5 (tag: v3.1.5, head: 6f59c55). Full audit hardening complete (31 fixes).
-All must-fix (19) and should-fix (12) findings from v3.1.3 review resolved.
-Error handling, security protocol, server stability, client UX improvements.
+v3.1.5 (tag: v3.1.5, head: fdcb50a). Full audit hardening complete (31 fixes).
 Post-release fix: input clipping bug (text + Enter sent as single atomic pty write).
 Active track in `.planning/`:
-- **v4-thin-viewer**: thin viewer architecture (executing, 0/4 waves)
+- **v4-thin-viewer**: thin viewer architecture (blocked -- tech-design references tmux but stack uses dtach since v3.1.3; reconciliation needed before Wave 0)
 Completed (archived): scrollback-and-dtach, v3.1.3-hardening, v3.1.4-should-fix.
