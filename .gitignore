@@ -8,3 +8,7 @@ config.json
 .session-meta.json
 claude-mobile
 claude-mobile.bat
+SESSION.md
+CLAUDE.local.md
+__pycache__/
+.playwright-cli/
