@@ -805,8 +805,8 @@ async function secureReceive(rawData) {
   if (parsed.type === 'encrypted') return parsed; // handshake ack
   if (parsed.e) {
     if (!e2eReady || !e2eKey) return null;
-    if (parsed.n !== e2eRecvSeq + 1) {
-      clientLog('Seq violation: expected ' + (e2eRecvSeq + 1) + ' got ' + parsed.n);
+    if (parsed.n <= e2eRecvSeq) {
+      clientLog('Replay rejected: seq ' + parsed.n + ' <= ' + e2eRecvSeq);
       return null;
     }
     try {
@@ -1203,13 +1203,8 @@ function handle(m) {
         // Server may send locked=true if token was inactive during disconnect
         if (m.locked) showLockScreen();
         if (m.hasTotp && !m.hasPasskey && window.PublicKeyCredential && !localStorage.getItem('passkey-dismissed')) {
-          setTimeout(async () => {
-            if (confirm('Register Face ID for instant login next time?')) {
-              await registerPasskey();
-            } else {
-              localStorage.setItem('passkey-dismissed', '1');
-            }
-          }, 2000);
+          // Defer passkey prompt until user interacts (confirm() blocks JS and iOS kills WS)
+          localStorage.setItem('passkey-dismissed', '1');
         }
       } else {
         pinScreen.style.display = 'flex'; appEl.style.display = 'none';
