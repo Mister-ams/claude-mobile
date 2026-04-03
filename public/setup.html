@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Mobile Setup</title>
+<link rel="stylesheet" href="/style.css">
+<style>
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg, #111418);
+    color: var(--text, #f6f7f9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 16px;
+    gap: 20px;
+    margin: 0;
+  }
+  h1 { font-size: 22px; margin: 0; }
+  .subtitle {
+    color: var(--text-sec, #abb3bf);
+    text-align: center;
+    max-width: 400px;
+    line-height: 1.6;
+    margin: 0;
+  }
+  .fingerprint {
+    font-size: 12px;
+    color: var(--dim, #738091);
+    margin: 0;
+  }
+  .fingerprint code {
+    color: var(--accent-light, #4c90f0);
+  }
+  .step {
+    background: var(--surface, #1c2127);
+    border: 1px solid var(--border-muted, #313840);
+    border-radius: 12px;
+    padding: 24px;
+    text-align: center;
+    max-width: 400px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .step h2 {
+    font-size: 16px;
+    margin: 0 0 12px 0;
+  }
+  .step p {
+    color: var(--text-sec, #abb3bf);
+    margin: 8px 0;
+    line-height: 1.5;
+  }
+  #qr {
+    margin: 16px auto;
+  }
+  #qr img {
+    display: block;
+    margin: 0 auto;
+  }
+  #secret {
+    font-size: 14px;
+    background: var(--bg, #111418);
+    padding: 8px;
+    border-radius: var(--radius, 4px);
+    display: block;
+    margin: 8px 0;
+    letter-spacing: 2px;
+    word-break: break-all;
+  }
+  input[type="tel"] {
+    padding: 12px;
+    font-size: 20px;
+    text-align: center;
+    width: 180px;
+    background: var(--bg, #111418);
+    border: 1px solid var(--border, #404854);
+    border-radius: 8px;
+    color: var(--text, #f6f7f9);
+    letter-spacing: 8px;
+  }
+  button {
+    padding: 12px 24px;
+    background: #ffd700;
+    color: var(--bg, #111418);
+    border: none;
+    border-radius: 8px;
+    font-weight: 700;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 12px;
+  }
+  button:hover { opacity: 0.9; }
+  button.danger {
+    background: var(--intent-danger, #cd4246);
+    color: #fff;
+  }
+  .ok { color: var(--intent-ok, #238551); font-weight: 600; }
+  .err { color: var(--intent-danger, #cd4246); }
+  .hidden { display: none; }
+  .manual-hint {
+    font-size: 12px;
+    color: var(--dim, #738091);
+  }
+</style>
+</head>
+<body>
+<h1>Claude Mobile Setup</h1>
+
+<!-- Loading state -->
+<div id="view-loading">
+  <p class="subtitle">Loading setup status...</p>
+</div>
+
+<!-- View: setup already complete (re-enrollment) -->
+<div id="view-complete" class="hidden">
+  <p class="subtitle">TOTP is configured. Use your phone to connect via the Tailscale URL.</p>
+  <p class="fingerprint">Server fingerprint: <code id="fp"></code></p>
+  <div class="step">
+    <h2>Reset Authenticator</h2>
+    <p>If your TOTP codes aren't working, reset to generate a new QR code.</p>
+    <button class="danger" id="btn-reset">Reset Authenticator</button>
+    <div id="reset-qr" class="hidden"></div>
+    <code id="reset-secret" class="hidden"></code>
+    <div id="reset-verify" class="hidden">
+      <p>Scan the QR code above, then enter the 6-digit code to confirm:</p>
+      <input type="tel" id="reset-code" maxlength="6" placeholder="000000">
+      <br><button id="btn-verify-reset">Verify &amp; Complete Reset</button>
+    </div>
+    <p id="reset-result"></p>
+  </div>
+</div>
+
+<!-- View: initial setup -->
+<div id="view-initial" class="hidden">
+  <p class="subtitle">This page is only accessible from your laptop. It sets up authentication for your phone.</p>
+  <div class="step">
+    <h2>Step 1: Scan with Apple Passwords</h2>
+    <p>Open your iPhone camera and scan this QR code. Apple Passwords will offer to save the verification code.</p>
+    <div id="init-qr">Loading...</div>
+    <p class="manual-hint">Or manually: Settings &gt; Passwords &gt; claude-mobile &gt; Set Up Verification Code &gt; Enter Setup Key</p>
+    <code id="init-secret"></code>
+  </div>
+  <div class="step">
+    <h2>Step 2: Verify</h2>
+    <p>Enter the 6-digit code from Apple Passwords:</p>
+    <input type="tel" id="init-code" maxlength="6" placeholder="000000">
+    <br><button id="btn-verify-init">Verify &amp; Complete Setup</button>
+    <p id="init-result"></p>
+  </div>
+</div>
+
+<script>
+(async function() {
+  // Fetch setup status
+  let status;
+  try {
+    const r = await fetch('/api/setup/status');
+    status = await r.json();
+  } catch (e) {
+    document.getElementById('view-loading').innerHTML =
+      '<p class="subtitle err">Failed to load setup status.</p>';
+    return;
+  }
+
+  document.getElementById('view-loading').classList.add('hidden');
+
+  if (status.setupComplete) {
+    // Show re-enrollment view
+    const view = document.getElementById('view-complete');
+    view.classList.remove('hidden');
+    document.getElementById('fp').textContent =
+      (status.fingerprint || '').slice(0, 16) + '...';
+
+    // Reset button
+    document.getElementById('btn-reset').addEventListener('click', async () => {
+      const r = await fetch('/api/totp/reset', { method: 'POST' });
+      const d = await r.json();
+      const result = document.getElementById('reset-result');
+      if (d.error) {
+        result.className = 'err';
+        result.textContent = d.error;
+        return;
+      }
+      if (d.qr) {
+        const qrEl = document.getElementById('reset-qr');
+        qrEl.innerHTML = '<img src="' + d.qr + '" width="200" height="200">';
+        qrEl.classList.remove('hidden');
+      }
+      if (d.secret) {
+        const secEl = document.getElementById('reset-secret');
+        secEl.textContent = d.secret;
+        secEl.classList.remove('hidden');
+      }
+      document.getElementById('reset-verify').classList.remove('hidden');
+    });
+
+    // Verify reset
+    async function verifyReset() {
+      const code = document.getElementById('reset-code').value.trim();
+      if (code.length !== 6) return;
+      const r = await fetch('/api/totp/verify-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      const d = await r.json();
+      const result = document.getElementById('reset-result');
+      result.className = d.verified ? 'ok' : 'err';
+      result.textContent = d.verified
+        ? 'Re-enrollment complete. Your new authenticator is active.'
+        : 'Code incorrect. Try again.';
+    }
+    document.getElementById('btn-verify-reset').addEventListener('click', verifyReset);
+    document.getElementById('reset-code').addEventListener('keydown', e => {
+      if (e.key === 'Enter') verifyReset();
+    });
+
+  } else {
+    // Show initial setup view
+    const view = document.getElementById('view-initial');
+    view.classList.remove('hidden');
+
+    // Auto-init: fetch QR
+    try {
+      const r = await fetch('/api/setup/init', { method: 'POST' });
+      const d = await r.json();
+      if (d.qr) {
+        document.getElementById('init-qr').innerHTML =
+          '<img src="' + d.qr + '" width="200" height="200">';
+      }
+      if (d.secret) {
+        document.getElementById('init-secret').textContent = d.secret;
+      }
+    } catch (e) {
+      document.getElementById('init-qr').textContent = 'Failed to generate QR code.';
+    }
+
+    // Verify initial setup
+    async function verifyInit() {
+      const code = document.getElementById('init-code').value.trim();
+      if (code.length !== 6) return;
+      const r = await fetch('/api/setup/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      const d = await r.json();
+      const result = document.getElementById('init-result');
+      result.className = d.verified ? 'ok' : 'err';
+      result.textContent = d.verified
+        ? 'Setup complete. Open the tunnel URL on your phone.'
+        : 'Code incorrect. Try again.';
+      if (d.verified) setTimeout(() => location.reload(), 2000);
+    }
+    document.getElementById('btn-verify-init').addEventListener('click', verifyInit);
+    document.getElementById('init-code').addEventListener('keydown', e => {
+      if (e.key === 'Enter') verifyInit();
+    });
+  }
+})();
+</script>
+</body>
+</html>

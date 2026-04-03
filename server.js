@@ -599,83 +599,16 @@ app.use(express.static(path.join(__dirname, 'public'), { etag: false, lastModifi
 // ─── Localhost-only setup page ─────────────────────────────────
 app.get('/setup', (req, res) => {
   if (!isLocalhost(req)) return res.status(403).send('Setup only available from localhost');
-  if (isSetupComplete()) return res.send(`<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Claude Mobile Setup</title>
-<style>body{font-family:system-ui;background:#0d1117;color:#e6edf3;display:flex;flex-direction:column;align-items:center;padding:40px;gap:20px}
-h1{font-size:22px}p{color:#8b949e;text-align:center;max-width:400px;line-height:1.6}.step{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:24px;text-align:center;max-width:400px;width:100%}
-.step h2{font-size:16px;margin-bottom:12px}#qr{margin:16px auto;display:none}input{padding:12px;font-size:20px;text-align:center;width:180px;background:#0d1117;border:1px solid #30363d;border-radius:8px;color:#e6edf3;letter-spacing:8px}
-button{padding:12px 24px;background:#ffd700;color:#0d1117;border:none;border-radius:8px;font-weight:700;font-size:16px;cursor:pointer;margin-top:12px}
-button:hover{opacity:0.9}button.danger{background:#f85149;color:#fff}.ok{color:#3fb950;font-weight:600}.err{color:#f85149}
-#verify-section{display:none}</style></head>
-<body><h1>Claude Mobile Setup</h1>
-<p>TOTP is configured. Use your phone to connect via the Tailscale URL.</p>
-<p style="font-size:12px;color:#8b949e">Server fingerprint: <code style="color:#58a6ff">${identityKeys.fingerprint.slice(0, 16)}...</code></p>
-<div class="step"><h2>Reset Authenticator</h2>
-<p>If your TOTP codes aren't working, reset to generate a new QR code.</p>
-<button class="danger" onclick="resetTotp()">Reset Authenticator</button>
-<div id="qr"></div>
-<code id="secret" style="font-size:14px;background:#0d1117;padding:8px;border-radius:4px;display:block;margin:8px 0;letter-spacing:2px"></code>
-<div id="verify-section">
-<p>Scan the QR code above, then enter the 6-digit code to confirm:</p>
-<input type="tel" id="code" maxlength="6" placeholder="000000">
-<br><button onclick="verifyReset()">Verify & Complete Reset</button>
-</div>
-<p id="result"></p></div>
-<script>
-async function resetTotp(){
-  const r=await fetch('/api/totp/reset',{method:'POST'});
-  const d=await r.json();
-  if(d.error){document.getElementById('result').className='err';document.getElementById('result').textContent=d.error;return}
-  if(d.qr){document.getElementById('qr').innerHTML='<img src="'+d.qr+'" width="200" height="200">';document.getElementById('qr').style.display='block'}
-  if(d.secret)document.getElementById('secret').textContent=d.secret;
-  document.getElementById('verify-section').style.display='block';
-}
-async function verifyReset(){
-  const code=document.getElementById('code').value.trim();
-  if(code.length!==6)return;
-  const r=await fetch('/api/totp/verify-reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
-  const d=await r.json();
-  document.getElementById('result').className=d.verified?'ok':'err';
-  document.getElementById('result').textContent=d.verified?'Re-enrollment complete. Your new authenticator is active.':'Code incorrect. Try again.';
-}
-document.getElementById('code')?.addEventListener('keydown',e=>{if(e.key==='Enter')verifyReset()});
-</script></body></html>`);
-  res.send(`<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Claude Mobile Setup</title>
-<style>body{font-family:system-ui;background:#0d1117;color:#e6edf3;display:flex;flex-direction:column;align-items:center;padding:40px;gap:20px}
-h1{font-size:22px}p{color:#8b949e;text-align:center;max-width:400px;line-height:1.6}.step{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:24px;text-align:center;max-width:400px;width:100%}
-.step h2{font-size:16px;margin-bottom:12px}#qr{margin:16px auto}input{padding:12px;font-size:20px;text-align:center;width:180px;background:#0d1117;border:1px solid #30363d;border-radius:8px;color:#e6edf3;letter-spacing:8px}
-button{padding:12px 24px;background:#ffd700;color:#0d1117;border:none;border-radius:8px;font-weight:700;font-size:16px;cursor:pointer;margin-top:12px}
-button:hover{opacity:0.9}.ok{color:#3fb950;font-weight:600}.err{color:#f85149}</style></head>
-<body><h1>Claude Mobile Setup</h1>
-<p>This page is only accessible from your laptop. It sets up authentication for your phone.</p>
-<div class="step"><h2>Step 1: Scan with Apple Passwords</h2>
-<p>Open your iPhone camera and scan this QR code. Apple Passwords will offer to save the verification code.</p>
-<div id="qr">Loading...</div>
-<p style="font-size:12px;color:#8b949e">Or manually: Settings > Passwords > claude-mobile > Set Up Verification Code > Enter Setup Key</p>
-<code id="secret" style="font-size:14px;background:#0d1117;padding:8px;border-radius:4px;display:block;margin:8px 0;letter-spacing:2px"></code>
-</div>
-<div class="step"><h2>Step 2: Verify</h2>
-<p>Enter the 6-digit code from Apple Passwords:</p>
-<input type="tel" id="code" maxlength="6" placeholder="000000">
-<br><button onclick="verify()">Verify & Complete Setup</button>
-<p id="result"></p></div>
-<script>
-fetch('/api/setup/init',{method:'POST'}).then(r=>r.json()).then(d=>{
-  if(d.qr) document.getElementById('qr').innerHTML='<img src="'+d.qr+'" width="200" height="200">';
-  if(d.secret) document.getElementById('secret').textContent=d.secret;
+  res.sendFile(path.join(__dirname, 'public', 'setup.html'));
 });
-async function verify(){
-  const code=document.getElementById('code').value.trim();
-  if(code.length!==6)return;
-  const r=await fetch('/api/setup/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
-  const d=await r.json();
-  document.getElementById('result').className=d.verified?'ok':'err';
-  document.getElementById('result').textContent=d.verified?'Setup complete. Open the tunnel URL on your phone.':'Code incorrect. Try again.';
-  if(d.verified) setTimeout(()=>location.reload(),2000);
-}
-document.getElementById('code').addEventListener('keydown',e=>{if(e.key==='Enter')verify()});
-</script></body></html>`);
+
+app.get('/api/setup/status', (req, res) => {
+  if (!isLocalhost(req)) return res.status(403).json({ error: 'Localhost only' });
+  res.json({
+    setupComplete: isSetupComplete(),
+    fingerprint: identityKeys?.fingerprint || null,
+    hasPasskeys: storedCredentials.length > 0
+  });
 });
 
 app.post('/api/setup/init', async (req, res) => {
