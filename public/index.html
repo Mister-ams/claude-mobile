@@ -13,44 +13,28 @@
 </head>
 <body>
 
-<div id="pin-screen">
-  <h1>CLAUDE MOBILE</h1>
+<div id="auth-screen" data-mode="login">
+  <div class="lock-icon" id="auth-lock-icon" aria-hidden="true" style="display:none">&#128274;</div>
+  <h1 id="auth-heading">CLAUDE MOBILE</h1>
   <div class="auth-card">
     <p class="sub" id="auth-label">Authenticate to connect</p>
 
-    <button class="auth-primary" id="passkey-btn" onclick="loginPasskey()"
+    <button class="auth-primary" id="passkey-btn" onclick="authAction('passkey')"
             aria-label="Login with Face ID">Login with Face ID</button>
 
     <div id="totp-section">
       <p class="sub">Enter verification code</p>
       <input type="tel" id="totp-input" class="totp-input" maxlength="6" placeholder="000000"
              autocapitalize="off" autocomplete="one-time-code" aria-label="TOTP verification code">
-      <button class="auth-btn" onclick="submitTotp()">Verify</button>
+      <button class="auth-btn" id="auth-submit-btn" onclick="authAction('totp')">Verify</button>
     </div>
 
     <div id="setup-msg">
       <p class="sub">Setup required. Open the setup page on your laptop first.</p>
     </div>
 
-    <p id="pin-error">Authentication failed</p>
-    <p id="pin-status"></p>
-  </div>
-</div>
-
-<div id="lock-screen">
-  <div class="lock-icon" aria-hidden="true">&#128274;</div>
-  <h2>SESSION LOCKED</h2>
-  <div class="auth-card">
-    <p class="sub">Inactive timeout -- re-authenticate to continue</p>
-    <button class="auth-primary" id="lock-passkey-btn" onclick="unlockPasskey()"
-            style="display:none" aria-label="Unlock with Face ID">Unlock with Face ID</button>
-    <div id="lock-totp-section">
-      <p class="sub">Enter verification code</p>
-      <input type="tel" id="lock-totp-input" class="totp-input" maxlength="6" placeholder="000000"
-             autocapitalize="off" autocomplete="one-time-code" aria-label="TOTP unlock code">
-      <button class="auth-btn" onclick="submitUnlockTotp()">Unlock</button>
-    </div>
-    <p id="lock-error">Unlock failed</p>
+    <p id="auth-error">Authentication failed</p>
+    <p id="auth-status"></p>
   </div>
 </div>
 
@@ -358,17 +342,33 @@ function scheduleTokenRefresh(ttl) {
 }
 
 const $ = id => document.getElementById(id);
-const pinScreen = $('pin-screen');
-const pinError = $('pin-error'), pinStatus = $('pin-status');
+const authScreen = $('auth-screen');
+const authError = $('auth-error'), authStatus = $('auth-status');
 const appEl = $('app'), termArea = $('term-area'), emptyState = $('empty-state');
 const dot = $('dot'), sname = $('sname'), sdir = $('sdir');
 const msgInput = $('msg'), tabsEl = $('tabs');
 
+// ─── Auth Screen Mode Management ────────────────────────────────
+function setAuthMode(mode) {
+  authScreen.dataset.mode = mode;
+  const heading = $('auth-heading');
+  const lockIcon = $('auth-lock-icon');
+  const submitBtn = $('auth-submit-btn');
+  if (mode === 'lock') {
+    heading.textContent = 'SESSION LOCKED';
+    lockIcon.style.display = '';
+    $('auth-label').textContent = 'Inactive timeout -- re-authenticate to continue';
+    submitBtn.textContent = 'Unlock';
+    $('setup-msg').style.display = 'none';
+  } else {
+    heading.textContent = 'CLAUDE MOBILE';
+    lockIcon.style.display = 'none';
+    $('auth-label').textContent = 'Authenticate to connect';
+    submitBtn.textContent = 'Verify';
+  }
+}
+
 // ─── Inactivity Lock ─────────────────────────────────────────────
-const lockScreen = $('lock-screen');
-const lockPasskeyBtn = $('lock-passkey-btn');
-const lockTotpInput = $('lock-totp-input');
-const lockError = $('lock-error');
 let inactivityTimer = null;
 let inactivityMs = 15 * 60 * 1000; // default; overridden by server on auth
 
@@ -380,18 +380,32 @@ function resetInactivityTimer() {
 }
 
 function showLockScreen() {
-  lockScreen.classList.add('active');
-  lockError.style.display = 'none';
+  setAuthMode('lock');
+  authScreen.classList.add('active');
+  authError.style.display = 'none';
+  $('totp-input').value = '';
   if (window.PublicKeyCredential) {
-    lockPasskeyBtn.style.display = 'block';
+    $('passkey-btn').style.display = 'block';
   }
+  $('totp-section').style.display = 'block';
 }
 
 function hideLockScreen() {
-  lockScreen.classList.remove('active');
-  lockTotpInput.value = '';
-  lockError.style.display = 'none';
+  authScreen.classList.remove('active');
+  $('totp-input').value = '';
+  authError.style.display = 'none';
   resetInactivityTimer();
+}
+
+// Unified action dispatcher for auth screen
+function authAction(method) {
+  if (authScreen.dataset.mode === 'lock') {
+    if (method === 'passkey') unlockPasskey();
+    else submitUnlockTotp();
+  } else {
+    if (method === 'passkey') loginPasskey();
+    else submitTotp();
+  }
 }
 
 async function unlockPasskey() {
@@ -400,24 +414,24 @@ async function unlockPasskey() {
     if (token) {
       queueSend({ type: 'unlock', sessionToken: token });
     } else {
-      lockError.textContent = 'Passkey verification failed';
-      lockError.style.display = 'block';
+      authError.textContent = 'Passkey verification failed';
+      authError.style.display = 'block';
     }
   } catch (e) {
-    lockError.textContent = 'Passkey error -- use TOTP code';
-    lockError.style.display = 'block';
+    authError.textContent = 'Passkey error -- use TOTP code';
+    authError.style.display = 'block';
   }
 }
 
 function submitUnlockTotp() {
-  const code = lockTotpInput.value.trim();
+  const code = $('totp-input').value.trim();
   if (!code || code.length !== 6) return;
-  lockError.style.display = 'none';
+  authError.style.display = 'none';
   queueSend({ type: 'unlock', totp: code });
 }
 
-lockTotpInput?.addEventListener('keydown', e => {
-  if (e.key === 'Enter') { e.preventDefault(); submitUnlockTotp(); }
+$('totp-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); authAction('totp'); }
 });
 
 ['touchstart', 'keydown', 'mousemove', 'click'].forEach(evt => {
@@ -425,15 +439,15 @@ lockTotpInput?.addEventListener('keydown', e => {
 });
 
 function showStatus(t, c) {
-  pinStatus.textContent = t;
-  pinStatus.style.color = c || 'var(--dim)';
-  pinStatus.style.display = 'block';
+  authStatus.textContent = t;
+  authStatus.style.color = c || 'var(--dim)';
+  authStatus.style.display = 'block';
 }
 
 function submitTotp() {
   const code = $('totp-input').value.trim();
   if (!code || code.length !== 6) return;
-  pinError.style.display = 'none';
+  authError.style.display = 'none';
   showStatus('Verifying code...', 'var(--accent)');
   doConnect('totp', code);
 }
@@ -608,8 +622,6 @@ async function setupTotp() {
 
 checkAuthStatus();
 
-$('totp-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitTotp(); } });
-
 function doConnect(method, totpCode) {
   if (ws) try { ws.close(); } catch (e) { console.warn('ws.close:', e.message); }
   e2eReady = false; e2eKey = null; e2eSendSeq = 0; e2eRecvSeq = 0; decryptFailCount = 0;
@@ -706,7 +718,7 @@ function handle(m) {
         if (m.sessionToken) sessionToken = m.sessionToken;
         if (m.inactivityMs) inactivityMs = m.inactivityMs;
         $('totp-input').value = '';
-        pinScreen.style.display = 'none'; appEl.style.display = 'flex';
+        authScreen.style.display = 'none'; appEl.style.display = 'flex';
         loadProjects();
         scheduleTokenRefresh(m.ttl);
         resetInactivityTimer();
@@ -718,19 +730,19 @@ function handle(m) {
           localStorage.setItem('passkey-dismissed', '1');
         }
       } else {
-        pinScreen.style.display = 'flex'; appEl.style.display = 'none';
+        setAuthMode('login'); authScreen.style.display = 'flex'; appEl.style.display = 'none';
         $('totp-input').value = '';
-        pinError.style.display = 'block'; sessionToken = null;
+        authError.style.display = 'block'; sessionToken = null;
         if (m.locked) showStatus('Too many attempts. Locked out.', 'var(--intent-danger)');
         if (m.reason) showStatus(m.reason, 'var(--intent-danger)');
         checkAuthStatus();
       }
       break;
     case 'expired':
-      pinScreen.style.display = 'flex'; appEl.style.display = 'none';
+      setAuthMode('login'); authScreen.style.display = 'flex'; appEl.style.display = 'none';
       sessionToken = null;
       $('totp-input').value = '';
-      pinError.style.display = 'none';
+      authError.style.display = 'none';
       showStatus('Session expired. Re-authenticate.', 'var(--intent-warn)');
       checkAuthStatus();
       break;
