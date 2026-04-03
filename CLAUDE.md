@@ -5,14 +5,15 @@ Claude Mobile Bridge -- mobile web interface for Claude Code terminal sessions o
 ## Architecture
 
 ```
-claude-mobile/                    v3.1.5
+claude-mobile/                    v3.2.0
 ├── server.js                     Node.js: Express + WebSocket + node-pty + dtach (WSL) + E2E crypto
 ├── config.json                   Projects, autoStart, tailscaleHostname, port (gitignored)
 ├── config.example.json           Template for config.json
 ├── install.sh                    Full setup script (WSL, dtach, PM2, Tailscale serve)
 ├── update.sh                     Pull + deps + PM2 restart
 ├── public/
-│   ├── index.html                Self-contained mobile web UI (xterm.js, custom input, Palantir theme)
+│   ├── index.html                Mobile web UI (xterm.js, custom input, Palantir theme)
+│   ├── style.css                 Extracted CSS (503 lines) -- layout, themes, animations
 │   ├── vendor/                   Bundled xterm.js + addons (no CDN)
 │   └── apple-touch-icon.png      PWA icon
 ├── package.json                  Deps: express, ws, node-pty, @simplewebauthn/server, otpauth, qrcode
@@ -79,8 +80,10 @@ Setup: open `http://localhost:3456/setup` on laptop to configure TOTP.
 
 ## Current State
 
-v3.1.5 (tag: v3.1.5, head: fdcb50a). Full audit hardening complete (31 fixes).
-Post-release fix: input clipping bug (text + Enter sent as single atomic pty write).
+v3.2.0 (head: cee97b9). Full code review (4-agent, 38 findings) + v3.1.6 fixes + hotfix v3.1.7 + re-review (10 fixes) + architecture cleanup.
+Key changes: async createSession (event-loop fix), E2E crypto hardening, 28 empty catches replaced with audit logging, CSS extracted to public/style.css (503 lines), client `sessions` renamed to `sessionList`, auth responses normalized (verified->success), dep update (path-to-regexp GHSA-37ch-88jc-xwx2).
+iOS gotchas discovered: confirm() dialog blocks JS killing WS 2.4s after auth; strict sequential client replay check breaks iOS Safari (reverted to gap-tolerant <=).
 Active track in `.planning/`:
 - **v4-thin-viewer**: thin viewer architecture (blocked -- tech-design references tmux but stack uses dtach since v3.1.3; reconciliation needed before Wave 0)
+Deferred architecture: T07 (merge login/lock screen), T08 (extract setup pages from server.js).
 Completed (archived): scrollback-and-dtach, v3.1.3-hardening, v3.1.4-should-fix.

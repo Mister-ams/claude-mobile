@@ -4,40 +4,38 @@ Session: 2026-04-03
 
 ## Completed This Session
 
-- Cold-started project (10 days since last session, 2026-03-24)
-- Full context gathering: HANDOVER.md, MEMORY, git state, active specs
-- Identified 3 staleness issues: HANDOVER head commit drift, completed planning artifacts not archived, untracked .playwright-cli/ and gen-icon.html
-- Identified blocker: v4 tech-design references tmux capture-pane but current stack uses dtach (migrated in v3.1.3)
-- Fixed CLAUDE.md head commit pointer and v4 status (marked blocked)
-- Added SESSION.md, CLAUDE.local.md, __pycache__/, .playwright-cli/ to .gitignore
-- No code changes -- context-only session
+- Full code review (4 agents: F1-F4) of claude-mobile codebase (4,476 LOC) -- 38 unique findings (13 must-fix, 25 should-fix)
+- v3.1.6: 38 fixes across 5 waves (async createSession, E2E crypto improvements, 28 empty catches replaced with audit logging, dep update path-to-regexp GHSA-37ch-88jc-xwx2) -- commit a1b6afe
+- Hotfix v3.1.7: confirm() dialog blocked JS on iOS killing WS 2.4s after auth; reverted strict sequential client replay check (caused message drops on iOS) -- commits ba5d066, 01b6da2
+- Re-review (4 agents): 10 remaining findings (3 regressions from v3.1.6), all fixed -- commit 01b6da2
+- Architecture review (dt.architect): 10 findings. Skipped monolith extraction (#1, #2). Executed quick wins + CSS extraction
+- v3.2.0: renamed client `sessions` to `sessionList`, normalized auth responses (verified->success), extracted checkRateLimits helper, fixed stale tmux comment, extracted 503 lines CSS to public/style.css -- commits 57eb1f9, cee97b9
+- User reported "typing works but enter doesn't push to terminal" on v3.2.0 -- investigated, input IS reaching server (audit log confirms). Likely stale Claude process in recovered session, not a code bug
 
 ## Key Decisions
 
-- v4-thin-viewer marked blocked until tech-design tmux/dtach mismatch is reconciled
-- 5 completed planning artifacts identified for archival: audit-v3.1.3-review.md, plan-v3.1.3-hardening.md, plan-v3.1.4-should-fix.md, STATE-v3.1.3-hardening.yaml, STATE-v3.1.4-should-fix.yaml
-- scrollback-and-dtach files already in archive/ as untracked -- deletion of originals not yet committed
+- Client strict sequential replay check (!==) breaks iOS Safari -- reverted to gap-tolerant (<=). Server keeps strict. Asymmetry is intentional and safe
+- confirm() dialogs on iOS block JS and cause WebSocket death -- never use blocking dialogs after auth
+- secureSend plaintext fallback after E2E was active now drops message instead of sending unencrypted
+- decrypt failure auto-reconnect capped at 3 cycles to prevent infinite loops
+- Architecture: server.js monolith (1836 LOC) and login/lock screen merge deferred -- not worth the risk for a 4K LOC project
 
 ## Next Action
 
-Reconcile v4 tech-design tmux assumption with dtach stack, then Wave 0 kickoff.
+Deferred architecture items: T07 (merge login/lock screen into single auth UI) and T08 (extract setup pages from server.js into public/setup.html). Then investigate the "enter doesn't push" issue if it persists.
 
 ## State
 
 - Branch: master
-- Last commit: fdcb50a (docs: sync project documentation -- v3.1.5 audit hardening + input clipping fix)
-- Tag: v3.1.5 at 6fb7873
-- Uncommitted: .gitignore update, CLAUDE.md current state fix
-- Planning artifacts pending archive: 5 files (see Key Decisions)
+- Last commit: cee97b9 (refactor: architecture cleanup Wave 1 -- extract CSS to style.css)
+- Tag: v3.1.5 at 6fb7873 (v3.1.6/v3.1.7/v3.2.0 untagged)
+- Uncommitted: none
+- Planning: .planning/plan-architecture-cleanup.md, .planning/plan-v3.1.6-review-fixes.md (completed, unarchived)
 
 ## Context Pointers
 
-- v4 tech-design: .planning/tech-design-v4-thin-viewer.md (tmux/dtach mismatch on line 17-19)
-- v4 plan: .planning/plan-v4-thin-viewer.md
-- Audit findings: .planning/audit-v3.1.3-review.md (completed, needs archive)
+- v4 tech-design: .planning/tech-design-v4-thin-viewer.md (tmux/dtach mismatch -- blocked)
+- Architecture cleanup plan: .planning/plan-architecture-cleanup.md
+- Review fixes plan: .planning/plan-v3.1.6-review-fixes.md
 - MEMORY: project_otg.md (version history, stack, all features)
 - CLAUDE.md: architecture, security tiers, gotchas
-
-## Open Questions
-
-- How should v4 thin viewer capture rendered terminal output without tmux? Options: (a) reintroduce tmux alongside dtach, (b) capture from dtach pty output + ANSI parser, (c) use server-side scrollback buffer as render source
