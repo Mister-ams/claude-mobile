@@ -253,14 +253,21 @@ else
   done
   PROJECTS="$PROJECTS]"
 
+  # Escape JSON-special characters in user-provided values
+  json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+  MAIN_NAME_E=$(json_escape "$MAIN_NAME")
+  TS_HOSTNAME_E=$(json_escape "$TS_HOSTNAME")
+  WSL_DISTRO_E=$(json_escape "$WSL_DISTRO")
+  MAIN_DIR_E=$(json_escape "$MAIN_DIR")
+
   cat > config.json << JSONEOF
 {
   "port": $PORT,
-  "tailscaleHostname": "$TS_HOSTNAME",
+  "tailscaleHostname": "$TS_HOSTNAME_E",
   "inactivityTimeout": 15,
-  "wslDistro": "$WSL_DISTRO",
-  "autoStart": ["$MAIN_NAME"],
-  "defaultDir": "$(echo "$MAIN_DIR" | sed 's/\\/\\\\/g')",
+  "wslDistro": "$WSL_DISTRO_E",
+  "autoStart": ["$MAIN_NAME_E"],
+  "defaultDir": "$MAIN_DIR_E",
   "projects": $PROJECTS
 }
 JSONEOF
@@ -370,4 +377,6 @@ echo -e "${BOLD}|${RESET}  ${DIM}Update anytime: bash update.sh${RESET}         
 echo -e "${BOLD}+============================================================+${RESET}"
 echo ""
 
-wait $SERVER_PID 2>/dev/null
+# Server is running in background for TOTP setup.
+# Press Ctrl+C when done, then use: pm2 start server.js --name claude-mobile
+wait $SERVER_PID 2>/dev/null || true

@@ -637,6 +637,8 @@ let reconnectTimer = null;
 let sessionToken = null;
 let refreshTimer = null;
 
+let decryptFailCount = 0;
+
 // ── Client Diagnostic Logging (sent back to server via WS) ──
 function clientLog(msg) {
   console.log(msg);
@@ -771,6 +773,7 @@ async function handleKeyExchange(msg) {
 
 async function secureSend(obj) {
   if (!e2eReady || !e2eKey) {
+    if (e2eSendSeq > 0) clientLog('WARN: plaintext fallback after E2E was active');
     ws.send(JSON.stringify(obj));
     return;
   }
@@ -802,7 +805,10 @@ async function secureReceive(rawData) {
   if (parsed.type === 'encrypted') return parsed; // handshake ack
   if (parsed.e) {
     if (!e2eReady || !e2eKey) return null;
-    if (parsed.n <= e2eRecvSeq) return null; // replay
+    if (parsed.n !== e2eRecvSeq + 1) {
+      clientLog('Seq violation: expected ' + (e2eRecvSeq + 1) + ' got ' + parsed.n);
+      return null;
+    }
     try {
       const data = base64urlDecode(parsed.e);
       const iv = data.subarray(0, 12);
@@ -812,9 +818,15 @@ async function secureReceive(rawData) {
       const decrypted = await crypto.subtle.decrypt(
         { name: 'AES-GCM', iv, additionalData: seqBuf }, e2eKey, ciphertext);
       e2eRecvSeq = parsed.n;
+      decryptFailCount = 0;
       return JSON.parse(new TextDecoder().decode(decrypted));
     } catch (err) {
       clientLog('DECRYPT FAILED: ' + err.message + ' payload:' + (parsed.e?.length || '?') + 'bytes seq:' + parsed.n);
+      decryptFailCount++;
+      if (decryptFailCount >= 3) {
+        showStatus('Encryption error -- reconnecting...', 'var(--intent-danger)');
+        setTimeout(() => doConnect('reconnect'), 500);
+      }
       return null;
     }
   }
@@ -1060,7 +1072,7 @@ async function setupTotp() {
         secret + '\n\n' +
         'Then enter the 6-digit code to verify.'
       );
-      try { await navigator.clipboard.writeText(secret); } catch {}
+      try { await navigator.clipboard.writeText(secret); } catch (e) { console.warn('Clipboard unavailable, copy manually'); }
       const verifyCode = async () => {
         const code = prompt('Enter the 6-digit code from Apple Passwords:');
         if (!code) return;
@@ -1089,8 +1101,8 @@ checkAuthStatus();
 $('totp-input')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submitTotp(); } });
 
 function doConnect(method, totpCode) {
-  if (ws) try { ws.close(); } catch {}
-  e2eReady = false; e2eKey = null; e2eSendSeq = 0; e2eRecvSeq = 0;
+  if (ws) try { ws.close(); } catch (e) { console.warn('ws.close:', e.message); }
+  e2eReady = false; e2eKey = null; e2eSendSeq = 0; e2eRecvSeq = 0; decryptFailCount = 0;
   sendQueue = Promise.resolve();
   pendingAuth = { method, totpCode };
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -1105,8 +1117,8 @@ function doConnect(method, totpCode) {
     if (sessionToken) { showStatus('Reconnecting...', 'var(--intent-warn)'); clearTimeout(reconnectTimer); reconnectTimer = setTimeout(() => doConnect('reconnect'), reconnectDelay); }
     reconnectDelay = Math.min(reconnectDelay * 2, 30000);
   };
-  ws.onerror = () => {
-    showStatus('Cannot reach server.', 'var(--intent-danger)');
+  ws.onerror = (ev) => {
+    showStatus('Connection error', 'var(--intent-danger)');
   };
   ws.onmessage = async (e) => {
     // Safari may deliver WebSocket data as Blob instead of string
@@ -1172,7 +1184,7 @@ function notifyAttention(sessionId, reason, sessionName) {
     try {
       const n = new Notification(title, { body, tag: `attn-${sessionId}`, renotify: true });
       n.onclick = () => { window.focus(); n.close(); };
-    } catch {}
+    } catch (e) { console.warn('Notification failed:', e.message); }
   }
 }
 
@@ -1293,7 +1305,11 @@ function handle(m) {
 }
 
 async function loadProjects() {
-  try { projects = (await (await fetch('/api/config', { headers: { 'X-Session-Token': sessionToken } })).json()).projects; } catch (e) {
+  try {
+    const res = await fetch('/api/config', { headers: { 'X-Session-Token': sessionToken } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    projects = (await res.json()).projects;
+  } catch (e) {
     clientLog('loadProjects failed: ' + e.message);
   }
 }
@@ -1357,11 +1373,12 @@ function switchTo(id) {
       const webgl = new WebglAddon.WebglAddon();
       webgl.onContextLost(() => {
         webgl.dispose();
-        try { term.loadAddon(new CanvasAddon.CanvasAddon()); } catch {}
+        try { term.loadAddon(new CanvasAddon.CanvasAddon()); } catch (e2) { console.warn('Canvas fallback failed:', e2.message); }
       });
       term.loadAddon(webgl);
-    } catch {
-      try { term.loadAddon(new CanvasAddon.CanvasAddon()); } catch {}
+    } catch (e) {
+      console.warn('WebGL failed:', e.message);
+      try { term.loadAddon(new CanvasAddon.CanvasAddon()); } catch (e2) { console.warn('Canvas failed:', e2.message); }
     }
 
     // Single fit after layout settles
@@ -1375,7 +1392,7 @@ function switchTo(id) {
           queueSend({ type: 'resize', cols: dims.cols, rows: dims.rows });
           updateDiag(dims.cols, dims.rows);
         }
-      } catch {}
+      } catch (e) { clientLog('fit failed: ' + e.message); }
     }, 150);
     wrap.addEventListener('touchstart', e => { e.stopPropagation(); e.preventDefault(); }, true);
     wrap.addEventListener('touchmove', e => { e.stopPropagation(); e.preventDefault(); }, true);
@@ -1384,7 +1401,7 @@ function switchTo(id) {
   const wrap = document.getElementById(`tw-${id}`);
   if (wrap) {
     wrap.classList.add('active');
-    setTimeout(() => { try { fits[id]?.fit(); } catch {} }, 50);
+    setTimeout(() => { try { fits[id]?.fit(); } catch (e) { clientLog('switchTo fit: ' + e.message); } }, 50);
   }
 
   emptyState.style.display = 'none';
@@ -1897,7 +1914,7 @@ function scrollBottom() {
   if (activeSession === null || !terms[activeSession]) return;
   userScrolled = false;
   // Refit first so terminal uses full available height, then scroll
-  try { fits[activeSession]?.fit(); } catch {}
+  try { fits[activeSession]?.fit(); } catch (e) { clientLog('scrollBottom fit: ' + e.message); }
   requestAnimationFrame(() => {
     terms[activeSession]?.scrollToBottom();
     // Pin document to prevent iOS pushing page beyond visible area
@@ -2027,7 +2044,7 @@ function doResize() {
         queueSend({ type: 'resize', cols: dims.cols, rows: dims.rows });
         updateDiag(dims.cols, dims.rows);
       }
-    } catch {}
+    } catch (e) { clientLog('doResize: ' + e.message); }
   }
 }
 
@@ -2071,7 +2088,7 @@ if (window.visualViewport) {
     clearTimeout(kbTimer);
     kbTimer = setTimeout(() => {
       if (activeSession !== null && fits[activeSession]) {
-        try { fits[activeSession].fit(); } catch {}
+        try { fits[activeSession].fit(); } catch (e) { clientLog('kb refit: ' + e.message); }
       }
     }, 400);
   };
@@ -2171,7 +2188,7 @@ updateThemeChar();
 
 // Wake lock
 if ('wakeLock' in navigator) {
-  const lock = () => navigator.wakeLock.request('screen').catch(() => {});
+  const lock = () => navigator.wakeLock.request('screen').catch(e => { console.warn('Wake lock:', e.message); });
   lock();
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') lock(); });
 }

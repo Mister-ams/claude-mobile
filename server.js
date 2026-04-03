@@ -89,7 +89,6 @@ function wslPathToWin(wslPath) {
 }
 
 function dtachSocket(id) { return `/tmp/${DTACH_PREFIX}-${id}.dtach`; }
-function dtachSocketName(id) { return `${DTACH_PREFIX}-${id}`; }
 
 function listDtachSessions() {
   try {
@@ -134,7 +133,7 @@ function dtachSessionAlive(id) {
     // Check socket file exists (dtach cleans up on process exit)
     wslExec(`test -S ${socket}`);
     return true;
-  } catch { return false; }
+  } catch (e) { audit('WARN', 'dtachSessionAlive: ' + e.message); return false; }
 }
 
 function killDtachSession(id) {
@@ -341,7 +340,7 @@ function secureSend(ws, obj) {
 
 function secureReceive(ws, rawStr) {
   let parsed;
-  try { parsed = JSON.parse(rawStr); } catch { return null; }
+  try { parsed = JSON.parse(rawStr); } catch (e) { audit('WARN', 'JSON parse failed', ws._ip); return null; }
   // Key exchange messages are always plaintext -- but block after encryption established
   if (parsed.type === 'key-exchange') {
     if (ws.encrypted) {
@@ -352,7 +351,7 @@ function secureReceive(ws, rawStr) {
   }
   // Encrypted message
   if (parsed.e) {
-    if (!ws.encrypted || !ws._sessionKey) return null;
+    if (!ws.encrypted || !ws._sessionKey) { audit('WARN', 'Encrypted msg before key exchange', ws._ip); return null; }
     // Replay protection: sequence must be strictly sequential (no gaps)
     if (parsed.n !== ws._recvSeq + 1) {
       audit('SECURITY', `Sequence violation: expected ${ws._recvSeq + 1}, got ${parsed.n}`, ws._ip);
@@ -556,8 +555,10 @@ try {
 function saveCredentials() {
   try {
     fs.writeFileSync(CRED_PATH, JSON.stringify(storedCredentials, null, 2));
+    return true;
   } catch (e) {
     audit('ERROR', 'Credential save failed: ' + e.message);
+    return false;
   }
 }
 
@@ -815,12 +816,10 @@ app.post('/api/passkey/auth-verify', async (req, res) => {
       cred.counter = verification.authenticationInfo.newCounter;
       saveCredentials();
       challenges.delete(req.body.expectedChallenge);
-      const ip = req.ip || 'unknown';
       const sessionToken = issueSessionToken(ip);
       audit('AUTH', `Passkey authentication successful`, ip);
       res.json({ verified: true, sessionToken });
     } else {
-      const ip = req.ip || 'unknown';
       recordIPFailure(ip);
       recordGlobalFailure(ip);
       audit('AUTH', 'Passkey authentication failed', ip);
@@ -831,10 +830,6 @@ app.post('/api/passkey/auth-verify', async (req, res) => {
   }
 });
 
-// Token refresh -- deprecated (use WebSocket refresh path for E2E encryption)
-app.post('/api/auth/refresh', (_req, res) => {
-  res.status(410).json({ error: 'Deprecated. Use WebSocket refresh for E2E encrypted rotation.' });
-});
 
 // Kill switch
 app.post('/api/kill', requireSession, (req, res) => {
@@ -876,12 +871,16 @@ app.post('/api/totp/verify-setup', requireSession, (req, res) => {
 
 app.post('/api/totp/reset', async (req, res) => {
   if (!isLocalhost(req)) return res.status(403).json({ error: 'Localhost only' });
-  generateTotpSecret();
-  const uri = getTotpUri();
-  const QRCode = require('qrcode');
-  const qr = await QRCode.toDataURL(uri);
-  audit('SETUP', 'TOTP reset initiated from localhost');
-  res.json({ qr, secret: totpSecret, uri });
+  try {
+    generateTotpSecret();
+    const uri = getTotpUri();
+    const qr = await QRCode.toDataURL(uri);
+    audit('SETUP', 'TOTP reset initiated from localhost');
+    res.json({ qr, secret: totpSecret, uri });
+  } catch (e) {
+    audit('ERROR', 'TOTP reset failed: ' + e.message);
+    res.status(500).json({ error: 'TOTP reset failed' });
+  }
 });
 
 app.post('/api/totp/verify-reset', express.json(), (req, res) => {
@@ -957,12 +956,12 @@ function saveSessionMeta() {
   for (const [id, s] of sessions) {
     meta[`cm-${id}`] = { name: s.name, dir: s.dir };
   }
-  try { fs.writeFileSync(SESSION_META_PATH, JSON.stringify(meta, null, 2)); } catch {}
+  try { fs.writeFileSync(SESSION_META_PATH, JSON.stringify(meta, null, 2)); } catch (e) { audit('ERROR', 'saveSessionMeta: ' + e.message); }
 }
 
 function loadSessionMeta() {
   try { return JSON.parse(fs.readFileSync(SESSION_META_PATH, 'utf8')); }
-  catch { return {}; }
+  catch (e) { if (e.code !== 'ENOENT') audit('WARN', 'loadSessionMeta: ' + e.message); return {}; }
 }
 
 function stripAnsi(str) {
@@ -1116,13 +1115,13 @@ function wireSessionProc(session) {
     // PTY (wsl.exe) exited -- check if dtach session is still alive
     if (dtachSessionAlive(id)) {
       // dtach survived (e.g., server restart) -- reattach after short delay
-      audit('SESSION', `PTY detached, dtach alive: ${dtachSocketName(id)}`);
+      audit('SESSION', `PTY detached, dtach alive: cm-${id}`);
       setTimeout(() => {
         if (!sessions.has(id)) return; // cleaned up already
         try {
-          session.proc = attachToDtach(id, 80, 24);
+          session.proc = attachToDtach(id, session.lastCols || 80, session.lastRows || 24);
           wireSessionProc(session);
-          audit('SESSION', `Reattached to dtach: ${dtachSocketName(id)}`);
+          audit('SESSION', `Reattached to dtach: cm-${id}`);
         } catch (e) {
           audit('ERROR', `Reattach failed: ${e.message}`);
           sessions.delete(id);
@@ -1140,7 +1139,7 @@ function wireSessionProc(session) {
   });
 }
 
-function createSession(name, dir, cols, rows) {
+async function createSession(name, dir, cols, rows) {
   if (sessions.size >= MAX_SESSIONS) return null;
   const id = nextId++;
   const wslDir = winPathToWsl(dir);
@@ -1152,21 +1151,20 @@ function createSession(name, dir, cols, rows) {
     return null;
   }
 
-  // Wait for dtach socket to appear (retry with delay, cross-platform)
+  // Wait for dtach socket to appear (retry with async delay)
   let proc = null;
+  let lastErr;
   for (let attempt = 0; attempt < 5; attempt++) {
     try {
       if (dtachSessionAlive(id)) {
         proc = attachToDtach(id, cols || 50, rows || 30);
         break;
       }
-    } catch {}
-    // Brief synchronous delay between retries
-    const start = Date.now();
-    while (Date.now() - start < 300) {} // 300ms
+    } catch (e) { lastErr = e; }
+    await new Promise(r => setTimeout(r, 300));
   }
   if (!proc) {
-    audit('ERROR', `dtach attach failed after 5 retries`);
+    audit('ERROR', `dtach attach failed after 5 retries: ${lastErr?.message || 'unknown'}`);
     return null;
   }
 
@@ -1184,7 +1182,7 @@ function createSession(name, dir, cols, rows) {
 
   wireSessionProc(session);
   sessions.set(id, session);
-  audit('SESSION', `Created: "${name}" in ${dir} (dtach: ${dtachSocketName(id)})`);
+  audit('SESSION', `Created: "${name}" in ${dir} (dtach: cm-${id})`);
   saveSessionMeta();
   return session;
 }
@@ -1274,7 +1272,7 @@ wss.on('connection', (ws, req) => {
     }
   }, 10000);
 
-  ws.on('message', (raw) => {
+  ws.on('message', async (raw) => {
     let msg;
     try {
     msg = secureReceive(ws, raw.toString());
@@ -1438,12 +1436,12 @@ wss.on('connection', (ws, req) => {
     switch (msg.type) {
       case 'create': {
         const dir = msg.dir || config.projects?.[0]?.dir || '';
-        const allowedDirs = config.projects.map(p => p.dir);
+        const allowedDirs = (config.projects || []).map(p => p.dir);
         if (!allowedDirs.includes(dir)) {
           secureSend(ws, { type: 'error', message: 'Directory not in allowed project list' });
           break;
         }
-        const created = createSession(msg.name || 'Session', dir, msg.cols, msg.rows);
+        const created = await createSession(msg.name || 'Session', dir, msg.cols, msg.rows);
         if (created) {
           broadcastSessions();
           secureSend(ws, { type: 'created', session: created.id });
@@ -1487,6 +1485,7 @@ wss.on('connection', (ws, req) => {
         }
         const inputHash = crypto.createHash('sha256').update(msg.data).digest('hex').slice(0, 12);
         audit('INPUT', `session=${ws.currentSession} len=${msg.data.length} hash=${inputHash}`, ws._ip);
+        if (!activeSession.proc) break;
         try { activeSession.proc.write(msg.data); } catch (e) {
           audit('ERROR', `pty write: ${e.message}`);
         }
@@ -1498,9 +1497,11 @@ wss.on('connection', (ws, req) => {
         if (!activeSession || !msg.cols || !msg.rows) break;
         const cols = Math.max(40, Math.min(300, msg.cols));
         const rows = Math.max(10, Math.min(200, msg.rows));
+        activeSession.lastCols = cols;
+        activeSession.lastRows = rows;
         try {
           activeSession.proc.resize(cols, rows);
-        } catch {}
+        } catch (e) { audit('WARN', 'resize failed session=' + ws.currentSession + ': ' + e.message); }
         break;
       }
 
@@ -1521,13 +1522,13 @@ wss.on('connection', (ws, req) => {
         killDtachSession(msg.session);
         const proc = targetSession.proc;
         targetSession.proc = null; // prevent onExit from double-broadcasting
-        try { proc.kill(); } catch {}
+        try { proc.kill(); } catch (e) { audit('WARN', 'proc.kill: ' + e.message); }
         if (targetSession.attentionTimer) clearTimeout(targetSession.attentionTimer);
         recentOutput.delete(msg.session);
         sessions.delete(msg.session);
         if (ws.currentSession === msg.session) ws.currentSession = null;
         broadcastSessions();
-        audit('SESSION', `Closed: "${targetSession.name}" (dtach: ${dtachSocketName(msg.session)})`, ws._ip);
+        audit('SESSION', `Closed: "${targetSession.name}" (dtach: cm-${msg.session})`, ws._ip);
         saveSessionMeta();
         break;
       }
@@ -1642,7 +1643,7 @@ function scanSkillDir(dir) {
       let desc = extractDescription(content);
       if (desc.length > 80) desc = desc.slice(0, 77) + '...';
       skills.push({ cmd: '/' + entry.name, desc });
-    } catch {}
+    } catch (e) { audit('WARN', 'Skill scan: ' + entry.name + ': ' + e.message); }
   }
   return skills;
 }
@@ -1654,13 +1655,13 @@ function scanCommandDir(dir) {
   const commands = [];
   if (!fs.existsSync(dir)) return commands;
   let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return commands; }
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { audit('WARN', 'scanCommandDir: ' + e.message); return commands; }
   for (const entry of entries) {
     if (entry.isDirectory()) {
       // Namespace: subdir/*.md -> /subdir:name
       const subdir = path.join(dir, entry.name);
       let subEntries;
-      try { subEntries = fs.readdirSync(subdir, { withFileTypes: true }); } catch { continue; }
+      try { subEntries = fs.readdirSync(subdir, { withFileTypes: true }); } catch (e) { audit('WARN', 'scanCommandDir sub: ' + e.message); continue; }
       for (const sub of subEntries) {
         if (!sub.isFile() || !sub.name.endsWith('.md')) continue;
         try {
@@ -1672,7 +1673,7 @@ function scanCommandDir(dir) {
           let desc = extractDescription(content);
           if (desc.length > 80) desc = desc.slice(0, 77) + '...';
           commands.push({ cmd, desc });
-        } catch {}
+        } catch (e) { audit('WARN', 'Command scan: ' + sub.name + ': ' + e.message); }
       }
     } else if (entry.isFile() && entry.name.endsWith('.md')) {
       // Top-level: foo.md -> /foo
@@ -1684,7 +1685,7 @@ function scanCommandDir(dir) {
         let desc = extractDescription(content);
         if (desc.length > 80) desc = desc.slice(0, 77) + '...';
         commands.push({ cmd, desc });
-      } catch {}
+      } catch (e) { audit('WARN', 'Command scan: ' + entry.name + ': ' + e.message); }
     }
   }
   return commands;
@@ -1748,7 +1749,7 @@ function watchSkillDirs(projectDir) {
         }, 1000);
       });
       entry.watchers.push(watcher);
-    } catch {}
+    } catch (e) { audit('WARN', 'fs.watch: ' + e.message); }
   }
 }
 
