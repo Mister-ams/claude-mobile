@@ -477,6 +477,10 @@ function recordIPFailure(ip) {
   authAttempts.set(ip, entry);
 }
 
+function checkRateLimits(ip) {
+  return checkGlobalRate() && checkIPRate(ip);
+}
+
 // ─── Audit log ───────────────────────────────────────────────────
 const AUDIT_PATH = path.join(os.homedir(), '.claude-mobile-audit.log');
 
@@ -766,7 +770,7 @@ app.post('/api/passkey/register-verify', requireSession, async (req, res) => {
 
 app.post('/api/passkey/auth-options', async (req, res) => {
   const ip = req.ip || 'unknown';
-  if (!checkGlobalRate() || !checkIPRate(ip)) {
+  if (!checkRateLimits(ip)) {
     return res.status(429).json({ error: 'Too many attempts' });
   }
   if (!storedCredentials.length) {
@@ -789,7 +793,7 @@ app.post('/api/passkey/auth-options', async (req, res) => {
 
 app.post('/api/passkey/auth-verify', async (req, res) => {
   const ip = req.ip || 'unknown';
-  if (!checkGlobalRate() || !checkIPRate(ip)) {
+  if (!checkRateLimits(ip)) {
     return res.status(429).json({ error: 'Too many attempts' });
   }
   try {
@@ -818,12 +822,12 @@ app.post('/api/passkey/auth-verify', async (req, res) => {
       challenges.delete(req.body.expectedChallenge);
       const sessionToken = issueSessionToken(ip);
       audit('AUTH', `Passkey authentication successful`, ip);
-      res.json({ verified: true, sessionToken });
+      res.json({ success: true, sessionToken });
     } else {
       recordIPFailure(ip);
       recordGlobalFailure(ip);
       audit('AUTH', 'Passkey authentication failed', ip);
-      res.json({ verified: false });
+      res.json({ success: false });
     }
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -1299,7 +1303,7 @@ wss.on('connection', (ws, req) => {
 
     // ── Auth via TOTP (backup 2FA) or session token re-auth ──
     if (msg.type === 'auth') {
-      if (!checkGlobalRate() || !checkIPRate(ws._ip)) {
+      if (!checkRateLimits(ws._ip)) {
         secureSend(ws, { type: 'auth', success: false, locked: true });
         return;
       }

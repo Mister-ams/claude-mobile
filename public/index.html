@@ -630,7 +630,7 @@
 <script src="/vendor/addon-webgl.min.js"></script>
 <script src="/vendor/addon-canvas.min.js"></script>
 <script>
-let ws = null, sessions = [], activeSession = null;
+let ws = null, sessionList = [], activeSession = null;
 let terms = {}, fits = {}, projects = [];
 let reconnectDelay = 1000;
 let reconnectTimer = null;
@@ -1000,7 +1000,7 @@ async function doPasskeyAuth() {
     })
   });
   const result = await authRes.json();
-  return (result.verified && result.sessionToken) ? result.sessionToken : null;
+  return (result.success && result.sessionToken) ? result.sessionToken : null;
 }
 
 async function loginPasskey() {
@@ -1253,9 +1253,9 @@ function handle(m) {
       console.warn('Server warning:', m.message);
       break;
     case 'sessions':
-      sessions = m.sessions; renderTabs(); updateHdr();
-      if (!sessions.length) { activeSession = null; emptyState.style.display = 'flex'; }
-      else if (activeSession === null) switchTo(sessions[0].id);
+      sessionList = m.sessions; renderTabs(); updateHdr();
+      if (!sessionList.length) { activeSession = null; emptyState.style.display = 'flex'; }
+      else if (activeSession === null) switchTo(sessionList[0].id);
       break;
     case 'created':
       switchTo(m.session); break;
@@ -1298,7 +1298,7 @@ function handle(m) {
       }
       break;
     case 'attention':
-      const s = sessions.find(x => x.id === m.session);
+      const s = sessionList.find(x => x.id === m.session);
       if (s) { s.attention = m.reason; renderTabs(); }
       notifyAttention(m.session, m.reason, s?.name);
       break;
@@ -1419,7 +1419,7 @@ function switchTo(id) {
 }
 
 function closeSession(id) {
-  const s = sessions.find(x => x.id === id);
+  const s = sessionList.find(x => x.id === id);
   if (!confirm(`Close ${s ? s.name : 'session'}?`)) return;
   if (terms[id]) { terms[id].dispose(); delete terms[id]; delete fits[id]; }
   const w = document.getElementById(`tw-${id}`);
@@ -1427,13 +1427,13 @@ function closeSession(id) {
   queueSend({ type: 'close', session: id });
   if (activeSession === id) {
     activeSession = null;
-    const rest = sessions.filter(x => x.id !== id);
+    const rest = sessionList.filter(x => x.id !== id);
     if (rest.length) switchTo(rest[0].id); else { emptyState.style.display = 'flex'; updateHdr(); }
   }
 }
 
 function updateHdr() {
-  const s = sessions.find(x => x.id === activeSession);
+  const s = sessionList.find(x => x.id === activeSession);
   if (!document.activeElement || document.activeElement !== sname) {
     sname.value = s ? s.name.toUpperCase() : 'NO SESSION';
   }
@@ -1446,7 +1446,7 @@ function commitRename() {
   const name = sname.value.trim().toUpperCase();
   if (!name) return;
   sname.value = name;
-  const s = sessions.find(x => x.id === activeSession);
+  const s = sessionList.find(x => x.id === activeSession);
   if (s && name !== s.name) {
     s.name = name;
     queueSend({ type: 'rename', session: activeSession, name });
@@ -1459,17 +1459,17 @@ function renderTabs() {
   const pillName = pill.querySelector('.pill-name');
   const pillDir = pill.querySelector('.pill-dir');
   const countBtn = $('tab-count-btn');
-  const s = sessions.find(x => x.id === activeSession);
+  const s = sessionList.find(x => x.id === activeSession);
 
   // Update pill content
   pillName.textContent = s ? s.name : 'No session';
   pillDir.textContent = s ? s.dir.split('\\').pop() : '';
 
   // Update count text
-  countBtn.querySelector('.count-text').textContent = sessions.length || '0';
+  countBtn.querySelector('.count-text').textContent = sessionList.length || '0';
 
   // Notification: red dot on pill + badge on count when ANY session needs input
-  const anyAttn = sessions.some(x => x.attention);
+  const anyAttn = sessionList.some(x => x.attention);
   pill.classList.toggle('needs-input', anyAttn);
   countBtn.classList.toggle('has-attn', anyAttn);
 
@@ -1491,7 +1491,7 @@ function renderSwitcher() {
   const sw = $('tab-switcher');
   if (!sw.classList.contains('open')) return;
   sw.innerHTML = '';
-  sessions.forEach(s => {
+  sessionList.forEach(s => {
     const item = document.createElement('div');
     item.className = 'switcher-item' + (s.id === activeSession ? ' active' : '');
     // Attention dot
@@ -1515,7 +1515,7 @@ function renderSwitcher() {
     item.onclick = () => { switchTo(s.id); closeSwitcher(); };
     sw.appendChild(item);
   });
-  if (!sessions.length) {
+  if (!sessionList.length) {
     const empty = document.createElement('div');
     empty.className = 'switcher-item';
     empty.style.color = 'var(--dim)';
@@ -1527,9 +1527,9 @@ function renderSwitcher() {
 
 function newSession() {
   if (!ws || ws.readyState !== 1) return;
-  const num = sessions.length + 1;
+  const num = sessionList.length + 1;
   const defaultDir = (projects && projects.length) ? projects[0].dir : '';
-  // Send screen dimensions so tmux session matches phone width
+  // Send screen dimensions so dtach session matches phone width
   const termArea = document.getElementById('term-area');
   const charW = 7.8; // approximate char width at 13px SF Mono
   const lineH = 13 * 1.286; // fontSize * lineHeight
@@ -1549,7 +1549,7 @@ const newHint = $('new-session-hint');
 let swipePeekWrap = null; // the term-wrap being peeked during swipe
 
 function getActiveIndex() {
-  return sessions.findIndex(s => s.id === activeSession);
+  return sessionList.findIndex(s => s.id === activeSession);
 }
 
 // Close switcher when tapping outside
@@ -1564,14 +1564,14 @@ function navigateTab(direction) {
   const idx = getActiveIndex();
   if (idx < 0) return false;
   const target = idx + direction;
-  if (target >= 0 && target < sessions.length) {
-    switchTo(sessions[target].id);
+  if (target >= 0 && target < sessionList.length) {
+    switchTo(sessionList[target].id);
     return true;
   }
   return false;
 }
 
-// Animated slide transition between sessions
+// Animated slide transition between sessionList entries
 function animatedSwitchTo(targetId, direction) {
   // direction: -1 = sliding right (prev session), +1 = sliding left (next session)
   const currentWrap = activeSession !== null ? document.getElementById(`tw-${activeSession}`) : null;
@@ -1649,15 +1649,15 @@ document.addEventListener('touchmove', e => {
 
   // Show edge hints
   hintL.classList.toggle('flash', dx > 20 && idx > 0);
-  hintR.classList.toggle('flash', dx < -20 && idx < sessions.length - 1);
+  hintR.classList.toggle('flash', dx < -20 && idx < sessionList.length - 1);
 
   // Translate active terminal following finger (damped at edges)
   if (activeWrap) {
     const canGoLeft = idx > 0;
-    const canGoRight = idx < sessions.length - 1;
+    const canGoRight = idx < sessionList.length - 1;
     let clampedDx = dx;
     // Rubber-band at edges (no session in that direction)
-    if ((!canGoLeft && dx > 0) || (!canGoRight && dx < 0 && idx === sessions.length - 1 && Math.abs(dx) < NEW_SESSION_THRESHOLD * 0.5)) {
+    if ((!canGoLeft && dx > 0) || (!canGoRight && dx < 0 && idx === sessionList.length - 1 && Math.abs(dx) < NEW_SESSION_THRESHOLD * 0.5)) {
       clampedDx = dx * 0.3;
     }
     activeWrap.style.transform = `translateX(${clampedDx}px)`;
@@ -1665,7 +1665,7 @@ document.addEventListener('touchmove', e => {
     // Show peek of target session
     const peekDir = dx > 0 ? -1 : 1; // -1=prev, 1=next
     const peekIdx = idx + peekDir;
-    const peekSession = (peekIdx >= 0 && peekIdx < sessions.length) ? sessions[peekIdx] : null;
+    const peekSession = (peekIdx >= 0 && peekIdx < sessionList.length) ? sessionList[peekIdx] : null;
 
     // Clean up old peek if direction changed
     if (swipePeekWrap && peekSession && swipePeekWrap.id !== `tw-${peekSession.id}`) {
@@ -1685,7 +1685,7 @@ document.addEventListener('touchmove', e => {
   }
 
   // New session pull indicator (swipe left past last tab)
-  if (dx < -20 && idx === sessions.length - 1) {
+  if (dx < -20 && idx === sessionList.length - 1) {
     const pull = Math.min(Math.abs(dx), 200);
     newHint.style.width = pull + 'px';
     newHint.classList.toggle('ready', pull >= NEW_SESSION_THRESHOLD);
@@ -1707,7 +1707,7 @@ function endSwipe() {
   const idx = getActiveIndex();
   const vw = window.innerWidth;
   const committed = Math.abs(swipeDx) > SWIPE_THRESHOLD;
-  const isNewSession = idx === sessions.length - 1 && swipeDx < -NEW_SESSION_THRESHOLD;
+  const isNewSession = idx === sessionList.length - 1 && swipeDx < -NEW_SESSION_THRESHOLD;
 
   if (!swiping) {
     // No swipe detected -- clean up any transforms
@@ -1721,8 +1721,8 @@ function endSwipe() {
     // Animate to completion
     const direction = swipeDx > 0 ? -1 : 1; // which way are we navigating
     const targetIdx = idx + direction;
-    if (targetIdx >= 0 && targetIdx < sessions.length) {
-      const targetId = sessions[targetIdx].id;
+    if (targetIdx >= 0 && targetIdx < sessionList.length) {
+      const targetId = sessionList[targetIdx].id;
 
       // Animate current out
       if (activeWrap) {
