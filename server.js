@@ -752,7 +752,7 @@ app.post('/api/passkey/register-verify', requireSession, async (req, res) => {
         counter: verification.registrationInfo.credential.counter,
         created: new Date().toISOString(),
       });
-      saveCredentials();
+      if (!saveCredentials()) audit('ERROR', 'Credential persist failed after passkey registration');
       challenges.delete(req.body.expectedChallenge);
       audit('AUTH', 'Passkey registered');
       res.json({ verified: true });
@@ -814,7 +814,7 @@ app.post('/api/passkey/auth-verify', async (req, res) => {
     });
     if (verification.verified) {
       cred.counter = verification.authenticationInfo.newCounter;
-      saveCredentials();
+      if (!saveCredentials()) audit('ERROR', 'Credential persist failed after counter update');
       challenges.delete(req.body.expectedChallenge);
       const sessionToken = issueSessionToken(ip);
       audit('AUTH', `Passkey authentication successful`, ip);
@@ -1535,7 +1535,7 @@ wss.on('connection', (ws, req) => {
     }
     } catch (e) {
       audit('ERROR', 'Message handler error: ' + e.message, ws._ip);
-      try { ws.close(1011, 'Internal error'); } catch {}
+      try { ws.close(1011, 'Internal error'); } catch (e) { audit('WARN', 'ws.close after error: ' + e.message, ws._ip); }
     }
   });
 
@@ -1631,7 +1631,7 @@ function scanSkillDir(dir) {
   const skills = [];
   if (!fs.existsSync(dir)) return skills;
   let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return skills; }
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { audit('WARN', 'scanSkillDir: ' + e.message); return skills; }
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const skillFile = path.join(dir, entry.name, 'SKILL.md');
@@ -1760,13 +1760,18 @@ function sendCommandsToClient(ws, projectDir) {
 }
 
 // ─── Startup ─────────────────────────────────────────────────────
-function autoStartSessions() {
+async function autoStartSessions() {
   const autoStart = config.autoStart || [];
   for (const name of autoStart) {
     const project = config.projects.find(p => p.name === name);
     if (project && fs.existsSync(project.dir)) {
-      const session = createSession(project.name, project.dir);
-      if (session) console.log(`  Auto-started: ${project.name}`);
+      try {
+        const session = await createSession(project.name, project.dir);
+        if (session) console.log(`  Auto-started: ${project.name}`);
+        else audit('WARN', `Auto-start failed for ${project.name}`);
+      } catch (e) {
+        audit('ERROR', `Auto-start error for ${project.name}: ${e.message}`);
+      }
     }
   }
 }

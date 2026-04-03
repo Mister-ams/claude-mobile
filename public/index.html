@@ -638,6 +638,7 @@ let sessionToken = null;
 let refreshTimer = null;
 
 let decryptFailCount = 0;
+let decryptReconnectCount = 0;
 
 // ── Client Diagnostic Logging (sent back to server via WS) ──
 function clientLog(msg) {
@@ -773,7 +774,10 @@ async function handleKeyExchange(msg) {
 
 async function secureSend(obj) {
   if (!e2eReady || !e2eKey) {
-    if (e2eSendSeq > 0) clientLog('WARN: plaintext fallback after E2E was active');
+    if (e2eSendSeq > 0) {
+      clientLog('DROPPED: plaintext send blocked after E2E was active (type: ' + obj.type + ')');
+      return;
+    }
     ws.send(JSON.stringify(obj));
     return;
   }
@@ -800,7 +804,7 @@ function queueSend(obj) {
 
 async function secureReceive(rawData) {
   let parsed;
-  try { parsed = JSON.parse(rawData); } catch { return null; }
+  try { parsed = JSON.parse(rawData); } catch { clientLog('JSON parse failed'); return null; }
   if (parsed.type === 'key-exchange') return parsed;
   if (parsed.type === 'encrypted') return parsed; // handshake ack
   if (parsed.e) {
@@ -808,6 +812,9 @@ async function secureReceive(rawData) {
     if (parsed.n <= e2eRecvSeq) {
       clientLog('Replay rejected: seq ' + parsed.n + ' <= ' + e2eRecvSeq);
       return null;
+    }
+    if (parsed.n > e2eRecvSeq + 1) {
+      clientLog('Seq gap detected: expected ' + (e2eRecvSeq + 1) + ' got ' + parsed.n);
     }
     try {
       const data = base64urlDecode(parsed.e);
@@ -823,9 +830,15 @@ async function secureReceive(rawData) {
     } catch (err) {
       clientLog('DECRYPT FAILED: ' + err.message + ' payload:' + (parsed.e?.length || '?') + 'bytes seq:' + parsed.n);
       decryptFailCount++;
+      if (decryptFailCount === 1) showStatus('Decrypt error -- retrying...', 'var(--intent-warn)');
       if (decryptFailCount >= 3) {
-        showStatus('Encryption error -- reconnecting...', 'var(--intent-danger)');
-        setTimeout(() => doConnect('reconnect'), 500);
+        decryptReconnectCount++;
+        if (decryptReconnectCount <= 3) {
+          showStatus('Encryption error -- reconnecting...', 'var(--intent-danger)');
+          setTimeout(() => doConnect('reconnect'), 500);
+        } else {
+          showStatus('Persistent encryption error. Reload the page.', 'var(--intent-danger)');
+        }
       }
       return null;
     }
@@ -1072,7 +1085,7 @@ async function setupTotp() {
         secret + '\n\n' +
         'Then enter the 6-digit code to verify.'
       );
-      try { await navigator.clipboard.writeText(secret); } catch (e) { console.warn('Clipboard unavailable, copy manually'); }
+      try { await navigator.clipboard.writeText(secret); } catch (e) { console.warn('Clipboard unavailable:', e.message); }
       const verifyCode = async () => {
         const code = prompt('Enter the 6-digit code from Apple Passwords:');
         if (!code) return;
@@ -1192,6 +1205,7 @@ function handle(m) {
   switch (m.type) {
     case 'auth':
       if (m.success) {
+        decryptReconnectCount = 0;
         if (m.sessionToken) sessionToken = m.sessionToken;
         if (m.inactivityMs) inactivityMs = m.inactivityMs;
         $('totp-input').value = '';
