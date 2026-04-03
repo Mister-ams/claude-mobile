@@ -5,14 +5,15 @@ Claude Mobile Bridge -- mobile web interface for Claude Code terminal sessions o
 ## Architecture
 
 ```
-claude-mobile/                    v3.2.0
+claude-mobile/                    v3.2.1
 ├── server.js                     Node.js: Express + WebSocket + node-pty + dtach (WSL) + E2E crypto
 ├── config.json                   Projects, autoStart, tailscaleHostname, port (gitignored)
 ├── config.example.json           Template for config.json
 ├── install.sh                    Full setup script (WSL, dtach, PM2, Tailscale serve)
 ├── update.sh                     Pull + deps + PM2 restart
 ├── public/
-│   ├── index.html                Mobile web UI (xterm.js, custom input, Palantir theme)
+│   ├── index.html                Mobile web UI (xterm.js, custom input, Palantir theme, merged #auth-screen)
+│   ├── setup.html                Setup pages (TOTP config, extracted from server.js in T08)
 │   ├── style.css                 Extracted CSS (503 lines) -- layout, themes, animations
 │   ├── vendor/                   Bundled xterm.js + addons (no CDN)
 │   └── apple-touch-icon.png      PWA icon
@@ -80,10 +81,9 @@ Setup: open `http://localhost:3456/setup` on laptop to configure TOTP.
 
 ## Current State
 
-v3.2.0 (head: cee97b9). Full code review (4-agent, 38 findings) + v3.1.6 fixes + hotfix v3.1.7 + re-review (10 fixes) + architecture cleanup.
-Key changes: async createSession (event-loop fix), E2E crypto hardening, 28 empty catches replaced with audit logging, CSS extracted to public/style.css (503 lines), client `sessions` renamed to `sessionList`, auth responses normalized (verified->success), dep update (path-to-regexp GHSA-37ch-88jc-xwx2).
+v3.2.1 (head: f8b950d). Full code review (4-agent, 38 findings) + v3.1.6 fixes + hotfix v3.1.7 + re-review (10 fixes) + architecture cleanup complete.
+Key changes: async createSession (event-loop fix), E2E crypto hardening, 28 empty catches replaced with audit logging, CSS extracted to public/style.css (503 lines), client `sessions` renamed to `sessionList`, auth responses normalized (verified->success), dep update (path-to-regexp GHSA-37ch-88jc-xwx2). T07: login/lock merged into single #auth-screen. T08: setup pages extracted to public/setup.html + /api/setup/status endpoint. server.js 1836->1769 LOC.
 iOS gotchas discovered: confirm() dialog blocks JS killing WS 2.4s after auth; strict sequential client replay check breaks iOS Safari (reverted to gap-tolerant <=).
 Active track in `.planning/`:
 - **v4-thin-viewer**: thin viewer architecture (blocked -- tech-design references tmux but stack uses dtach since v3.1.3; reconciliation needed before Wave 0)
-Deferred architecture: T07 (merge login/lock screen), T08 (extract setup pages from server.js).
 Completed (archived): scrollback-and-dtach, v3.1.3-hardening, v3.1.4-should-fix.
