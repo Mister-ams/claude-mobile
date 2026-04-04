@@ -2,6 +2,9 @@ node_modules/
 .pin
 .credentials.json
 .totp-secret
+.totp-secret.bak
+.totp-secret.tmp
+*.tmp
 .bootstrap-token
 config.json
 .server-identity-key
