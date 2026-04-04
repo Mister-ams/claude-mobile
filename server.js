@@ -148,21 +148,6 @@ function killDtachSession(id) {
   }
 }
 
-// ─── Audit log (must be defined early -- used by TOTP/identity loaders) ──
-const AUDIT_PATH = path.join(os.homedir(), '.claude-mobile-audit.log');
-const AUDIT_LEVELS = { SYSTEM: 'INFO', TOTP: 'WARN', AUTH: 'INFO', CRYPTO: 'INFO', SECURITY: 'CRIT', SETUP: 'WARN', ERROR: 'ERROR', CONNECT: 'DEBUG', UPLOAD: 'INFO', SESSION: 'INFO', 'ATTN-MISS': 'DEBUG' };
-
-function audit(category, message, ip) {
-  const ts = new Date().toISOString();
-  const level = AUDIT_LEVELS[category] || 'INFO';
-  const line = `${ts} [${level}] [${category}] ${ip ? `(${ip}) ` : ''}${message}\n`;
-  try { fs.appendFileSync(AUDIT_PATH, line); } catch (e) {
-    process.stderr.write('audit write failed: ' + e.message + '\n');
-  }
-  const prefix = level === 'CRIT' || level === 'ERROR' ? '  ⚠ [audit]' : '  [audit]';
-  console.log(`${prefix} ${category}: ${message}`);
-}
-
 // ─── Auth: No tokens. Setup via localhost only. ──────────────────
 const QRCode = require('qrcode');
 
@@ -177,68 +162,26 @@ function isLocalhost(req) {
 
 // ─── TOTP (backup 2FA, works with Apple Passwords) ──────────────
 const TOTP_PATH = path.join(__dirname, '.totp-secret');
-const TOTP_BACKUP_PATH = TOTP_PATH + '.bak';
 let totpSecret = null;
-
-// Atomic file write: write to .tmp then rename (prevents corruption on crash/PM2 kill)
-function atomicWriteSync(filePath, data) {
-  const tmpPath = filePath + '.tmp';
-  fs.writeFileSync(tmpPath, data);
-  fs.renameSync(tmpPath, filePath);
-}
 
 function loadTotpSecret() {
   try {
-    const raw = fs.readFileSync(TOTP_PATH, 'utf8');
-    if (!raw || !raw.trim()) throw new Error('File is empty');
-    const data = JSON.parse(raw);
-    if (!data.secret || typeof data.secret !== 'string') throw new Error('Missing or invalid secret field');
+    const data = JSON.parse(fs.readFileSync(TOTP_PATH, 'utf8'));
     totpSecret = data.secret;
-    audit('TOTP', `Secret loaded (created: ${data.created || 'unknown'})`);
   } catch (e) {
-    if (e.code === 'ENOENT') return; // No file yet -- first run
-    audit('TOTP', `PRIMARY secret file corrupt or unreadable: ${e.message} -- attempting backup recovery`);
-    process.stderr.write(`TOTP secret file corrupt: ${e.message}\n`);
-    // Attempt recovery from backup
-    try {
-      const backupRaw = fs.readFileSync(TOTP_BACKUP_PATH, 'utf8');
-      if (backupRaw && backupRaw.trim()) {
-        const backupData = JSON.parse(backupRaw);
-        if (backupData.secret && typeof backupData.secret === 'string') {
-          totpSecret = backupData.secret;
-          // Restore primary from backup
-          atomicWriteSync(TOTP_PATH, backupRaw);
-          audit('TOTP', `SECRET RECOVERED FROM BACKUP (created: ${backupData.created || 'unknown'}) -- primary file restored`);
-          return;
-        }
-      }
-    } catch (backupErr) {
-      audit('TOTP', `Backup recovery also failed: ${backupErr.message} -- manual re-enrollment required`);
+    if (e.code !== 'ENOENT') {
+      audit('ERROR', 'loadTotpSecret failed (file may be corrupt): ' + e.message);
+      process.stderr.write('TOTP secret file corrupt or unreadable: ' + e.message + '\n');
     }
-    process.stderr.write('TOTP: BOTH primary and backup are corrupt/missing. Manual re-enrollment required via /setup\n');
   }
 }
 
 function totpConfigured() { return !!totpSecret; }
 
-function generateTotpSecret(reason) {
-  // Guard: if a secret already exists, back it up and log prominently
-  if (totpSecret) {
-    audit('TOTP', `⚠ SECRET REGENERATION (reason: ${reason || 'unspecified'}) -- backing up previous secret`);
-    try {
-      const existing = fs.readFileSync(TOTP_PATH, 'utf8');
-      atomicWriteSync(TOTP_BACKUP_PATH, existing);
-      audit('TOTP', 'Previous secret backed up to .totp-secret.bak');
-    } catch (e) {
-      audit('TOTP', `Backup of previous secret failed: ${e.message}`);
-    }
-  } else {
-    audit('TOTP', `New secret generated (reason: ${reason || 'first-time setup'})`);
-  }
+function generateTotpSecret() {
   const secret = new Secret();
   totpSecret = secret.base32;
-  const payload = JSON.stringify({ secret: totpSecret, created: new Date().toISOString(), reason: reason || 'initial' });
-  atomicWriteSync(TOTP_PATH, payload);
+  fs.writeFileSync(TOTP_PATH, JSON.stringify({ secret: totpSecret, created: new Date().toISOString() }));
   return totpSecret;
 }
 
@@ -285,7 +228,7 @@ function loadOrCreateIdentityKey() {
   const pubHex = publicKey.toString('hex');
   const fingerprint = crypto.createHash('sha256').update(publicKey).digest('hex');
   identityKeys = { publicKey: pubHex, privateKey, fingerprint, created: new Date().toISOString() };
-  atomicWriteSync(IDENTITY_KEY_PATH, JSON.stringify(identityKeys, null, 2));
+  fs.writeFileSync(IDENTITY_KEY_PATH, JSON.stringify(identityKeys, null, 2));
   audit('CRYPTO', `Identity key generated. Fingerprint: ${fingerprint.slice(0, 16)}...`);
 }
 
@@ -538,7 +481,17 @@ function checkRateLimits(ip) {
   return checkGlobalRate() && checkIPRate(ip);
 }
 
-// ─── Audit log: defined early (see line ~151) ───────────────────
+// ─── Audit log ───────────────────────────────────────────────────
+const AUDIT_PATH = path.join(os.homedir(), '.claude-mobile-audit.log');
+
+function audit(category, message, ip) {
+  const ts = new Date().toISOString();
+  const line = `${ts} [${category}] ${ip ? `(${ip}) ` : ''}${message}\n`;
+  try { fs.appendFileSync(AUDIT_PATH, line); } catch (e) {
+    process.stderr.write('audit write failed: ' + e.message + '\n');
+  }
+  console.log(`  [audit] ${category}: ${message}`);
+}
 
 // ─── Env var whitelist for pty ───────────────────────────────────
 const ENV_WHITELIST = [
@@ -576,27 +529,6 @@ function checkCanary(input) {
   return null;
 }
 
-// ─── Graceful shutdown (prevents file corruption on PM2 restart) ─
-let isShuttingDown = false;
-function gracefulShutdown(signal) {
-  if (isShuttingDown) return;
-  isShuttingDown = true;
-  audit('SYSTEM', `Graceful shutdown initiated (signal: ${signal})`);
-  // Close WebSocket connections
-  if (global._wss) {
-    global._wss.clients.forEach(ws => {
-      try { ws.close(1001, 'Server shutting down'); } catch (e) { /* ignore */ }
-    });
-  }
-  // Allow pending writes to complete, then exit
-  setTimeout(() => {
-    audit('SYSTEM', 'Shutdown complete');
-    process.exit(0);
-  }, 500);
-}
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-
 // ─── Auto-shutdown ───────────────────────────────────────────────
 const AUTO_SHUTDOWN_MS = 8 * 60 * 60 * 1000; // 8 hours
 let lastAuthenticatedActivity = Date.now();
@@ -626,7 +558,7 @@ try {
 
 function saveCredentials() {
   try {
-    atomicWriteSync(CRED_PATH, JSON.stringify(storedCredentials, null, 2));
+    fs.writeFileSync(CRED_PATH, JSON.stringify(storedCredentials, null, 2));
     return true;
   } catch (e) {
     audit('ERROR', 'Credential save failed: ' + e.message);
@@ -682,7 +614,7 @@ app.get('/api/setup/status', (req, res) => {
 app.post('/api/setup/init', async (req, res) => {
   if (!isLocalhost(req)) return res.status(403).json({ error: 'Localhost only' });
   if (isSetupComplete()) return res.json({ error: 'Already configured' });
-  const secret = totpConfigured() ? totpSecret : generateTotpSecret('initial-setup-via-localhost');
+  const secret = totpConfigured() ? totpSecret : generateTotpSecret();
   const uri = getTotpUri();
   try {
     const qr = await QRCode.toDataURL(uri);
@@ -858,7 +790,8 @@ app.post('/api/totp/setup', requireSession, (req, res) => {
   if (totpConfigured()) {
     return res.json({ already: true, uri: getTotpUri() });
   }
-  generateTotpSecret('totp-setup-endpoint');
+  generateTotpSecret();
+  audit('AUTH', 'TOTP secret generated');
   res.json({ uri: getTotpUri(), secret: totpSecret });
 });
 
@@ -871,30 +804,15 @@ app.post('/api/totp/verify-setup', requireSession, (req, res) => {
   }
 });
 
-// ─── TOTP Re-enrollment (localhost-only, requires current code) ──
+// ─── TOTP Re-enrollment (localhost-only) ──────────────────────
 
 app.post('/api/totp/reset', async (req, res) => {
   if (!isLocalhost(req)) return res.status(403).json({ error: 'Localhost only' });
-  // Require current TOTP code to prove the user still has access before allowing reset
-  // Skip verification only if TOTP is genuinely not configured (corrupt/missing)
-  if (totpConfigured()) {
-    const currentCode = req.body?.currentCode;
-    if (!currentCode) {
-      audit('TOTP', 'Reset BLOCKED -- no currentCode provided (guardrail active)');
-      return res.status(400).json({ error: 'Current TOTP code required. Provide { currentCode: "123456" } to confirm identity before reset.' });
-    }
-    if (!verifyTotp(currentCode)) {
-      audit('TOTP', 'Reset BLOCKED -- invalid currentCode provided');
-      return res.status(403).json({ error: 'Current TOTP code is invalid. Cannot reset without proving current access.' });
-    }
-    audit('TOTP', 'Reset authorized with valid current TOTP code');
-  } else {
-    audit('TOTP', 'Reset proceeding without code verification (no existing secret configured)');
-  }
   try {
-    generateTotpSecret('manual-reset-via-localhost');
+    generateTotpSecret();
     const uri = getTotpUri();
     const qr = await QRCode.toDataURL(uri);
+    audit('SETUP', 'TOTP reset initiated from localhost');
     res.json({ qr, secret: totpSecret, uri });
   } catch (e) {
     audit('ERROR', 'TOTP reset failed: ' + e.message);
@@ -962,7 +880,6 @@ app.get('/health', (req, res) => {
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, maxPayload: 1024 * 1024 }); // 1MB max message
-global._wss = wss; // Reference for graceful shutdown handler
 
 // ─── Sessions ────────────────────────────────────────────────────
 const sessions = new Map();
@@ -976,7 +893,7 @@ function saveSessionMeta() {
   for (const [id, s] of sessions) {
     meta[`cm-${id}`] = { name: s.name, dir: s.dir };
   }
-  try { atomicWriteSync(SESSION_META_PATH, JSON.stringify(meta, null, 2)); } catch (e) { audit('ERROR', 'saveSessionMeta: ' + e.message); }
+  try { fs.writeFileSync(SESSION_META_PATH, JSON.stringify(meta, null, 2)); } catch (e) { audit('ERROR', 'saveSessionMeta: ' + e.message); }
 }
 
 function loadSessionMeta() {
