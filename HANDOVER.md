@@ -1,28 +1,21 @@
 # HANDOVER -- Claude Mobile
 
-Session: 2026-04-03
+Session: 2026-04-12
 
 ## Completed This Session
 
-- v3.2.1: T07 merged login/lock into single #auth-screen (f8b950d), T08 extracted setup pages to public/setup.html + /api/setup/status endpoint (9d7984b). server.js 1836->1769 LOC
-- All architecture cleanup items from plan-architecture-cleanup.md now complete
-
-### Previous Session (same day, carried forward)
-
-- Full code review (4 agents) -- 38 findings (13 must-fix, 25 should-fix)
-- v3.1.6: 38 fixes (async createSession, E2E hardening, 28 empty catches, dep update)
-- Hotfix v3.1.7: confirm() dialog killed iOS WS, reverted strict sequential client replay
-- Re-review: 10 findings (3 regressions), all fixed
-- Architecture review (dt.architect): 10 findings, monolith extraction skipped
-- v3.2.0: CSS extracted to style.css, sessionList rename, auth response normalization, checkRateLimits helper
+- Cold-start restart (/dt.restart) after 9-day idle period (last session 2026-04-03)
+- Full ground truth verification (6 GTV checks)
+- GTV-5: 11 untracked planning files identified
+- GTV-6: 5 completed planning artifacts archived (plan-architecture-cleanup.md, plan-v3.1.6-review-fixes.md, audit-v3.1.3-review.md, STATE-v3.1.3-hardening.yaml, STATE-v3.1.4-should-fix.yaml)
+- STATE-v4-thin-viewer.yaml status corrected from "executing" to "blocked"
+- CLAUDE.md head hash updated (f8b950d -> 3c0cfa4)
+- No code changes -- documentation sync only
 
 ## Key Decisions
 
-- iOS confirm() blocks JS killing WS ~2.4s after auth -- never use blocking dialogs
-- Strict sequential client replay (!==) breaks iOS Safari -- gap-tolerant (<=) is correct
-- secureSend drops plaintext after E2E active (security fix)
-- Decrypt reconnect capped at 3 cycles (prevents infinite loop)
-- Monolith extraction deferred -- not worth risk for 4K LOC project
+- v4-thin-viewer remains blocked on tmux/dtach mismatch in tech-design (identified 2026-04-03, still unresolved)
+- HANDOVER.md was cosmetically stale (said f8b950d but HEAD is 3c0cfa4)
 
 ## Next Action
 
@@ -31,14 +24,14 @@ Reconcile v4 tech-design tmux/dtach mismatch, then v4-thin-viewer Wave 0 kickoff
 ## State
 
 - Branch: master
-- Last commit: f8b950d (refactor(T07): merge login/lock screen into single auth UI)
+- Last commit: 3c0cfa4 (docs: sync project documentation -- v3.2.1 architecture cleanup complete)
 - Tag: v3.1.5 at 6fb7873 (v3.1.6-v3.2.1 untagged)
-- Uncommitted: none
-- Planning: .planning/plan-architecture-cleanup.md (all tasks complete)
+- Uncommitted: planning archive moves + STATE fix + CLAUDE.md update (doc sync)
 
 ## Context Pointers
 
 - v4 tech-design: .planning/tech-design-v4-thin-viewer.md (tmux/dtach mismatch -- blocked)
-- Architecture cleanup plan: .planning/plan-architecture-cleanup.md
+- v4 plan: .planning/plan-v4-thin-viewer.md
+- v4 STATE: .planning/STATE-v4-thin-viewer.yaml (status: blocked)
 - MEMORY: project_otg.md (version history, stack, all features)
 - CLAUDE.md: architecture, security tiers, gotchas

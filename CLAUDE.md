@@ -81,9 +81,9 @@ Setup: open `http://localhost:3456/setup` on laptop to configure TOTP.
 
 ## Current State
 
-v3.2.1 (head: f8b950d). Full code review (4-agent, 38 findings) + v3.1.6 fixes + hotfix v3.1.7 + re-review (10 fixes) + architecture cleanup complete.
+v3.2.1 (head: 3c0cfa4). Full code review (4-agent, 38 findings) + v3.1.6 fixes + hotfix v3.1.7 + re-review (10 fixes) + architecture cleanup complete.
 Key changes: async createSession (event-loop fix), E2E crypto hardening, 28 empty catches replaced with audit logging, CSS extracted to public/style.css (503 lines), client `sessions` renamed to `sessionList`, auth responses normalized (verified->success), dep update (path-to-regexp GHSA-37ch-88jc-xwx2). T07: login/lock merged into single #auth-screen. T08: setup pages extracted to public/setup.html + /api/setup/status endpoint. server.js 1836->1769 LOC.
 iOS gotchas discovered: confirm() dialog blocks JS killing WS 2.4s after auth; strict sequential client replay check breaks iOS Safari (reverted to gap-tolerant <=).
 Active track in `.planning/`:
 - **v4-thin-viewer**: thin viewer architecture (blocked -- tech-design references tmux but stack uses dtach since v3.1.3; reconciliation needed before Wave 0)
-Completed (archived): scrollback-and-dtach, v3.1.3-hardening, v3.1.4-should-fix.
+Completed (archived): scrollback-and-dtach, v3.1.3-hardening, v3.1.4-should-fix, v3.1.6-review-fixes, architecture-cleanup, audit-v3.1.3-review.
