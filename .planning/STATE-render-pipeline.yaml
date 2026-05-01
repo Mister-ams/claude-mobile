@@ -1,10 +1,15 @@
 schema_version: 1
-feature: v4-thin-viewer
-plan: .planning/plan-v4-thin-viewer.md
-tech_design: .planning/tech-design-v4-thin-viewer.md
-status: blocked
-updated: 2026-04-12
-blocked_reason: tech-design references tmux but stack uses dtach since v3.1.3; reconciliation needed before Wave 0
+feature: render-pipeline
+plan: .planning/plan-render-pipeline.md
+tech_design: .planning/tech-design-render-pipeline.md
+status: active
+updated: 2026-05-01
+
+# Renamed 2026-05-01 from v4-thin-viewer.
+# Old shape (tmux capture-pane -> ANSI-to-HTML poll) was incompatible with the
+# Claude Code CLI's full-screen TUI model (alt-screen + DECSTBM + mouse + OSC 8).
+# New shape: headless xterm on server + cell-grid + row-diff transport.
+# Versioning: patch-only on the 3.2.x line (no v4 jump, no minor bump).
 
 sprint:
   current: 1
@@ -12,7 +17,7 @@ sprint:
 
 wave:
   current: 0
-  total: 4
+  total: 7
 
 completed: []
 blocked: []
