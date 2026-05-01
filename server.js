@@ -31,6 +31,13 @@ const PORT = process.env.PORT || config.port || 3456;
 const MAX_SESSIONS = 8;
 const SCROLLBACK_SIZE = 400000;
 
+// Output coalescing (D1, T02 of W1: render-pipeline). Flush PTY output to
+// connected clients on the first of: IDLE_MS quiet since last chunk,
+// MAX_BYTES buffered, or MAX_AGE_MS since the buffer's first byte.
+const COALESCE_IDLE_MS = 16;
+const COALESCE_MAX_BYTES = 4096;
+const COALESCE_MAX_AGE_MS = 64;
+
 // ─── dtach session persistence (via WSL) ─────────────────────────
 const WSL_DISTRO = config.wslDistro || 'Ubuntu-24.04';
 const DTACH_PREFIX = 'cm'; // socket files: /tmp/cm-0.dtach, cm-1.dtach, ...
@@ -1005,6 +1012,20 @@ function completeAuth(ws, token, extra) {
   secureSend(ws, { type: 'sessions', sessions: getSessionList() });
 }
 
+// Flush coalesced PTY output to all connected clients (D1, T02).
+function flushOutput(session) {
+  if (!session.outBuffer) return;
+  const data = session.outBuffer;
+  session.outBuffer = '';
+  session.outFirstByteAt = 0;
+  if (session.outIdleTimer) { clearTimeout(session.outIdleTimer); session.outIdleTimer = null; }
+  if (session.outMaxAgeTimer) { clearTimeout(session.outMaxAgeTimer); session.outMaxAgeTimer = null; }
+  const obj = { type: 'output', session: session.id, data };
+  for (const ws of session.clients) {
+    if (ws.readyState === 1) secureSend(ws, obj);
+  }
+}
+
 // Wire up proc.onData and proc.onExit for a session (shared by create + recover)
 function wireSessionProc(session) {
   const { id } = session;
@@ -1025,9 +1046,20 @@ function wireSessionProc(session) {
     // Clear attention when new output arrives (Claude is responding)
     if (session.attention) { session.attention = null; broadcastSessions(); }
 
-    const obj = { type: 'output', session: id, data };
-    for (const ws of session.clients) {
-      if (ws.readyState === 1) secureSend(ws, obj);
+    // Coalesce outbound output (D1, T02). Flush on idle, byte cap, or
+    // max-age -- whichever fires first.
+    if (!session.outBuffer) session.outBuffer = '';
+    if (!session.outFirstByteAt) session.outFirstByteAt = Date.now();
+    session.outBuffer += data;
+    if (session.outBuffer.length >= COALESCE_MAX_BYTES) {
+      flushOutput(session);
+    } else {
+      if (session.outIdleTimer) clearTimeout(session.outIdleTimer);
+      session.outIdleTimer = setTimeout(() => flushOutput(session), COALESCE_IDLE_MS);
+      if (!session.outMaxAgeTimer) {
+        const remaining = Math.max(0, COALESCE_MAX_AGE_MS - (Date.now() - session.outFirstByteAt));
+        session.outMaxAgeTimer = setTimeout(() => flushOutput(session), remaining);
+      }
     }
 
     // Debounce: wait for output to settle, then check accumulated buffer.
@@ -1069,6 +1101,8 @@ function wireSessionProc(session) {
     } else {
       // dtach session is gone -- clean up
       if (session.attentionTimer) clearTimeout(session.attentionTimer);
+      if (session.outIdleTimer) clearTimeout(session.outIdleTimer);
+      if (session.outMaxAgeTimer) clearTimeout(session.outMaxAgeTimer);
       recentOutput.delete(id);
       sessions.delete(id);
       broadcastSessions();
