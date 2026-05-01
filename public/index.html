@@ -770,20 +770,10 @@ function handle(m) {
       switchTo(m.session); break;
     case 'output':
       if (terms[m.session]) {
-        if (m.session === activeSession && userScrolled) {
-          // Preserve scroll position -- write() with ANSI cursor sequences
-          // repositions the viewport as a side effect during active TUI output
-          const vp = terms[m.session].element?.querySelector('.xterm-viewport');
-          const pos = vp?.scrollTop;
-          terms[m.session].write(m.data);
-          if (vp && pos !== undefined) vp.scrollTop = pos;
-        } else {
-          terms[m.session].write(m.data);
-          if (m.session === activeSession) {
-            terms[m.session].scrollToBottom();
-            window.scrollTo(0, 0);
-          }
-        }
+        let q = pendingTermWrites.get(m.session);
+        if (!q) { q = []; pendingTermWrites.set(m.session, q); }
+        q.push(m.data);
+        scheduleTerminalFlush();
       }
       break;
     case 'scrollback':
@@ -851,6 +841,40 @@ function getTermTheme() {
     brightYellow: '#ec9a3c', brightBlue: '#4c90f0', brightMagenta: '#bd6bbd',
     brightCyan: '#3fa6da', brightWhite: '#f6f7f9'
   };
+}
+
+// T03 of W1 (render-pipeline): coalesce client-side term.write into one
+// call per session per animation frame. Pairs with server-side coalescer
+// (T02, server.js). The scroll-preserve hack now runs once per frame
+// instead of once per WS message.
+const pendingTermWrites = new Map();  // Map<sessionId, string[]>
+let termWriteRaf = 0;
+
+function flushTerminalWrites() {
+  termWriteRaf = 0;
+  const entries = Array.from(pendingTermWrites);
+  pendingTermWrites.clear();
+  for (const [sid, chunks] of entries) {
+    const term = terms[sid];
+    if (!term || chunks.length === 0) continue;
+    const data = chunks.join('');
+    if (sid === activeSession && userScrolled) {
+      const vp = term.element?.querySelector('.xterm-viewport');
+      const pos = vp?.scrollTop;
+      term.write(data);
+      if (vp && pos !== undefined) vp.scrollTop = pos;
+    } else {
+      term.write(data);
+      if (sid === activeSession) {
+        term.scrollToBottom();
+        window.scrollTo(0, 0);
+      }
+    }
+  }
+}
+
+function scheduleTerminalFlush() {
+  if (termWriteRaf === 0) termWriteRaf = requestAnimationFrame(flushTerminalWrites);
 }
 
 function makeTerm() {
