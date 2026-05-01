@@ -1,6 +1,7 @@
 const express = require('express');
 const { WebSocketServer } = require('ws');
 const pty = require('node-pty');
+const { Terminal: HeadlessTerminal } = require('@xterm/headless');
 const { execSync } = require('child_process');
 const crypto = require('crypto');
 const http = require('http');
@@ -1012,6 +1013,52 @@ function completeAuth(ws, token, extra) {
   secureSend(ws, { type: 'sessions', sessions: getSessionList() });
 }
 
+// W4 of render-pipeline (T12): per-session @xterm/headless prototype.
+// Mirrors PTY output into an in-process VT engine so the spike (T13)
+// can validate parity against the live xterm.js client. Not wired to
+// clients -- consumed only by dumpHeadlessGrid for inspection.
+function ensureHeadlessTerminal(session) {
+  if (session.headless) return;
+  try {
+    session.headless = new HeadlessTerminal({
+      cols: session.lastCols || 80,
+      rows: session.lastRows || 24,
+      scrollback: 5000,
+      allowProposedApi: true,
+    });
+  } catch (e) {
+    audit('WARN', `headless init failed for cm-${session.id}: ${e.message}`);
+  }
+}
+
+function disposeHeadlessTerminal(session) {
+  if (!session.headless) return;
+  try { session.headless.dispose(); } catch (_) { /* swallow */ }
+  session.headless = null;
+}
+
+// Snapshot the headless cell grid for spike validation. Used by T13a +
+// future debug entry points. Returns null if no headless terminal.
+function dumpHeadlessGrid(id) {
+  const session = sessions.get(id);
+  if (!session || !session.headless) return null;
+  const term = session.headless;
+  const buffer = term.buffer.active;
+  const lines = [];
+  for (let y = 0; y < term.rows; y++) {
+    const line = buffer.getLine(y);
+    if (!line) break;
+    lines.push(line.translateToString(true));
+  }
+  return {
+    cols: term.cols,
+    rows: term.rows,
+    altScreen: buffer.type === 'alternate',
+    cursor: { x: buffer.cursorX, y: buffer.cursorY },
+    text: lines.join('\n'),
+  };
+}
+
 // Flush coalesced PTY output to all connected clients (D1, T02).
 function flushOutput(session) {
   if (!session.outBuffer) return;
@@ -1030,10 +1077,16 @@ function flushOutput(session) {
 function wireSessionProc(session) {
   const { id } = session;
   const gen = ++session.generation;
+  ensureHeadlessTerminal(session);
 
   session.proc.onData((data) => {
     if (session.generation !== gen) return; // stale handler from previous proc
     session.scrollback += data;
+    // W4 T12: mirror to headless prototype. Failures stay isolated.
+    if (session.headless) {
+      try { session.headless.write(data); }
+      catch (e) { audit('WARN', `headless write cm-${id}: ${e.message}`); }
+    }
     if (session.scrollback.length > SCROLLBACK_SIZE) {
       let start = session.scrollback.length - SCROLLBACK_SIZE;
       // Skip forward past a broken surrogate pair or partial ANSI escape
@@ -1103,6 +1156,7 @@ function wireSessionProc(session) {
       if (session.attentionTimer) clearTimeout(session.attentionTimer);
       if (session.outIdleTimer) clearTimeout(session.outIdleTimer);
       if (session.outMaxAgeTimer) clearTimeout(session.outMaxAgeTimer);
+      disposeHeadlessTerminal(session);
       recentOutput.delete(id);
       sessions.delete(id);
       broadcastSessions();
@@ -1474,6 +1528,11 @@ wss.on('connection', (ws, req) => {
         try {
           activeSession.proc.resize(cols, rows);
         } catch (e) { audit('WARN', 'resize failed session=' + ws.currentSession + ': ' + e.message); }
+        // W4 T12: keep the headless prototype in sync with PTY size.
+        if (activeSession.headless) {
+          try { activeSession.headless.resize(cols, rows); }
+          catch (e) { audit('WARN', `headless resize cm-${activeSession.id}: ${e.message}`); }
+        }
         break;
       }
 
