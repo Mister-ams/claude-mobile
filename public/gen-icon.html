@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"></head>
+<body style="margin:0;padding:0;background:transparent">
+<canvas id="c" width="180" height="180"></canvas>
+<script>
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+// Background: Blueprint dark surface
+ctx.fillStyle = '#1c2127';
+ctx.beginPath();
+ctx.roundRect(0, 0, 180, 180, 36);
+ctx.fill();
+// Terminal prompt: > _
+ctx.fillStyle = '#2d72d2';
+ctx.font = 'bold 72px SF Mono, Menlo, Monaco, monospace';
+ctx.textBaseline = 'middle';
+ctx.textAlign = 'center';
+ctx.fillText('>', 66, 92);
+// Cursor
+ctx.fillStyle = '#4c90f0';
+ctx.fillRect(102, 62, 4, 56);
+// Subtle border
+ctx.strokeStyle = '#404854';
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.roundRect(1, 1, 178, 178, 36);
+ctx.stroke();
+</script>
+</body></html>
