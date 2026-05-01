@@ -16,7 +16,7 @@ sprint:
   total: 1
 
 wave:
-  current: 2
+  current: 5
   total: 7
 
 completed:
@@ -25,6 +25,21 @@ completed:
     shipped: 2026-05-01
     commits: [1519dc4, ecb020d, b703128, 01394f6]
     note: "Server-side onData coalescer + client rAF batching. User-validated as 'huge improvement'. CI green on master."
+  - wave: W2
+    release: 3.2.3
+    shipped: 2026-05-01
+    commits: [213059a, 9a07555, c03454d]
+    note: "WS-path fidelity audit (zero filtering confirmed). Resize wired to dtach PTY with TDD-aligned bounds [10,400]/[5,200]."
+  - wave: W3
+    release: 3.2.4
+    shipped: 2026-05-02
+    commits: [82c10ab, bc36043]
+    note: "Shared rAF scheduler (scheduleOnce + requestLive/dropLive). Migrated T03 batcher and scrollBottom to it. requestLive/dropLive reserved for W7 rope-tail."
+  - wave: W4
+    release: 3.2.5
+    shipped: 2026-05-02
+    commits: [c3d32da, feba3f1]
+    note: "@xterm/headless v6.0.0 mirror + spike. 13/13 scripted checks pass; 2 workarounds documented (async writes, OSC 8 via registerOscHandler). Verdict GO for W5."
 
 blocked: []
 retrospective: []
