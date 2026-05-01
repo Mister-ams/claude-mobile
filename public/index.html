@@ -843,15 +843,57 @@ function getTermTheme() {
   };
 }
 
+// T08 of W3 (render-pipeline): shared rAF scheduler. scheduleOnce(fn) runs
+// fn at most once on the next animation frame (Set-based dedup; reusing
+// the same function reference within a frame coalesces). requestLive(fn) /
+// dropLive(fn) keep a ref-counted persistent loop for animations
+// (no callers yet; reserved for W7 rope-tail). The shared loop stops
+// when both queues are empty.
+const liveSubscribers = new Set();
+const onceQueue = new Set();
+let frameRaf = 0;
+
+function tickFrame() {
+  frameRaf = 0;
+  const once = Array.from(onceQueue);
+  onceQueue.clear();
+  for (const fn of once) {
+    try { fn(); } catch (e) { clientLog('frame once: ' + e.message); }
+  }
+  for (const fn of liveSubscribers) {
+    try { fn(); } catch (e) { clientLog('frame live: ' + e.message); }
+  }
+  if (liveSubscribers.size > 0 || onceQueue.size > 0) {
+    frameRaf = requestAnimationFrame(tickFrame);
+  }
+}
+
+function ensureFrame() {
+  if (frameRaf === 0) frameRaf = requestAnimationFrame(tickFrame);
+}
+
+function scheduleOnce(fn) {
+  onceQueue.add(fn);
+  ensureFrame();
+}
+
+function requestLive(fn) {
+  liveSubscribers.add(fn);
+  ensureFrame();
+}
+
+function dropLive(fn) {
+  liveSubscribers.delete(fn);
+}
+
 // T03 of W1 (render-pipeline): coalesce client-side term.write into one
 // call per session per animation frame. Pairs with server-side coalescer
 // (T02, server.js). The scroll-preserve hack now runs once per frame
-// instead of once per WS message.
+// instead of once per WS message. T09 of W3 routes the rAF through the
+// shared scheduleOnce above.
 const pendingTermWrites = new Map();  // Map<sessionId, string[]>
-let termWriteRaf = 0;
 
 function flushTerminalWrites() {
-  termWriteRaf = 0;
   const entries = Array.from(pendingTermWrites);
   pendingTermWrites.clear();
   for (const [sid, chunks] of entries) {
@@ -874,7 +916,7 @@ function flushTerminalWrites() {
 }
 
 function scheduleTerminalFlush() {
-  if (termWriteRaf === 0) termWriteRaf = requestAnimationFrame(flushTerminalWrites);
+  scheduleOnce(flushTerminalWrites);
 }
 
 function makeTerm() {
@@ -1457,7 +1499,8 @@ function scrollBottom() {
   userScrolled = false;
   // Refit first so terminal uses full available height, then scroll
   try { fits[activeSession]?.fit(); } catch (e) { clientLog('scrollBottom fit: ' + e.message); }
-  requestAnimationFrame(() => {
+  // T09 of W3: route through shared scheduler instead of ad-hoc rAF.
+  scheduleOnce(() => {
     terms[activeSession]?.scrollToBottom();
     // Pin document to prevent iOS pushing page beyond visible area
     window.scrollTo(0, 0);
