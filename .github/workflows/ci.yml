@@ -1,0 +1,42 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  syntax:
+    name: syntax checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: server.js syntax
+        run: node --check server.js
+
+      - name: public/index.html inline JS syntax
+        run: |
+          node -e "
+            const fs = require('fs');
+            const html = fs.readFileSync('public/index.html', 'utf8');
+            const re = /<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g;
+            let m, count = 0, ok = true;
+            while ((m = re.exec(html))) {
+              count++;
+              try { new Function(m[1]); }
+              catch (e) {
+                console.error('Block ' + count + ' syntax error: ' + e.message);
+                ok = false;
+              }
+            }
+            console.log(count + ' inline scripts checked, ' + (ok ? 'all OK' : 'ERRORS'));
+            process.exit(ok ? 0 : 1);
+          "
