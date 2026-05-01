@@ -1466,8 +1466,9 @@ wss.on('connection', (ws, req) => {
 
       case 'resize': {
         if (!activeSession || !msg.cols || !msg.rows) break;
-        const cols = Math.max(40, Math.min(300, msg.cols));
-        const rows = Math.max(10, Math.min(200, msg.rows));
+        // Bounds per TDD E4 (T06): cols [10,400], rows [5,200].
+        const cols = Math.max(10, Math.min(400, msg.cols));
+        const rows = Math.max(5, Math.min(200, msg.rows));
         activeSession.lastCols = cols;
         activeSession.lastRows = rows;
         try {
