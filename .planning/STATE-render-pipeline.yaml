@@ -3,7 +3,7 @@ feature: render-pipeline
 plan: .planning/plan-render-pipeline.md
 tech_design: .planning/tech-design-render-pipeline.md
 status: active
-updated: 2026-05-01
+updated: 2026-05-02
 
 # Renamed 2026-05-01 from v4-thin-viewer.
 # Old shape (tmux capture-pane -> ANSI-to-HTML poll) was incompatible with the
@@ -16,9 +16,15 @@ sprint:
   total: 1
 
 wave:
-  current: 0
+  current: 2
   total: 7
 
-completed: []
+completed:
+  - wave: W1
+    release: 3.2.2
+    shipped: 2026-05-01
+    commits: [1519dc4, ecb020d, b703128, 01394f6]
+    note: "Server-side onData coalescer + client rAF batching. User-validated as 'huge improvement'. CI green on master."
+
 blocked: []
 retrospective: []
