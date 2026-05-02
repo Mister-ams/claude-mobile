@@ -113,6 +113,16 @@
 <script>
 let ws = null, sessionList = [], activeSession = null;
 let terms = {}, fits = {}, projects = [];
+
+// T19 of W5 (render-pipeline): grid renderer state, parallel to terms{}.
+// One entry per session when RENDERER_MODE === 'grid'.
+let gridTerms = {};
+
+// W5 per-page renderer mode. ?renderer=grid in the URL flips to the new
+// cell-grid pipeline; default is the legacy xterm.js path. The flag goes
+// out in every 'connect' message so the server's per-WS gridRenderer
+// flag tracks it.
+const RENDERER_MODE = (new URLSearchParams(location.search).get('renderer') === 'grid') ? 'grid' : 'xterm';
 let reconnectDelay = 1000;
 let reconnectTimer = null;
 let sessionToken = null;
@@ -776,6 +786,12 @@ function handle(m) {
         scheduleTerminalFlush();
       }
       break;
+    case 'snapshot':
+      if (gridTerms[m.session]) applyGridSnapshot(gridTerms[m.session], m);
+      break;
+    case 'frame':
+      if (gridTerms[m.session]) applyGridFrame(gridTerms[m.session], m);
+      break;
     case 'scrollback':
       if (terms[m.session] && m.data) {
         const term = terms[m.session];
@@ -919,6 +935,89 @@ function scheduleTerminalFlush() {
   scheduleOnce(flushTerminalWrites);
 }
 
+// T19 + T20 of W5 (render-pipeline): grid renderer factory + Snapshot /
+// Frame application. Pure DOM, no VT logic -- the server's @xterm/headless
+// produces the cell grid; this side only renders styled cells.
+//
+// Colour encoding mirrors server cellToSgr:
+//   0..15            = ANSI palette (matches xterm dark theme)
+//   16..255          = extended palette, deferred to W7 polish
+//   0x1000000+rrggbb = 24-bit RGB
+const ANSI_PALETTE = [
+  '#111418', '#cd4246', '#238551', '#c87619',
+  '#2d72d2', '#9d3f9d', '#147eb3', '#abb3bf',
+  '#5f6b7c', '#e76a6e', '#32a467', '#ec9a3c',
+  '#4c90f0', '#bd6bbd', '#3fa6da', '#f6f7f9'
+];
+const SGR_RGB_FLAG = 0x1000000;
+const GRID_MAX_RENDERED_ROWS = 1000;  // mobile perf cap; W7 virtualises
+
+function sgrColorToHex(value) {
+  if (value >= SGR_RGB_FLAG) return '#' + (value & 0xFFFFFF).toString(16).padStart(6, '0');
+  if (value >= 0 && value < 16) return ANSI_PALETTE[value];
+  return null;  // 16..255 fall through; rendered as default
+}
+
+function applySgr(span, sgr) {
+  if (!sgr) return;
+  if (sgr.fg !== undefined) { const c = sgrColorToHex(sgr.fg); if (c) span.style.color = c; }
+  if (sgr.bg !== undefined) { const c = sgrColorToHex(sgr.bg); if (c) span.style.backgroundColor = c; }
+  if (sgr.bold) span.style.fontWeight = 'bold';
+  if (sgr.italic) span.style.fontStyle = 'italic';
+  if (sgr.underline) span.style.textDecoration = 'underline';
+  if (sgr.reverse) span.classList.add('reverse');
+  // sgr.hyperlink handled in renderRow (T21).
+}
+
+function renderRow(runs) {
+  const div = document.createElement('div');
+  div.className = 'grid-row';
+  for (const run of runs) {
+    const span = document.createElement('span');
+    span.textContent = run.text;
+    applySgr(span, run.sgr);
+    div.appendChild(span);
+  }
+  return div;
+}
+
+function makeGridTerm() {
+  const wrap = document.createElement('div');
+  wrap.className = 'grid-term';
+  return { wrap, cols: 0, rows: 0, rowEls: new Map(), cursor: { row: 0, col: 0, visible: true } };
+}
+
+function applyGridSnapshot(grid, snap) {
+  grid.cols = snap.cols;
+  grid.rows = snap.rows;
+  grid.cursor = snap.cursor;
+  grid.wrap.innerHTML = '';
+  grid.rowEls.clear();
+  const sb = snap.scrollback.slice(-GRID_MAX_RENDERED_ROWS);
+  for (const rc of sb) {
+    const el = renderRow(rc.runs);
+    grid.wrap.appendChild(el);
+    grid.rowEls.set(rc.row, el);
+  }
+  for (const rc of snap.viewport) {
+    const el = renderRow(rc.runs);
+    grid.wrap.appendChild(el);
+    grid.rowEls.set(rc.row, el);
+  }
+  grid.wrap.scrollTop = grid.wrap.scrollHeight;
+}
+
+function applyGridFrame(grid, frame) {
+  grid.cursor = frame.cursor;
+  for (const rc of frame.changes) {
+    const newEl = renderRow(rc.runs);
+    const existing = grid.rowEls.get(rc.row);
+    if (existing) existing.replaceWith(newEl);
+    else grid.wrap.appendChild(newEl);
+    grid.rowEls.set(rc.row, newEl);
+  }
+}
+
 function makeTerm() {
   const term = new Terminal({
     fontSize: 13,
@@ -939,7 +1038,21 @@ function switchTo(id) {
   activeSession = id;
   document.querySelectorAll('.term-wrap').forEach(el => el.classList.remove('active'));
 
-  if (!terms[id]) {
+  if (RENDERER_MODE === 'grid' && !gridTerms[id]) {
+    // T19 of W5: grid renderer mount. The wrap is scrollable; the grid
+    // renderer handles scroll itself (no fit addon, no WebGL/Canvas).
+    const wrap = document.createElement('div');
+    wrap.className = 'term-wrap';
+    wrap.id = `tw-${id}`;
+    termArea.appendChild(wrap);
+    const grid = makeGridTerm();
+    wrap.appendChild(grid.wrap);
+    gridTerms[id] = grid;
+    // Stop propagation so swipe-to-switch doesn't fight scroll. Don't
+    // preventDefault -- we WANT native scroll on grid.wrap.
+    wrap.addEventListener('touchstart', e => { e.stopPropagation(); }, true);
+    wrap.addEventListener('touchmove', e => { e.stopPropagation(); }, true);
+  } else if (RENDERER_MODE !== 'grid' && !terms[id]) {
     const wrap = document.createElement('div');
     wrap.className = 'term-wrap';
     wrap.id = `tw-${id}`;
@@ -985,11 +1098,17 @@ function switchTo(id) {
   const wrap = document.getElementById(`tw-${id}`);
   if (wrap) {
     wrap.classList.add('active');
-    setTimeout(() => { try { fits[id]?.fit(); } catch (e) { clientLog('switchTo fit: ' + e.message); } }, 50);
+    if (RENDERER_MODE !== 'grid') {
+      setTimeout(() => { try { fits[id]?.fit(); } catch (e) { clientLog('switchTo fit: ' + e.message); } }, 50);
+    } else {
+      // T19: emit an initial resize once the grid wrap has layout, so the
+      // server knows the viewport size before producing a snapshot.
+      setTimeout(() => doResize(), 50);
+    }
   }
 
   emptyState.style.display = 'none';
-  if (ws && ws.readyState === 1) queueSend({ type: 'connect', session: id });
+  if (ws && ws.readyState === 1) queueSend({ type: 'connect', session: id, renderer: RENDERER_MODE });
   updateHdr(); renderTabs();
 }
 
@@ -997,6 +1116,7 @@ function closeSession(id) {
   const s = sessionList.find(x => x.id === id);
   if (!confirm(`Close ${s ? s.name : 'session'}?`)) return;
   if (terms[id]) { terms[id].dispose(); delete terms[id]; delete fits[id]; }
+  if (gridTerms[id]) { delete gridTerms[id]; }
   const w = document.getElementById(`tw-${id}`);
   if (w) w.remove();
   queueSend({ type: 'close', session: id });
@@ -1495,8 +1615,19 @@ function scrollTerm(lines) {
 }
 
 function scrollBottom() {
-  if (activeSession === null || !terms[activeSession]) return;
+  if (activeSession === null) return;
   userScrolled = false;
+  // T19 of W5: grid renderer scrolls its own wrap via DOM scroll.
+  if (RENDERER_MODE === 'grid') {
+    const grid = gridTerms[activeSession];
+    if (!grid) return;
+    scheduleOnce(() => {
+      grid.wrap.scrollTop = grid.wrap.scrollHeight;
+      window.scrollTo(0, 0);
+    });
+    return;
+  }
+  if (!terms[activeSession]) return;
   // Refit first so terminal uses full available height, then scroll
   try { fits[activeSession]?.fit(); } catch (e) { clientLog('scrollBottom fit: ' + e.message); }
   // T09 of W3: route through shared scheduler instead of ad-hoc rAF.
@@ -1616,7 +1747,29 @@ msgInput.addEventListener('blur', () => {
 
 let lastCols = 0, lastRows = 0;
 function doResize() {
-  if (activeSession !== null && fits[activeSession]) {
+  if (activeSession === null) return;
+  // T19 of W5: grid mode has no fit addon. Compute dims from a probe span.
+  if (RENDERER_MODE === 'grid') {
+    const grid = gridTerms[activeSession];
+    if (!grid || grid.wrap.clientWidth === 0) return;
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position:absolute;visibility:hidden;font:inherit;line-height:inherit;white-space:pre';
+    probe.textContent = 'X';
+    grid.wrap.appendChild(probe);
+    const r = probe.getBoundingClientRect();
+    grid.wrap.removeChild(probe);
+    if (r.width <= 0 || r.height <= 0) return;
+    const cols = Math.max(10, Math.floor(grid.wrap.clientWidth / r.width));
+    const rows = Math.max(5, Math.floor(grid.wrap.clientHeight / r.height));
+    if (cols === lastCols && rows === lastRows) return;
+    lastCols = cols; lastRows = rows;
+    if (ws && ws.readyState === 1) {
+      queueSend({ type: 'resize', cols, rows });
+      updateDiag(cols, rows);
+    }
+    return;
+  }
+  if (fits[activeSession]) {
     try {
       const dims = fits[activeSession].proposeDimensions();
       if (!dims) return;
