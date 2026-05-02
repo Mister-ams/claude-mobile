@@ -16,7 +16,7 @@ sprint:
   total: 1
 
 wave:
-  current: 5
+  current: 6
   total: 7
 
 completed:
@@ -40,6 +40,21 @@ completed:
     shipped: 2026-05-02
     commits: [c3d32da, feba3f1]
     note: "@xterm/headless v6.0.0 mirror + spike. 13/13 scripted checks pass; 2 workarounds documented (async writes, OSC 8 via registerOscHandler). Verdict GO for W5."
+  - wave: W5
+    release: 3.2.6
+    shipped: 2026-05-02
+    commits: [9c1aaa4, eb44141, 16f1e4a, b97e2cf, 3709e06]
+    note: "Cell-grid + row-RLE diff transport behind per-session flag (?renderer=grid). Server: buildSnapshot/buildFrame, OSC 8 URI registry via registerOscHandler. Client: gridTerms{}, makeGridTerm, Snapshot/Frame handlers, OSC 8 anchors, E8 tab-return resync. Default xterm.js path unchanged."
+    deferred:
+      - task: T22
+        title: mouse-tracking event forwarding
+        moved_to: W7
+        reason: "Needs server-side CSI mode tracking + client encoder + listener mgmt (~150 LOC); risks breaking grid-mode scroll/tap UX. Not commonly used in Claude Code REPL. Per-session flag default-off contains the impact."
+    known_limits:
+      - "Cursor tracked but not visually rendered (W7)."
+      - "Scrollback display capped at 1000 rows; server keeps full 5000."
+      - "ANSI palette 16..255 falls through to default (W7)."
+      - "Theme switching (light/dark) doesn't repaint already-rendered rows; refresh refreshes from next snapshot."
 
 blocked: []
 retrospective: []
