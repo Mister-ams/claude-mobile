@@ -1026,6 +1026,9 @@ function ensureHeadlessTerminal(session) {
       scrollback: 5000,
       allowProposedApi: true,
     });
+    // T15+T16 per-session diff state.
+    if (session.frameSeq === undefined) session.frameSeq = 0;
+    session.lastEmittedGrid = null;  // populated by buildSnapshot
   } catch (e) {
     audit('WARN', `headless init failed for cm-${session.id}: ${e.message}`);
   }
@@ -1035,6 +1038,115 @@ function disposeHeadlessTerminal(session) {
   if (!session.headless) return;
   try { session.headless.dispose(); } catch (_) { /* swallow */ }
   session.headless = null;
+}
+
+// W5 of render-pipeline (T15+T16): cell-grid snapshot/frame builder.
+// Walks the headless terminal's buffer and produces RowChange[] with
+// RLE-collapsed CellRun[] per the TypeSpec wire contract.
+//
+// Colour encoding for SGR.fg / SGR.bg:
+//   undefined         = default
+//   0..255            = ANSI palette index
+//   0x1000000+rrggbb  = 24-bit RGB (top bit set as discriminator)
+//
+// On Snapshot: emit full viewport + full scrollback, reset lastEmittedGrid.
+// On Frame:    emit only changed viewport rows; scrollback growth deferred
+//              to the next Snapshot (W7 polish; see tech-design risks).
+const RGB_FLAG = 0x1000000;
+
+function cellToSgr(cell) {
+  const sgr = {};
+  if (!cell.isFgDefault()) {
+    sgr.fg = cell.isFgRGB() ? (RGB_FLAG | cell.getFgColor()) : cell.getFgColor();
+  }
+  if (!cell.isBgDefault()) {
+    sgr.bg = cell.isBgRGB() ? (RGB_FLAG | cell.getBgColor()) : cell.getBgColor();
+  }
+  if (cell.isBold() !== 0) sgr.bold = true;
+  if (cell.isItalic() !== 0) sgr.italic = true;
+  if (cell.isUnderline() !== 0) sgr.underline = true;
+  if (cell.isInverse() !== 0) sgr.reverse = true;
+  // sgr.hyperlink populated by OSC 8 tracker in T21.
+  return sgr;
+}
+
+function sgrEquals(a, b) {
+  return a.fg === b.fg && a.bg === b.bg && a.bold === b.bold &&
+         a.italic === b.italic && a.underline === b.underline &&
+         a.reverse === b.reverse && a.hyperlink === b.hyperlink;
+}
+
+function rowToRuns(line) {
+  if (!line) return [];
+  const runs = [];
+  let current = null;
+  for (let x = 0; x < line.length; x++) {
+    const cell = line.getCell(x);
+    if (!cell) break;
+    const ch = cell.getChars() || ' ';
+    const sgr = cellToSgr(cell);
+    if (current && sgrEquals(current.sgr, sgr)) {
+      current.text += ch;
+      current.length += 1;
+    } else {
+      if (current) runs.push(current);
+      current = { text: ch, sgr, length: 1 };
+    }
+  }
+  if (current) runs.push(current);
+  return runs;
+}
+
+function buildSnapshot(session) {
+  const term = session.headless;
+  if (!term) return null;
+  const buf = term.buffer.active;
+  const baseY = buf.baseY;
+  const viewport = [];
+  for (let y = 0; y < term.rows; y++) {
+    viewport.push({ row: y, runs: rowToRuns(buf.getLine(baseY + y)) });
+  }
+  const scrollback = [];
+  for (let y = 0; y < baseY; y++) {
+    scrollback.push({ row: y - baseY, runs: rowToRuns(buf.getLine(y)) });
+  }
+  // Reset diff cache: this Snapshot is the new baseline.
+  session.lastEmittedGrid = new Map();
+  for (const rc of viewport) session.lastEmittedGrid.set(rc.row, JSON.stringify(rc.runs));
+  return {
+    type: 'snapshot',
+    session: session.id,
+    cols: term.cols, rows: term.rows,
+    viewport, scrollback,
+    cursor: { row: buf.cursorY, col: buf.cursorX, visible: true },
+    altScreen: buf.type === 'alternate',
+    mouseTracking: false,  // populated by T22
+    seq: ++session.frameSeq,
+  };
+}
+
+function buildFrame(session) {
+  const term = session.headless;
+  if (!term || !session.lastEmittedGrid) return null;
+  const buf = term.buffer.active;
+  const baseY = buf.baseY;
+  const changes = [];
+  for (let y = 0; y < term.rows; y++) {
+    const runs = rowToRuns(buf.getLine(baseY + y));
+    const json = JSON.stringify(runs);
+    if (session.lastEmittedGrid.get(y) !== json) {
+      changes.push({ row: y, runs });
+      session.lastEmittedGrid.set(y, json);
+    }
+  }
+  if (changes.length === 0) return null;
+  return {
+    type: 'frame',
+    session: session.id,
+    changes,
+    cursor: { row: buf.cursorY, col: buf.cursorX, visible: true },
+    seq: ++session.frameSeq,
+  };
 }
 
 // Snapshot the headless cell grid for spike validation. Used by T13a +
