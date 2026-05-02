@@ -1172,6 +1172,9 @@ function dumpHeadlessGrid(id) {
 }
 
 // Flush coalesced PTY output to all connected clients (D1, T02).
+// T17 of W5: per-client routing. Grid clients receive a row-diff Frame
+// (built lazily, once per flush); legacy clients receive the raw byte
+// stream as before. Both pipelines coexist during the W5 soak.
 function flushOutput(session) {
   if (!session.outBuffer) return;
   const data = session.outBuffer;
@@ -1179,9 +1182,17 @@ function flushOutput(session) {
   session.outFirstByteAt = 0;
   if (session.outIdleTimer) { clearTimeout(session.outIdleTimer); session.outIdleTimer = null; }
   if (session.outMaxAgeTimer) { clearTimeout(session.outMaxAgeTimer); session.outMaxAgeTimer = null; }
-  const obj = { type: 'output', session: session.id, data };
+  const legacyMsg = { type: 'output', session: session.id, data };
+  let frameMsg = null;
+  let builtFrame = false;
   for (const ws of session.clients) {
-    if (ws.readyState === 1) secureSend(ws, obj);
+    if (ws.readyState !== 1) continue;
+    if (ws.gridRenderer) {
+      if (!builtFrame) { frameMsg = buildFrame(session); builtFrame = true; }
+      if (frameMsg) secureSend(ws, frameMsg);
+    } else {
+      secureSend(ws, legacyMsg);
+    }
   }
 }
 
@@ -1595,9 +1606,20 @@ wss.on('connection', (ws, req) => {
         }
         ws.currentSession = msg.session;
         targetSession.clients.add(ws);
-        // Send server-side scrollback buffer on reconnect.
-        // Client uses chunked writes with term.reset() to replay cleanly.
-        if (targetSession.scrollback) {
+        // T17: per-WS grid-renderer flag, set from connect message. Default
+        // false -> legacy xterm.js path. ?renderer=grid (URL or settings)
+        // flips it on the client and surfaces here.
+        ws.gridRenderer = (msg.renderer === 'grid');
+        if (ws.gridRenderer) {
+          // Grid pipeline: ship the current cell-grid state. Legacy
+          // scrollback string skipped -- snapshot carries scrollback rows.
+          const snapshot = buildSnapshot(targetSession);
+          if (snapshot) {
+            audit('SNAPSHOT', `cm-${targetSession.id} viewport=${snapshot.viewport.length} scrollback=${snapshot.scrollback.length} seq=${snapshot.seq}`);
+            secureSend(ws, snapshot);
+          }
+        } else if (targetSession.scrollback) {
+          // Legacy: server-side scrollback buffer on reconnect.
           audit('SCROLLBACK', `sending ${targetSession.scrollback.length} bytes from buffer`);
           secureSend(ws, { type: 'scrollback', session: targetSession.id, data: targetSession.scrollback });
         }
@@ -1644,6 +1666,16 @@ wss.on('connection', (ws, req) => {
         if (activeSession.headless) {
           try { activeSession.headless.resize(cols, rows); }
           catch (e) { audit('WARN', `headless resize cm-${activeSession.id}: ${e.message}`); }
+        }
+        // T18 of W5: Frame messages don't carry cols/rows, so resize
+        // requires a fresh Snapshot to inform grid clients of the new
+        // viewport size before subsequent frames apply on top of it.
+        // Built lazily -- if no grid clients are connected, no work.
+        let resizeSnap = null;
+        for (const gws of activeSession.clients) {
+          if (gws.readyState !== 1 || !gws.gridRenderer) continue;
+          if (!resizeSnap) resizeSnap = buildSnapshot(activeSession);
+          if (resizeSnap) secureSend(gws, resizeSnap);
         }
         break;
       }
