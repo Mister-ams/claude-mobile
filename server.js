@@ -1029,6 +1029,20 @@ function ensureHeadlessTerminal(session) {
     // T15+T16 per-session diff state.
     if (session.frameSeq === undefined) session.frameSeq = 0;
     session.lastEmittedGrid = null;  // populated by buildSnapshot
+    // T21: OSC 8 hyperlink URI registry. xterm assigns monotonic urlIds
+    // starting at 1; our OSC 8 handler captures URIs in the same order
+    // and keys them by id for cell-time lookup in rowToRuns.
+    session.linkRegistry = new Map();
+    session.nextLinkId = 1;
+    session.headless.parser.registerOscHandler(8, (data) => {
+      const sep = data.indexOf(';');
+      const uri = sep >= 0 ? data.slice(sep + 1) : '';
+      if (uri) {
+        session.linkRegistry.set(session.nextLinkId, uri);
+        session.nextLinkId++;
+      }
+      return false;  // let xterm continue normal handling
+    });
   } catch (e) {
     audit('WARN', `headless init failed for cm-${session.id}: ${e.message}`);
   }
@@ -1076,8 +1090,13 @@ function sgrEquals(a, b) {
          a.reverse === b.reverse && a.hyperlink === b.hyperlink;
 }
 
-function rowToRuns(line) {
+function rowToRuns(line, linkRegistry) {
   if (!line) return [];
+  // T21: peek into internal _extendedAttrs to read per-cell OSC 8 urlId.
+  // IBufferCell intentionally hides this; the wrapper has _line pointing
+  // at the internal BufferLine, which carries _extendedAttrs[x]._urlId
+  // for cells inside an OSC 8 hyperlink range. Wrapped in try-style guard.
+  const extAttrs = line._line && line._line._extendedAttrs;
   const runs = [];
   let current = null;
   for (let x = 0; x < line.length; x++) {
@@ -1085,6 +1104,13 @@ function rowToRuns(line) {
     if (!cell) break;
     const ch = cell.getChars() || ' ';
     const sgr = cellToSgr(cell);
+    if (extAttrs && extAttrs[x] && linkRegistry) {
+      const urlId = extAttrs[x]._urlId;
+      if (urlId) {
+        const uri = linkRegistry.get(urlId);
+        if (uri) sgr.hyperlink = uri;
+      }
+    }
     if (current && sgrEquals(current.sgr, sgr)) {
       current.text += ch;
       current.length += 1;
@@ -1104,11 +1130,11 @@ function buildSnapshot(session) {
   const baseY = buf.baseY;
   const viewport = [];
   for (let y = 0; y < term.rows; y++) {
-    viewport.push({ row: y, runs: rowToRuns(buf.getLine(baseY + y)) });
+    viewport.push({ row: y, runs: rowToRuns(buf.getLine(baseY + y), session.linkRegistry) });
   }
   const scrollback = [];
   for (let y = 0; y < baseY; y++) {
-    scrollback.push({ row: y - baseY, runs: rowToRuns(buf.getLine(y)) });
+    scrollback.push({ row: y - baseY, runs: rowToRuns(buf.getLine(y), session.linkRegistry) });
   }
   // Reset diff cache: this Snapshot is the new baseline.
   session.lastEmittedGrid = new Map();
@@ -1132,7 +1158,7 @@ function buildFrame(session) {
   const baseY = buf.baseY;
   const changes = [];
   for (let y = 0; y < term.rows; y++) {
-    const runs = rowToRuns(buf.getLine(baseY + y));
+    const runs = rowToRuns(buf.getLine(baseY + y), session.linkRegistry);
     const json = JSON.stringify(runs);
     if (session.lastEmittedGrid.get(y) !== json) {
       changes.push({ row: y, runs });

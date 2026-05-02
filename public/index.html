@@ -973,10 +973,19 @@ function renderRow(runs) {
   const div = document.createElement('div');
   div.className = 'grid-row';
   for (const run of runs) {
-    const span = document.createElement('span');
-    span.textContent = run.text;
-    applySgr(span, run.sgr);
-    div.appendChild(span);
+    // T21: cells inside an OSC 8 link become anchors instead of spans.
+    let el;
+    if (run.sgr && run.sgr.hyperlink) {
+      el = document.createElement('a');
+      el.href = run.sgr.hyperlink;
+      el.target = '_blank';
+      el.rel = 'noopener noreferrer';
+    } else {
+      el = document.createElement('span');
+    }
+    el.textContent = run.text;
+    applySgr(el, run.sgr);
+    div.appendChild(el);
   }
   return div;
 }
