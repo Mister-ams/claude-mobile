@@ -1944,6 +1944,18 @@ if ('wakeLock' in navigator) {
   lock();
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') lock(); });
 }
+
+// E8 of W5: tab return -> request a fresh Snapshot to resync the grid
+// renderer's state. Backgrounded tabs may miss frames; reconnect message
+// is the cheapest way to re-seed without dropping the WS. Scoped to grid
+// mode (xterm path has its own scrollback replay on reconnect).
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (RENDERER_MODE !== 'grid') return;
+  if (activeSession === null) return;
+  if (!ws || ws.readyState !== 1) return;
+  queueSend({ type: 'connect', session: activeSession, renderer: 'grid' });
+});
 </script>
 </body>
 </html>
