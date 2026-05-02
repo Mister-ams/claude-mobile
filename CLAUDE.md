@@ -81,9 +81,8 @@ Setup: open `http://localhost:3456/setup` on laptop to configure TOTP.
 
 ## Current State
 
-v3.2.1 (head: 3c0cfa4). Full code review (4-agent, 38 findings) + v3.1.6 fixes + hotfix v3.1.7 + re-review (10 fixes) + architecture cleanup complete.
-Key changes: async createSession (event-loop fix), E2E crypto hardening, 28 empty catches replaced with audit logging, CSS extracted to public/style.css (503 lines), client `sessions` renamed to `sessionList`, auth responses normalized (verified->success), dep update (path-to-regexp GHSA-37ch-88jc-xwx2). T07: login/lock merged into single #auth-screen. T08: setup pages extracted to public/setup.html + /api/setup/status endpoint. server.js 1836->1769 LOC.
-iOS gotchas discovered: confirm() dialog blocks JS killing WS 2.4s after auth; strict sequential client replay check breaks iOS Safari (reverted to gap-tolerant <=).
+v3.2.6 (head: da4b2fc). Render-pipeline push W1-W5 shipped 2026-05-01/02 across the 3.2.x patch line; W6 default flip attempted (3.2.7) and reverted same day. Grid renderer (cell-grid + row-RLE diff over WS, server-side @xterm/headless) is opt-in via `?renderer=grid`; default is legacy xterm.js. [verified -- git log + pm2 list]
 Active track in `.planning/`:
-- **v4-thin-viewer**: thin viewer architecture (blocked -- tech-design references tmux but stack uses dtach since v3.1.3; reconciliation needed before Wave 0)
+- **render-pipeline** (`tech-design-render-pipeline.md` + `plan-render-pipeline.md`): W1-W5 shipped, W6 BLOCKED on grid history/scrollback render bug, W7 polish (rope-tail, viewport culling, single input parser, mouse-tracking T22) blocked behind W6.
+Pointers: `HANDOVER.md` (current next action), `STATE-render-pipeline.yaml` (per-wave commits), `memory/project_w6_history_render_bug.md` (investigation pointers), `guide-tui-rendering-references.md` (OpenTUI + CLI rendering analysis).
 Completed (archived): scrollback-and-dtach, v3.1.3-hardening, v3.1.4-should-fix, v3.1.6-review-fixes, architecture-cleanup, audit-v3.1.3-review.

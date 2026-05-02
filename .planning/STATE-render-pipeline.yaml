@@ -18,6 +18,11 @@ sprint:
 wave:
   current: 6
   total: 7
+  # W6 default-flip attempted 2026-05-02 (commit 3c1c402) and reverted same
+  # day (commit da4b2fc). History/scrollback did not render in grid mode
+  # when default; works fine under ?renderer=grid opt-in. Investigation
+  # pointers in memory/project_w6_history_render_bug.md. T26 (legacy WS
+  # handler removal) and T27 (xterm.js vendor delete) BLOCKED until fix.
 
 completed:
   - wave: W1
@@ -56,5 +61,15 @@ completed:
       - "ANSI palette 16..255 falls through to default (W7)."
       - "Theme switching (light/dark) doesn't repaint already-rendered rows; refresh refreshes from next snapshot."
 
-blocked: []
+blocked:
+  - wave: W6
+    task: T24
+    attempted: 2026-05-02
+    reverted: 2026-05-02
+    flip_commit: 3c1c402
+    revert_commit: da4b2fc
+    symptom: "history/scrollback does not render in grid mode when default-on; opt-in (?renderer=grid) works fine"
+    investigation_pointers: memory/project_w6_history_render_bug.md
+    blocks: [T26, T27, T28, W7]
+
 retrospective: []
