@@ -12,3 +12,4 @@ SESSION.md
 CLAUDE.local.md
 __pycache__/
 .playwright-cli/
+.planning/*.png

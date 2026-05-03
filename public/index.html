@@ -732,7 +732,7 @@ function handle(m) {
         loadProjects();
         scheduleTokenRefresh(m.ttl);
         resetInactivityTimer();
-        if (activeSession !== null) queueSend({ type: 'connect', session: activeSession });
+        if (activeSession !== null) queueSend({ type: 'connect', session: activeSession, renderer: RENDERER_MODE });
         // Server may send locked=true if token was inactive during disconnect
         if (m.locked) showLockScreen();
         if (m.hasTotp && !m.hasPasskey && window.PublicKeyCredential && !localStorage.getItem('passkey-dismissed')) {
