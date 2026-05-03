@@ -206,6 +206,10 @@ html, body {
   z-index: 10; display: none; pointer-events: none;
 }
 #term-area:has(.term-wrap.active) #scroll-zones { display: block; pointer-events: auto; }
+/* Grid mode: .grid-term has its own overflow-y:auto + -webkit-overflow-scrolling:touch
+   for native iOS finger-drag. The scroll-zones overlay would intercept those touches
+   and call preventDefault, breaking native scroll. Hide it in grid mode. */
+#term-area:has(.term-wrap.active .grid-term) #scroll-zones { display: none; }
 .scroll-zone { position: absolute; top: 0; bottom: 0; }
 /* Left/right split -- consistent at all viewport heights */
 .scroll-zone-up { left: 0; width: 50%; }
