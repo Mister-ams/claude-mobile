@@ -262,7 +262,7 @@ html, body {
   line-height: 1.286;
   white-space: pre;
   background: var(--bg, #111418);
-  color: var(--fg, #f6f7f9);
+  color: var(--text, #f6f7f9);
   padding: 0;
   box-sizing: border-box;
 }
