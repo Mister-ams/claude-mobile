@@ -1,44 +1,45 @@
 # HANDOVER -- Claude Mobile
 
-Generated: 2026-05-02
+Generated: 2026-05-04
 
 ## Decisions
 
-- Patch-only versioning on the 3.2.x line: every wave/release bumps the patch component only. `feedback_versioning.md` carries the rule [reported]
-- W1-W5 use `@xterm/headless` v6.0.0 server-side as canonical VT engine; client cell-grid renderer consumes row-RLE diffs over WS [verified -- 13/13 spike checks + W5 commits in master]
-- Coalesce numbers (server 16/4/64 ms, client one rAF) locked: user reported "huge improvement" after W1 [reported]
-- T22 (mouse-tracking forwarding) deferred to W7: ~150 LOC, risks grid-mode UX, not commonly used in Claude Code REPL [observed]
-- W6 default flip rolled back same day after history-render regression: keep grid as opt-in only until the bug is found [reported]
+- T24 cutover landed: grid is default; xterm is opt-out via `?renderer=xterm`. T26-T28 (delete legacy WS handler / drop xterm.js vendor / sweep CLAUDE.md) intentionally held to keep the fallback shipped indefinitely [verified in prod 3.2.18]
+- Patch-only versioning on the 3.2.x line: 12 releases this session, no minor or major bump [verified -- git log]
+- W7 closed with three concrete tasks (T30 substitute, T31, T33). T22 mouse tracking and T32 input-parser refactor explicitly skipped: low value vs cost on touch-only mobile [user call]
+- Two-attempt cutover: first attempt (3.2.7, 2026-05-02) reverted same day. Eleven polish patches addressed real symptoms surfaced during soak before the retry (3.2.18) landed clean [verified]
 
 ## State Changes
 
-- master HEAD = `da4b2fc` (Revert "feat(T24)") [verified -- git log]
-- PM2 running 3.2.6, online [verified -- pm2 list]
-- 11 new commits this session: W1 (4) -> W2 (3) -> W3 (2) -> W4 (2) -> W5 (6) -> W6 (1 + 1 revert)
-- New deps: `@xterm/headless@^6.0.0` (server-side VT mirror)
-- New files: `.github/workflows/ci.yml` (syntax-only gate), `guide-tui-rendering-references.md`, `.planning/audit-fidelity-pre-w5.md`, `.planning/spike-report-headless-xterm.md`, `.planning/spike-headless-xterm.js`
-- 5 feature branches merged into master via fast-forward and still resident locally + on origin: `render-pipeline/{w1,w2,w3-w4,w5,w6}` -- safe to delete
+- master HEAD = `8b3baf2` (T24 cutover, 3.2.18) [verified -- git log]
+- PM2 running 3.2.18, online, all 3 dtach sessions recovered [verified -- pm2 list + audit log]
+- 12 new commits this session: 3.2.7 reconnect fix -> 3.2.8 light-mode CSS -> 3.2.9 scroll-zones -> 3.2.10 palette+cursor+reverse -> 3.2.11 swipe -> 3.2.12 viewport culling -> 3.2.13 frame coalescing -> 3.2.14 ResizeObserver -> 3.2.15 touch-action -> 3.2.16 resize ground truth -> 3.2.17 inset gutter + fonts.ready -> 3.2.18 T24 flip
+- New files: `memory/project_w6_history_render_bug.md` (post-mortem), `.planning/spike-w6-connect-probe.js`, `.planning/spike-w6-input-inject.js`, `.planning/spike-w6-browser-test.py`, `.planning/spike-w6-browser-single.py` (regression artifacts)
+- `.planning/STATE-render-pipeline.yaml` rewritten: status: completed, wave 7/7, polish patches enumerated, retrospective added
 
 ## Discovered Constraints
 
-- xterm.js `term.write()` is async; callers reading buffer state must await the callback. T12 mirror is fire-and-forget which is correct (no synchronous reads after write) [verified -- spike script]
-- `IBufferCell.getHyperlinkId()` is missing in @xterm/headless v6.0.0; use `cell.hasExtendedAttrs() !== 0` + per-session `parser.registerOscHandler(8, ...)` to track URIs by monotonic ID. Per-cell URI lookup uses the internal `line._line._extendedAttrs[x]._urlId` [verified -- probe + functional test]
-- Frame messages do not carry cols/rows; resize requires emitting a fresh Snapshot to grid clients [observed]
-- Grid scrollback is shipped as `RowChange[]` in Snapshot only; viewport-row scroll-off is not streamed -- next Snapshot delivers it (W7 polish)
-- Grid history did NOT render when default-on, fine under opt-in flag (cause unknown) [reported]
+- iOS Safari serves stale HTML across `pm2 restart` despite `Cache-Control: no-cache, no-store, must-revalidate`. Tab close + reopen busts; in-tab reload sometimes does not [observed during 3.2.6 -> 3.2.7 transition]
+- iOS Safari probes char-width as fallback metrics if SF Mono / Menlo hasn't resolved at measurement time -- 7.13 px instead of 7.81 px, 5-col over-estimate. `document.fonts.ready` callback corrects this [verified -- 3.2.17]
+- Multi-client PTY resize race: clients connected to the same session via different viewports each send their own resize. Last writer wins. Local lastCols cache desyncs from server truth; doResize must compare against `grid.cols` (snapshot ground truth) [verified -- 3.2.16]
+- `touch-action: pan-y` is required on scroll containers under iOS; `auto` lets iOS evaluate horizontal pans first, breaking JS-driven swipe handlers [verified -- 3.2.15]
+- ResizeObserver is the cheapest signal for "session became visible after being switched away" -- catches the display:none -> block transition that snapshots arriving while hidden mis-render against (clientHeight=0) [verified -- 3.2.14]
 
 ## Next Action
 
-Investigate why grid-mode history/scrollback fails to render when grid is the default but works under `?renderer=grid` opt-in. See `memory/project_w6_history_render_bug.md` for the four likely causes ranked. Until that's fixed, do NOT proceed to T26-T28 (deletions) or W7 polish.
+None blocking. Initiative is closed. Optional follow-ups when convenient:
+
+- Drop `.planning/spike-headless-xterm.js`, `.planning/spike-w6-*` from working set (regression artifacts; safe to leave indefinitely)
+- Delete the 5 merged feature branches still resident: `render-pipeline/{w1,w2,w3-w4,w5,w6}` (and likely a w7 branch from earlier)
+- T26-T28 deletions if you ever decide grid mode is solid enough to drop the xterm fallback (would save ~400 KB shipped + ~100 LOC of legacy server handling)
 
 ## Context Pointers
 
-- `.planning/tech-design-render-pipeline.md` -- 300 lines: TypeSpec wire contract, EARS E1-E8, 10 Y-statements
-- `.planning/plan-render-pipeline.md` -- 33-task wave plan W1-W7
-- `.planning/STATE-render-pipeline.yaml` -- updated with W5 closed and W6 attempted+reverted
-- `.planning/spike-report-headless-xterm.md` + `spike-headless-xterm.js` -- W4 validation, OSC 8 workaround pattern
-- `.planning/audit-fidelity-pre-w5.md` -- T05 baseline of WS path (zero filtering)
-- `guide-tui-rendering-references.md` (root) -- OpenTUI + Claude Code CLI rendering analysis
-- `server.js:1013-1110` (T02 coalescer + headless mirror), `server.js:1601-1614` (Snapshot on connect)
-- `public/index.html` -- search `RENDERER_MODE`, `gridTerms`, `applyGridSnapshot`, `applyGridFrame`
-- `memory/project_w6_history_render_bug.md` -- four ranked investigation paths for the bug
+- `.planning/STATE-render-pipeline.yaml` -- canonical project state, all polish patches enumerated, retrospective at the bottom
+- `memory/project_w6_history_render_bug.md` -- post-mortem of the cutover bug
+- `.planning/tech-design-render-pipeline.md` -- TypeSpec wire contract, EARS E1-E8 (unchanged)
+- `.planning/plan-render-pipeline.md` -- task breakdown (unchanged; T22/T32 skipped, T30 substituted)
+- `public/index.html` line 128: RENDERER_MODE polarity (default = grid, opt-out = xterm)
+- `public/index.html`: search `gridTerms`, `applyGridSnapshot`, `applyGridFrame`, `renderGridWindow`, `queueGridFrame`, `mergeFrames`, `updateGridCursor`, `measureCharWidth`
+- `public/style.css` line 240+: `.term-wrap` insets, `.grid-term` (touch-action, overscroll), `.grid-row`, `.grid-spacer`, `.grid-cursor`
+- `server.js:1013-1110` (T02 coalescer + T12 headless mirror); `server.js:1638` (`ws.gridRenderer` flag set from connect msg); `server.js:1126-1175` (buildSnapshot, buildFrame, rowToRuns)

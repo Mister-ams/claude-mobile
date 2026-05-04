@@ -5,7 +5,7 @@ Claude Mobile Bridge -- mobile web interface for Claude Code terminal sessions o
 ## Architecture
 
 ```
-claude-mobile/                    v3.2.1
+claude-mobile/                    v3.2.18
 ├── server.js                     Node.js: Express + WebSocket + node-pty + dtach (WSL) + E2E crypto
 ├── config.json                   Projects, autoStart, tailscaleHostname, port (gitignored)
 ├── config.example.json           Template for config.json
@@ -79,10 +79,17 @@ Setup: open `http://localhost:3456/setup` on laptop to configure TOTP.
 - Passkeys must be re-registered if tailscaleHostname changes (rpID binding)
 - Text and Enter must be sent as single atomic pty write (qsend(t + '\r')) -- separate writes race in the pipeline
 
+## Renderer
+
+Default is the cell-grid renderer (W6 T24 cutover at 3.2.18, 2026-05-04). Server-side `@xterm/headless` v6.0.0 mirror diffs against last-emitted state; ships row changes (RLE-collapsed `CellRun[]`) over WS as `snapshot` (full state) and `frame` (changed rows). Client (`gridTerms{}`) maintains a virtualized DOM with bounded mount window via spacers. Cursor renders as a 2px absolute-positioned bar tracked from snapshot/frame `cursor` field.
+
+Legacy xterm.js path retained as **opt-out fallback**: `?renderer=xterm` in URL forces it. Used by clients hitting any unforeseen grid-mode issue. T26-T28 (delete legacy server scrollback handler, drop xterm.js vendor bundle, sweep this file) are intentionally held to keep the fallback shipped.
+
+Per-WS `gridRenderer` flag set from the `connect` message's `renderer` field (`server.js:1638`). All four client-side `connect` senders MUST include `renderer: RENDERER_MODE` -- missing it bricks history rendering on the affected WS. See `memory/project_w6_history_render_bug.md`.
+
 ## Current State
 
-v3.2.6 (head: da4b2fc). Render-pipeline push W1-W5 shipped 2026-05-01/02 across the 3.2.x patch line; W6 default flip attempted (3.2.7) and reverted same day. Grid renderer (cell-grid + row-RLE diff over WS, server-side @xterm/headless) is opt-in via `?renderer=grid`; default is legacy xterm.js. [verified -- git log + pm2 list]
-Active track in `.planning/`:
-- **render-pipeline** (`tech-design-render-pipeline.md` + `plan-render-pipeline.md`): W1-W5 shipped, W6 BLOCKED on grid history/scrollback render bug, W7 polish (rope-tail, viewport culling, single input parser, mouse-tracking T22) blocked behind W6.
-Pointers: `HANDOVER.md` (current next action), `STATE-render-pipeline.yaml` (per-wave commits), `memory/project_w6_history_render_bug.md` (investigation pointers), `guide-tui-rendering-references.md` (OpenTUI + CLI rendering analysis).
-Completed (archived): scrollback-and-dtach, v3.1.3-hardening, v3.1.4-should-fix, v3.1.6-review-fixes, architecture-cleanup, audit-v3.1.3-review.
+v3.2.18 (head: 8b3baf2). Render-pipeline initiative CLOSED 2026-05-04: 18 patch releases across W1-W7. Grid is default; xterm fallback retained. [verified -- git log + pm2 list]
+
+Pointers: `HANDOVER.md` (current state + decisions), `.planning/STATE-render-pipeline.yaml` (canonical per-wave commits + retrospective), `memory/project_w6_history_render_bug.md` (post-mortem of the cutover bug), `guide-tui-rendering-references.md` (OpenTUI + CLI rendering analysis).
+Completed (archived): scrollback-and-dtach, v3.1.3-hardening, v3.1.4-should-fix, v3.1.6-review-fixes, architecture-cleanup, audit-v3.1.3-review, render-pipeline (W1-W7).
