@@ -1069,6 +1069,23 @@ function makeGridTerm() {
     });
   }, { passive: true });
 
+  // Re-window on any size transition: hidden->visible (session switch),
+  // orientation change, soft-keyboard show/hide. Without this, a snapshot
+  // landing while term-wrap is display:none computes mountedCount=10
+  // (overscan only) from clientHeight=0 and stays stuck on re-show.
+  if (typeof ResizeObserver !== 'undefined') {
+    const ro = new ResizeObserver(() => {
+      if (grid.scrollScheduled) return;
+      grid.scrollScheduled = true;
+      requestAnimationFrame(() => {
+        grid.scrollScheduled = false;
+        renderGridWindow(grid);
+      });
+    });
+    ro.observe(wrap);
+    grid.resizeObserver = ro;
+  }
+
   return grid;
 }
 
