@@ -237,7 +237,16 @@ html, body {
 .scroll-zone-down .scroll-icon { right: 12px; }
 .scroll-zone:active .scroll-icon { opacity: 0.6; }
 .term-wrap {
-  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  /* Inset from term-area edges so terminal content has visible breathing
+     room. Cells used to butt against the device edges; under the iPhone
+     home indicator and the column-2 panel of two-column tool output that
+     looked like text was being clipped. Insets respect iOS safe-area
+     where it exceeds the base inset. */
+  position: absolute;
+  top: 4px;
+  left: max(6px, env(safe-area-inset-left));
+  right: max(6px, env(safe-area-inset-right));
+  bottom: 4px;
   display: none; overflow: hidden;
   will-change: transform;
 }

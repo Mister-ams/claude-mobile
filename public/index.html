@@ -1348,8 +1348,15 @@ function switchTo(id) {
       setTimeout(() => { try { fits[id]?.fit(); } catch (e) { clientLog('switchTo fit: ' + e.message); } }, 50);
     } else {
       // T19: emit an initial resize once the grid wrap has layout, so the
-      // server knows the viewport size before producing a snapshot.
+      // server knows the viewport size before producing a snapshot. The
+      // 50ms call may probe before SF Mono/Menlo has resolved (iOS Safari
+      // briefly uses a fallback whose char metrics differ from the final
+      // monospace, leading to wrong cols). Schedule a second pass once
+      // fonts.ready resolves, which corrects to the real char width.
       setTimeout(() => doResize(), 50);
+      if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => doResize());
+      }
     }
   }
 
