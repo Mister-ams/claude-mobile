@@ -277,6 +277,12 @@ html, body {
   white-space: pre;
   min-height: 1.286em;
 }
+/* T31: spacer divs preserve scrollHeight for unmounted rows above/below the
+   visible window. Heights are set inline by renderGridWindow. */
+.grid-spacer {
+  display: block;
+  width: 100%;
+}
 .grid-cursor {
   position: absolute;
   width: 2px;

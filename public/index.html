@@ -952,7 +952,8 @@ const ANSI_PALETTE = [
 // Standard xterm 256-color cube levels for indexes 16..231 (6x6x6).
 const XTERM_CUBE_LEVELS = [0, 95, 135, 175, 215, 255];
 const SGR_RGB_FLAG = 0x1000000;
-const GRID_MAX_RENDERED_ROWS = 1000;  // mobile perf cap; W7 virtualises
+// Removed in T31: viewport culling makes the per-row mount cost bounded, so
+// we render all 5000 server-side scrollback rows. See GRID_MAX_ROWS.
 
 function hex2(n) { return n.toString(16).padStart(2, '0'); }
 
@@ -1016,13 +1017,55 @@ function renderRow(runs) {
   return div;
 }
 
+// T31: viewport culling. The wrap holds two empty spacer divs flanking the
+// mounted-row range. Spacer heights stand in for unmounted rows so scrollHeight
+// stays accurate without keeping every row in the DOM. On scroll, the visible
+// window is recomputed and only [firstVisible-overscan, lastVisible+overscan]
+// rows are mounted; everything else lives in grid.allRows[] until scrolled to.
+const GRID_OVERSCAN = 10;
+const GRID_MAX_ROWS = 5000;  // matches server's HeadlessTerminal scrollback cap
+const GRID_ROW_HEIGHT_FALLBACK = 17;
+
 function makeGridTerm() {
   const wrap = document.createElement('div');
   wrap.className = 'grid-term';
+  const topSpacer = document.createElement('div');
+  topSpacer.className = 'grid-spacer';
+  topSpacer.style.height = '0px';
+  const bottomSpacer = document.createElement('div');
+  bottomSpacer.className = 'grid-spacer';
+  bottomSpacer.style.height = '0px';
   const cursorEl = document.createElement('div');
   cursorEl.className = 'grid-cursor';
+  wrap.appendChild(topSpacer);
+  wrap.appendChild(bottomSpacer);
   wrap.appendChild(cursorEl);
-  return { wrap, cursorEl, charWidth: 0, cols: 0, rows: 0, rowEls: new Map(), cursor: { row: 0, col: 0, visible: true } };
+
+  const grid = {
+    wrap, topSpacer, bottomSpacer, cursorEl,
+    allRows: [],            // ordered {row, runs} for entire scrollback+viewport
+    rowIndexByServerRow: new Map(),  // server row -> index in allRows
+    mountedEls: [],         // currently mounted DOM rows in display order
+    mountedStart: 0,        // index in allRows of first mounted row
+    mountedCount: 0,
+    rowEls: new Map(),      // server row -> mounted DOM element
+    rowHeight: 0,
+    charWidth: 0,
+    cols: 0, rows: 0,
+    cursor: { row: 0, col: 0, visible: true },
+    scrollScheduled: false,
+  };
+
+  wrap.addEventListener('scroll', () => {
+    if (grid.scrollScheduled) return;
+    grid.scrollScheduled = true;
+    requestAnimationFrame(() => {
+      grid.scrollScheduled = false;
+      renderGridWindow(grid);
+    });
+  }, { passive: true });
+
+  return grid;
 }
 
 function measureCharWidth(grid) {
@@ -1035,6 +1078,68 @@ function measureCharWidth(grid) {
   grid.wrap.removeChild(probe);
   grid.charWidth = w;
   return w;
+}
+
+function ensureRowHeight(grid) {
+  if (grid.rowHeight > 0) return grid.rowHeight;
+  const probe = document.createElement('div');
+  probe.className = 'grid-row';
+  probe.appendChild(document.createTextNode('X'));
+  grid.wrap.appendChild(probe);
+  const h = probe.getBoundingClientRect().height || GRID_ROW_HEIGHT_FALLBACK;
+  grid.wrap.removeChild(probe);
+  grid.rowHeight = h;
+  return h;
+}
+
+function unmountAllGridRows(grid) {
+  for (const el of grid.mountedEls) el.remove();
+  grid.mountedEls = [];
+  grid.rowEls.clear();
+}
+
+function renderGridWindow(grid) {
+  if (!grid.allRows.length) {
+    unmountAllGridRows(grid);
+    grid.topSpacer.style.height = '0px';
+    grid.bottomSpacer.style.height = '0px';
+    grid.mountedStart = 0;
+    grid.mountedCount = 0;
+    updateGridCursor(grid);
+    return;
+  }
+  const rowH = ensureRowHeight(grid);
+  const total = grid.allRows.length;
+  const scrollTop = grid.wrap.scrollTop;
+  const clientH = grid.wrap.clientHeight;
+
+  const firstVisible = Math.floor(scrollTop / rowH);
+  const lastVisible = Math.ceil((scrollTop + clientH) / rowH);
+  const mountStart = Math.max(0, firstVisible - GRID_OVERSCAN);
+  const mountEnd = Math.min(total, lastVisible + GRID_OVERSCAN);
+  const mountCount = mountEnd - mountStart;
+
+  if (mountStart === grid.mountedStart && mountCount === grid.mountedCount && grid.mountedEls.length === mountCount) {
+    updateGridCursor(grid);
+    return;
+  }
+
+  unmountAllGridRows(grid);
+  grid.topSpacer.style.height = (mountStart * rowH) + 'px';
+  grid.bottomSpacer.style.height = ((total - mountEnd) * rowH) + 'px';
+
+  const fragment = document.createDocumentFragment();
+  for (let i = mountStart; i < mountEnd; i++) {
+    const rc = grid.allRows[i];
+    const el = renderRow(rc.runs);
+    fragment.appendChild(el);
+    grid.mountedEls.push(el);
+    grid.rowEls.set(rc.row, el);
+  }
+  grid.bottomSpacer.before(fragment);
+  grid.mountedStart = mountStart;
+  grid.mountedCount = mountCount;
+  updateGridCursor(grid);
 }
 
 function updateGridCursor(grid) {
@@ -1052,33 +1157,46 @@ function applyGridSnapshot(grid, snap) {
   grid.cols = snap.cols;
   grid.rows = snap.rows;
   grid.cursor = snap.cursor;
-  grid.charWidth = 0;  // remeasure: cols may have changed
-  grid.wrap.innerHTML = '';
-  grid.wrap.appendChild(grid.cursorEl);
-  grid.rowEls.clear();
-  const sb = snap.scrollback.slice(-GRID_MAX_RENDERED_ROWS);
-  for (const rc of sb) {
-    const el = renderRow(rc.runs);
-    grid.wrap.appendChild(el);
-    grid.rowEls.set(rc.row, el);
+  grid.charWidth = 0;  // cols may have changed; remeasure on next cursor update
+  grid.rowHeight = 0;  // remeasure too -- font may differ post-resize
+
+  // Build full row list. Server row indices: scrollback < 0, viewport 0..rows-1.
+  const sb = snap.scrollback.slice(-GRID_MAX_ROWS);
+  grid.allRows = sb.concat(snap.viewport);
+  grid.rowIndexByServerRow.clear();
+  for (let i = 0; i < grid.allRows.length; i++) {
+    grid.rowIndexByServerRow.set(grid.allRows[i].row, i);
   }
-  for (const rc of snap.viewport) {
-    const el = renderRow(rc.runs);
-    grid.wrap.appendChild(el);
-    grid.rowEls.set(rc.row, el);
-  }
+
+  unmountAllGridRows(grid);
+  // Pre-set scrollHeight so we can scroll to bottom before computing the
+  // window. Park all virtual height in topSpacer; renderGridWindow rewrites
+  // both spacers once it knows the mounted range.
+  ensureRowHeight(grid);
+  const totalH = grid.allRows.length * grid.rowHeight;
+  grid.topSpacer.style.height = totalH + 'px';
+  grid.bottomSpacer.style.height = '0px';
+  grid.mountedStart = 0;
+  grid.mountedCount = 0;
   grid.wrap.scrollTop = grid.wrap.scrollHeight;
-  updateGridCursor(grid);
+  renderGridWindow(grid);
 }
 
 function applyGridFrame(grid, frame) {
   grid.cursor = frame.cursor;
   for (const rc of frame.changes) {
-    const newEl = renderRow(rc.runs);
-    const existing = grid.rowEls.get(rc.row);
-    if (existing) existing.replaceWith(newEl);
-    else grid.wrap.appendChild(newEl);
-    grid.rowEls.set(rc.row, newEl);
+    const idx = grid.rowIndexByServerRow.get(rc.row);
+    if (idx === undefined) continue;
+    grid.allRows[idx] = rc;
+    if (idx >= grid.mountedStart && idx < grid.mountedStart + grid.mountedCount) {
+      const newEl = renderRow(rc.runs);
+      const existing = grid.rowEls.get(rc.row);
+      if (existing) {
+        existing.replaceWith(newEl);
+        grid.mountedEls[idx - grid.mountedStart] = newEl;
+      }
+      grid.rowEls.set(rc.row, newEl);
+    }
   }
   updateGridCursor(grid);
 }
