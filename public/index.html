@@ -1073,6 +1073,9 @@ function makeGridTerm() {
   // orientation change, soft-keyboard show/hide. Without this, a snapshot
   // landing while term-wrap is display:none computes mountedCount=10
   // (overscan only) from clientHeight=0 and stays stuck on re-show.
+  // Also re-runs doResize so we re-assert mobile dimensions when becoming
+  // visible -- another client connected to the same session may have
+  // resized the PTY in the meantime.
   if (typeof ResizeObserver !== 'undefined') {
     const ro = new ResizeObserver(() => {
       if (grid.scrollScheduled) return;
@@ -1080,6 +1083,7 @@ function makeGridTerm() {
       requestAnimationFrame(() => {
         grid.scrollScheduled = false;
         renderGridWindow(grid);
+        if (typeof doResize === 'function' && wrap.clientWidth > 0) doResize();
       });
     });
     ro.observe(wrap);
@@ -2003,8 +2007,12 @@ function doResize() {
     if (r.width <= 0 || r.height <= 0) return;
     const cols = Math.max(10, Math.floor(grid.wrap.clientWidth / r.width));
     const rows = Math.max(5, Math.floor(grid.wrap.clientHeight / r.height));
-    if (cols === lastCols && rows === lastRows) return;
-    lastCols = cols; lastRows = rows;
+    // Skip iff the SERVER already has these dims (per the latest snapshot).
+    // Don't compare against lastCols -- another client connected to the same
+    // session can resize the PTY out from under us, and a stale local cache
+    // would silently let the mismatch persist (rows wider than viewport ->
+    // visible right-side clipping).
+    if (cols === grid.cols && rows === grid.rows) return;
     if (ws && ws.readyState === 1) {
       queueSend({ type: 'resize', cols, rows });
       updateDiag(cols, rows);
