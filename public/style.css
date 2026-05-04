@@ -270,6 +270,14 @@ html, body {
   padding: 0;
   box-sizing: border-box;
   position: relative;  /* containing block for absolutely-positioned cursor */
+  /* iOS Safari: with overflow-y:auto and no touch-action, the default is
+     'auto' -- iOS evaluates horizontal pans for native rubber-band before
+     JS handlers see them, which made horizontal swipes feel like the
+     terminal was sliding sideways instead of triggering swipe-to-switch.
+     pan-y tells iOS only vertical pans are meaningful here; horizontal
+     touches pass straight to the document swipe handler. */
+  touch-action: pan-y;
+  overscroll-behavior-x: none;
 }
 .grid-term::-webkit-scrollbar { display: none; }
 .grid-row {
