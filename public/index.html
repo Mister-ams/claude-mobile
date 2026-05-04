@@ -1113,10 +1113,11 @@ function switchTo(id) {
     const grid = makeGridTerm();
     wrap.appendChild(grid.wrap);
     gridTerms[id] = grid;
-    // Stop propagation so swipe-to-switch doesn't fight scroll. Don't
-    // preventDefault -- we WANT native scroll on grid.wrap.
-    wrap.addEventListener('touchstart', e => { e.stopPropagation(); }, true);
-    wrap.addEventListener('touchmove', e => { e.stopPropagation(); }, true);
+    // Touches inside the grid wrap propagate freely to the document-level
+    // swipe-to-switch handler. That handler is passive:true and only locks
+    // horizontal when dx > dy*1.5, so it cannot fight native vertical scroll
+    // on .grid-term. The earlier defensive stopPropagation here blocked
+    // swipe-to-switch entirely once 3.2.9 hid the scroll-zones passthrough.
   } else if (RENDERER_MODE !== 'grid' && !terms[id]) {
     const wrap = document.createElement('div');
     wrap.className = 'term-wrap';
