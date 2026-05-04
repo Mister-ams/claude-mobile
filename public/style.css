@@ -269,6 +269,7 @@ html, body {
   color: var(--text, #f6f7f9);
   padding: 0;
   box-sizing: border-box;
+  position: relative;  /* containing block for absolutely-positioned cursor */
 }
 .grid-term::-webkit-scrollbar { display: none; }
 .grid-row {
@@ -276,9 +277,15 @@ html, body {
   white-space: pre;
   min-height: 1.286em;
 }
-.grid-row .reverse {
-  filter: invert(1);
+.grid-cursor {
+  position: absolute;
+  width: 2px;
+  background: var(--accent, #2d72d2);
+  pointer-events: none;
+  display: none;
+  animation: grid-cursor-blink 1s steps(2) infinite;
 }
+@keyframes grid-cursor-blink { 0%, 50% { opacity: 1; } 50.01%, 100% { opacity: 0; } }
 #empty-state {
   display: flex; flex-direction: column; align-items: center;
   justify-content: center; height: 100%; gap: 12px;

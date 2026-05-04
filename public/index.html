@@ -949,23 +949,49 @@ const ANSI_PALETTE = [
   '#5f6b7c', '#e76a6e', '#32a467', '#ec9a3c',
   '#4c90f0', '#bd6bbd', '#3fa6da', '#f6f7f9'
 ];
+// Standard xterm 256-color cube levels for indexes 16..231 (6x6x6).
+const XTERM_CUBE_LEVELS = [0, 95, 135, 175, 215, 255];
 const SGR_RGB_FLAG = 0x1000000;
 const GRID_MAX_RENDERED_ROWS = 1000;  // mobile perf cap; W7 virtualises
+
+function hex2(n) { return n.toString(16).padStart(2, '0'); }
 
 function sgrColorToHex(value) {
   if (value >= SGR_RGB_FLAG) return '#' + (value & 0xFFFFFF).toString(16).padStart(6, '0');
   if (value >= 0 && value < 16) return ANSI_PALETTE[value];
-  return null;  // 16..255 fall through; rendered as default
+  if (value >= 16 && value < 232) {
+    // 6x6x6 color cube: index = 16 + 36*r + 6*g + b
+    const i = value - 16;
+    const r = XTERM_CUBE_LEVELS[Math.floor(i / 36)];
+    const g = XTERM_CUBE_LEVELS[Math.floor((i % 36) / 6)];
+    const b = XTERM_CUBE_LEVELS[i % 6];
+    return '#' + hex2(r) + hex2(g) + hex2(b);
+  }
+  if (value >= 232 && value < 256) {
+    // 24-step grayscale ramp.
+    const v = 8 + (value - 232) * 10;
+    return '#' + hex2(v) + hex2(v) + hex2(v);
+  }
+  return null;
 }
 
 function applySgr(span, sgr) {
   if (!sgr) return;
-  if (sgr.fg !== undefined) { const c = sgrColorToHex(sgr.fg); if (c) span.style.color = c; }
-  if (sgr.bg !== undefined) { const c = sgrColorToHex(sgr.bg); if (c) span.style.backgroundColor = c; }
+  let fg = sgr.fg !== undefined ? sgrColorToHex(sgr.fg) : null;
+  let bg = sgr.bg !== undefined ? sgrColorToHex(sgr.bg) : null;
+  // SGR 7: reverse swaps fg/bg, defaults filled from theme so the swap is
+  // visible even when both sides were "default".
+  if (sgr.reverse) {
+    const newFg = bg !== null ? bg : 'var(--bg, #111418)';
+    const newBg = fg !== null ? fg : 'var(--text, #f6f7f9)';
+    fg = newFg;
+    bg = newBg;
+  }
+  if (fg !== null) span.style.color = fg;
+  if (bg !== null) span.style.backgroundColor = bg;
   if (sgr.bold) span.style.fontWeight = 'bold';
   if (sgr.italic) span.style.fontStyle = 'italic';
   if (sgr.underline) span.style.textDecoration = 'underline';
-  if (sgr.reverse) span.classList.add('reverse');
   // sgr.hyperlink handled in renderRow (T21).
 }
 
@@ -993,14 +1019,42 @@ function renderRow(runs) {
 function makeGridTerm() {
   const wrap = document.createElement('div');
   wrap.className = 'grid-term';
-  return { wrap, cols: 0, rows: 0, rowEls: new Map(), cursor: { row: 0, col: 0, visible: true } };
+  const cursorEl = document.createElement('div');
+  cursorEl.className = 'grid-cursor';
+  wrap.appendChild(cursorEl);
+  return { wrap, cursorEl, charWidth: 0, cols: 0, rows: 0, rowEls: new Map(), cursor: { row: 0, col: 0, visible: true } };
+}
+
+function measureCharWidth(grid) {
+  if (grid.charWidth > 0) return grid.charWidth;
+  const probe = document.createElement('span');
+  probe.style.cssText = 'position:absolute;visibility:hidden;font:inherit;line-height:inherit;white-space:pre';
+  probe.textContent = 'X';
+  grid.wrap.appendChild(probe);
+  const w = probe.getBoundingClientRect().width;
+  grid.wrap.removeChild(probe);
+  grid.charWidth = w;
+  return w;
+}
+
+function updateGridCursor(grid) {
+  const c = grid.cursor;
+  if (!c || !c.visible) { grid.cursorEl.style.display = 'none'; return; }
+  const rowEl = grid.rowEls.get(c.row);
+  if (!rowEl) { grid.cursorEl.style.display = 'none'; return; }
+  const charW = measureCharWidth(grid);
+  if (!charW) { grid.cursorEl.style.display = 'none'; return; }
+  grid.cursorEl.style.cssText =
+    `display:block;top:${rowEl.offsetTop}px;left:${c.col * charW}px;height:${rowEl.offsetHeight}px;`;
 }
 
 function applyGridSnapshot(grid, snap) {
   grid.cols = snap.cols;
   grid.rows = snap.rows;
   grid.cursor = snap.cursor;
+  grid.charWidth = 0;  // remeasure: cols may have changed
   grid.wrap.innerHTML = '';
+  grid.wrap.appendChild(grid.cursorEl);
   grid.rowEls.clear();
   const sb = snap.scrollback.slice(-GRID_MAX_RENDERED_ROWS);
   for (const rc of sb) {
@@ -1014,6 +1068,7 @@ function applyGridSnapshot(grid, snap) {
     grid.rowEls.set(rc.row, el);
   }
   grid.wrap.scrollTop = grid.wrap.scrollHeight;
+  updateGridCursor(grid);
 }
 
 function applyGridFrame(grid, frame) {
@@ -1025,6 +1080,7 @@ function applyGridFrame(grid, frame) {
     else grid.wrap.appendChild(newEl);
     grid.rowEls.set(rc.row, newEl);
   }
+  updateGridCursor(grid);
 }
 
 function makeTerm() {
