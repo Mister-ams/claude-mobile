@@ -790,7 +790,7 @@ function handle(m) {
       if (gridTerms[m.session]) applyGridSnapshot(gridTerms[m.session], m);
       break;
     case 'frame':
-      if (gridTerms[m.session]) applyGridFrame(gridTerms[m.session], m);
+      if (gridTerms[m.session]) queueGridFrame(gridTerms[m.session], m);
       break;
     case 'scrollback':
       if (terms[m.session] && m.data) {
@@ -1054,6 +1054,10 @@ function makeGridTerm() {
     cols: 0, rows: 0,
     cursor: { row: 0, col: 0, visible: true },
     scrollScheduled: false,
+    // T30 substitute: rAF-coalesced frame queue. Multiple frames arriving
+    // within one paint window merge to a single applyGridFrame call.
+    pendingFrames: [],
+    frameRafScheduled: false,
   };
 
   wrap.addEventListener('scroll', () => {
@@ -1159,6 +1163,9 @@ function applyGridSnapshot(grid, snap) {
   grid.cursor = snap.cursor;
   grid.charWidth = 0;  // cols may have changed; remeasure on next cursor update
   grid.rowHeight = 0;  // remeasure too -- font may differ post-resize
+  // Snapshots fully reset state; any frames still queued from before this
+  // snapshot are stale and would re-apply changes already covered.
+  grid.pendingFrames.length = 0;
 
   // Build full row list. Server row indices: scrollback < 0, viewport 0..rows-1.
   const sb = snap.scrollback.slice(-GRID_MAX_ROWS);
@@ -1199,6 +1206,40 @@ function applyGridFrame(grid, frame) {
     }
   }
   updateGridCursor(grid);
+}
+
+// T30 substitute: coalesce frames arriving within the same paint window into
+// one applyGridFrame call. Reduces JS DOM mutation work during burst streams
+// (claude-code token output emits frames faster than rAF can paint). Merge
+// rule: latest-wins per row index; latest cursor wins; seq tracks the most
+// recent merged frame.
+function queueGridFrame(grid, frame) {
+  grid.pendingFrames.push(frame);
+  if (grid.frameRafScheduled) return;
+  grid.frameRafScheduled = true;
+  requestAnimationFrame(() => {
+    grid.frameRafScheduled = false;
+    if (!grid.pendingFrames.length) return;
+    const merged = mergeFrames(grid.pendingFrames);
+    grid.pendingFrames.length = 0;
+    applyGridFrame(grid, merged);
+  });
+}
+
+function mergeFrames(frames) {
+  if (frames.length === 1) return frames[0];
+  const last = frames[frames.length - 1];
+  const rowMap = new Map();
+  for (const f of frames) {
+    for (const ch of f.changes) rowMap.set(ch.row, ch);
+  }
+  return {
+    type: 'frame',
+    session: last.session,
+    changes: Array.from(rowMap.values()),
+    cursor: last.cursor,
+    seq: last.seq,
+  };
 }
 
 function makeTerm() {
