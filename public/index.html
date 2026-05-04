@@ -118,11 +118,14 @@ let terms = {}, fits = {}, projects = [];
 // One entry per session when RENDERER_MODE === 'grid'.
 let gridTerms = {};
 
-// W5 per-page renderer mode. ?renderer=grid in the URL flips to the new
-// cell-grid pipeline; default is the legacy xterm.js path. The flag goes
-// out in every 'connect' message so the server's per-WS gridRenderer
-// flag tracks it.
-const RENDERER_MODE = (new URLSearchParams(location.search).get('renderer') === 'grid') ? 'grid' : 'xterm';
+// W6 T24: default flipped to the cell-grid renderer (3.2.18). The legacy
+// xterm.js path remains available via ?renderer=xterm as a fallback for any
+// issue grid mode hasn't yet covered. T26-T28 (delete the legacy WS
+// scrollback handler, drop the xterm.js vendor bundle, sweep CLAUDE.md)
+// are intentionally held -- the fallback stays shipped indefinitely. The
+// flag goes out in every 'connect' message so the server's per-WS
+// gridRenderer flag tracks it.
+const RENDERER_MODE = (new URLSearchParams(location.search).get('renderer') === 'xterm') ? 'xterm' : 'grid';
 let reconnectDelay = 1000;
 let reconnectTimer = null;
 let sessionToken = null;
