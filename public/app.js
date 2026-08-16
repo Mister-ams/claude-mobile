@@ -1330,8 +1330,9 @@ function isWideLayout() { return wideMQ.matches; }
 
 function onLayoutChange() {
   document.body.classList.toggle('wide', isWideLayout());
-  applyHwKeyboard();  // T12: the default (on for tablets) tracks the boundary
-  applyFontSize();    // T14: so does the default font size
+  applyHwKeyboard();    // T12: the default (on for tablets) tracks the boundary
+  applyFontSize();      // T14: so does the default font size
+  syncSwipeHandlers();  // T15: swipe nav is bound only at narrow widths
   renderTabs();
 }
 
@@ -1527,7 +1528,7 @@ function animatedSwitchTo(targetId, direction) {
 // Using document-level avoids iOS event bubbling issues with nested elements
 let swipeActive = false;
 
-document.addEventListener('touchstart', e => {
+function onSwipeStart(e) {
   if (e.touches.length !== 1) return;
   const t = e.touches[0];
   // Only activate for touches inside the terminal area
@@ -1540,9 +1541,9 @@ document.addEventListener('touchstart', e => {
   swiping = false;
   swipeDx = 0;
   swipePeekWrap = null;
-}, { passive: true });
+}
 
-document.addEventListener('touchmove', e => {
+function onSwipeMove(e) {
   if (!swipeActive || e.touches.length !== 1) return;
   const t = e.touches[0];
   const dx = t.clientX - swipeStartX;
@@ -1603,7 +1604,7 @@ document.addEventListener('touchmove', e => {
     newHint.style.width = '0';
     newHint.classList.remove('ready');
   }
-}, { passive: true });
+}
 
 function endSwipe() {
   hintL.classList.remove('flash');
@@ -1700,8 +1701,52 @@ function snapBack(activeWrap) {
   }
 }
 
-document.addEventListener('touchend', endSwipe, { passive: true });
-document.addEventListener('touchcancel', endSwipe, { passive: true });
+// ── T15: swipe navigation is a narrow-width behaviour ────────────────
+// Finger-following session switching exists because a 390px screen shows
+// exactly one session, so the only way between them is a gesture. On an
+// iPad the persistent tab strip (T13) shows every session at once, the
+// keyboard has Cmd-Shift-arrows (T12), and a horizontal drag from near the
+// edge is an iPadOS system gesture -- so here the swipe earns little and
+// competes with the OS. The handlers are genuinely bound/unbound rather
+// than early-returning: a bound document-level touchmove listener still
+// costs iOS a hit-test on every frame of a system gesture.
+//
+// The code stays. A phone is still a supported client, and rotating an
+// iPad or resizing a desktop window across 820px re-binds it live.
+let swipeHandlersBound = false;
+
+function swipeNavigationActive() { return swipeHandlersBound; }
+
+function bindSwipeHandlers() {
+  if (swipeHandlersBound) return;
+  document.addEventListener('touchstart', onSwipeStart, { passive: true });
+  document.addEventListener('touchmove', onSwipeMove, { passive: true });
+  document.addEventListener('touchend', endSwipe, { passive: true });
+  document.addEventListener('touchcancel', endSwipe, { passive: true });
+  swipeHandlersBound = true;
+}
+
+function unbindSwipeHandlers() {
+  if (!swipeHandlersBound) return;
+  document.removeEventListener('touchstart', onSwipeStart);
+  document.removeEventListener('touchmove', onSwipeMove);
+  document.removeEventListener('touchend', endSwipe);
+  document.removeEventListener('touchcancel', endSwipe);
+  swipeHandlersBound = false;
+  // Abandon any gesture that was mid-flight when the boundary was crossed.
+  // swipeDx is zeroed first so endSwipe snaps back instead of committing a
+  // session switch the user never finished asking for.
+  if (swipeActive || swiping) { swipeDx = 0; endSwipe(); }
+  swipeActive = false;
+  swiping = false;
+  swipeDx = 0;
+}
+
+function syncSwipeHandlers() {
+  if (isWideLayout()) unbindSwipeHandlers(); else bindSwipeHandlers();
+}
+
+syncSwipeHandlers();
 
 let lastSent = '';
 
