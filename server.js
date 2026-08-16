@@ -1476,6 +1476,18 @@ function wireSessionProc(session) {
   });
 }
 
+// T21 (R5): one sanitizer for session names, used by both create and rename.
+// Control characters are stripped first: createSession audit-logs the name, so
+// an embedded newline in a create message forged whole audit-log lines. The
+// markup strip and the 50-char bound are what rename already did.
+function sanitizeSessionName(name) {
+  return String(name == null ? '' : name)
+    .replace(/[\x00-\x1f\x7f]/g, ' ')
+    .replace(/[<>"'&]/g, '')
+    .slice(0, 50)
+    .trim();
+}
+
 async function createSession(name, dir, cols, rows) {
   if (sessions.size >= MAX_SESSIONS) return null;
   const id = nextId++;
@@ -1793,7 +1805,7 @@ wss.on('connection', (ws, req) => {
           secureSend(ws, { type: 'error', message: 'Directory not in allowed project list' });
           break;
         }
-        const created = await createSession(msg.name || 'Session', dir, msg.cols, msg.rows);
+        const created = await createSession(sanitizeSessionName(msg.name) || 'Session', dir, msg.cols, msg.rows);
         if (created) {
           broadcastSessions();
           secureSend(ws, { type: 'created', session: created.id });
@@ -1888,7 +1900,8 @@ wss.on('connection', (ws, req) => {
 
       case 'rename': {
         if (!targetSession || !msg.name) break;
-        const name = String(msg.name).slice(0, 50).replace(/[<>"'&]/g, '');
+        const name = sanitizeSessionName(msg.name);
+        if (!name) break;
         targetSession.name = name;
         broadcastSessions();
         saveSessionMeta();
