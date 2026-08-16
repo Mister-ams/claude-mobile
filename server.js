@@ -613,6 +613,23 @@ function saveCredentials() {
 // Active challenges for WebAuthn
 const challenges = new Map(); // challengeId -> { challenge, expires }
 
+// ─── Same-origin policy (T18 + T19) ──────────────────────────────
+// The only legitimate origins are this server's own pages: the tailnet host
+// that `tailscale serve` fronts, and localhost for the setup page.
+const ALLOWED_ORIGINS = new Set([
+  `http://localhost:${PORT}`,
+  `http://127.0.0.1:${PORT}`,
+  `http://[::1]:${PORT}`,
+]);
+if (config.tailscaleHostname) {
+  ALLOWED_ORIGINS.add(`https://${String(config.tailscaleHostname).toLowerCase()}`);
+  ALLOWED_ORIGINS.add(`http://${String(config.tailscaleHostname).toLowerCase()}`);
+}
+
+function isAllowedOrigin(origin) {
+  return ALLOWED_ORIGINS.has(String(origin || '').trim().toLowerCase().replace(/\/$/, ''));
+}
+
 // ─── Express ─────────────────────────────────────────────────────
 const app = express();
 // Trust X-Forwarded-For from loopback (tailscale serve proxies HTTPS -> localhost)
@@ -923,7 +940,31 @@ app.get('/health', (req, res) => {
 });
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server, maxPayload: 1024 * 1024 }); // 1MB max message
+
+// T18 (R2): WebSocket upgrades are exempt from CORS, and the *.ts.net name
+// resolves in PUBLIC DNS with a valid certificate, so without this check any
+// page open in a browser on a tailnet device can open a socket here. It can
+// never authenticate -- the session token lives in a JS variable, never a
+// cookie, and that stays true -- but it can burn the global limiter: 20 failed
+// auths trigger a 10-minute GLOBAL lockout, repeatable indefinitely, which is a
+// drive-by denial of the operator's own remote access.
+//
+// A missing Origin is allowed: browsers always send one on an upgrade (which is
+// what makes this effective against the drive-by case), while non-browser
+// tooling on the tailnet sends none and could forge any value anyway.
+function verifyUpgrade(info) {
+  const origin = info.req.headers.origin;
+  if (!origin || isAllowedOrigin(origin)) return true;
+  audit('SECURITY', `WebSocket upgrade rejected: origin=${String(origin).slice(0, 120)}`,
+    info.req.socket?.remoteAddress);
+  return false;
+}
+
+const wss = new WebSocketServer({
+  server,
+  maxPayload: 1024 * 1024, // 1MB max message
+  verifyClient: verifyUpgrade,
+});
 
 // ─── Sessions ────────────────────────────────────────────────────
 const sessions = new Map();
