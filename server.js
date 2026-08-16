@@ -215,12 +215,37 @@ function attachToDtach(id, cols, rows) {
   });
 }
 
+// Liveness means a process is HOLDING the socket, not merely that the file
+// exists. /tmp is on the ext4 rootfs in this distro rather than tmpfs, so socket
+// FILES survive a WSL shutdown while the daemons behind them do not: the old
+// `test -S` reported those phantoms as alive and recovery attached to nothing --
+// exactly the case the new boot-resilience work makes routine. lsof is already
+// how killDtachSession finds the holder, so reuse it rather than invent a
+// second mechanism. Returns 'alive' | 'stale' (exists, unheld) | 'gone'.
+function dtachSocketState(socket) {
+  return wslBash(
+    'if [ ! -S "$1" ]; then echo gone; ' +
+    'elif [ -n "$(lsof -t "$1" 2>/dev/null)" ]; then echo alive; ' +
+    'else echo stale; fi',
+    [socket]);
+}
+
 function dtachSessionAlive(id) {
   const socket = dtachSocket(id);
   try {
-    // Check socket file exists (dtach cleans up on process exit)
-    wslBash('test -S "$1"', [socket]);
-    return true;
+    const state = dtachSocketState(socket);
+    if (state === 'alive') return true;
+    // Re-probe before unlinking: the second WSL round-trip also supplies the
+    // spacing, so a socket that was created microseconds ago is not mistaken
+    // for a phantom during createSession's attach retry loop.
+    if (state === 'stale' && dtachSocketState(socket) === 'stale') {
+      // Nothing holds it, so unlinking cannot orphan a live session -- and a
+      // socket that still HAS a holder is never touched here.
+      audit('SESSION', `Stale dtach socket with no holder removed: cm-${id}`);
+      try { wslBash('rm -f "$1"', [socket]); }
+      catch (e) { audit('WARN', `stale socket unlink failed for cm-${id}: ${e.message}`); }
+    }
+    return false;
   } catch (e) { audit('WARN', 'dtachSessionAlive: ' + e.message); return false; }
 }
 
@@ -1556,6 +1581,16 @@ function recoverDtachSessions() {
     const name = saved?.name || `Recovered-${idNum}`;
     const dir = saved?.dir || 'unknown';
 
+    // A socket file with no process behind it is a phantom -- routine after a
+    // WSL restart, since /tmp is on the rootfs here. dtachSessionAlive reports
+    // it and clears it, so the leftover heals on read instead of being attached
+    // to an empty socket.
+    if (!dtachSessionAlive(idNum)) {
+      console.log(`  Skipped phantom socket: ${metaKey} (no process holds it)`);
+      audit('SESSION', `Recovery skipped phantom socket: ${metaKey}`);
+      continue;
+    }
+
     try {
       const proc = attachToDtach(idNum, 80, 24);
       console.log(`  dtach attach: pid=${proc.pid} for ${metaKey}`);
@@ -1941,6 +1976,66 @@ wss.on('connection', (ws, req) => {
   });
 });
 
+// ─── Backbone watchdog (T10) ─────────────────────────────────────
+// The session backbone in W0 is dtach inside WSL. W5 replaces it with the herdr
+// daemon: swap probeBackbone() for a socket `ping` and everything around it --
+// the state machine, the audit line, the client push -- stays as is.
+//
+// Detect and report only. No auto-restart in this wave.
+let backboneDown = false;
+
+// One WSL round trip: is dtach reachable, and which sockets are actually held
+// by a process? Returns { ok, wslDown, detail }.
+function probeBackbone() {
+  try {
+    const out = wslBash(
+      'command -v dtach >/dev/null 2>&1 || { echo NODTACH; exit 0; }; ' +
+      'for s in "$1"/"$2"-*.dtach; do [ -S "$s" ] || continue; ' +
+      'if [ -n "$(lsof -t "$s" 2>/dev/null)" ]; then echo "$s"; fi; done',
+      [DTACH_DIR, DTACH_PREFIX]);
+    if (out.includes('NODTACH')) {
+      return { ok: false, wslDown: false, detail: `dtach is missing in ${WSL_DISTRO}` };
+    }
+    const held = new Set(out.split('\n').map(s => s.trim()).filter(Boolean));
+    const orphaned = [...sessions.keys()].filter(id => !held.has(dtachSocket(id)));
+    if (orphaned.length) {
+      return {
+        ok: false, wslDown: false,
+        detail: `no live dtach process for ${orphaned.map(id => `cm-${id}`).join(', ')}`,
+      };
+    }
+    return { ok: true, wslDown: false, detail: `dtach reachable, ${held.size} live socket(s)` };
+  } catch (e) {
+    // wsl.exe writes its own errors as UTF-16, so strip the NULs and take the
+    // first line; otherwise the whole probe script gets echoed into the log.
+    const stderr = String(e.stderr || '').replace(/\0/g, '').trim().split('\n')[0];
+    const why = stderr || `exit ${e.status === undefined ? '?' : e.status}`;
+    return { ok: false, wslDown: true, detail: `WSL (${WSL_DISTRO}) unreachable: ${why.slice(0, 120)}` };
+  }
+}
+
+function checkBackbone() {
+  const probe = probeBackbone();
+  if (probe.wslDown) {
+    wslAvailable = false;
+    setLastError(probe.detail);
+  } else if (probe.ok) {
+    wslAvailable = true;
+  }
+  if (!probe.ok && !backboneDown) {
+    backboneDown = true;
+    audit('BACKBONE-DOWN', probe.detail);
+    // `backbone` is the field a client renders as a banner; type stays
+    // `warning` so today's client still surfaces it rather than dropping an
+    // unknown message on the floor.
+    broadcastAll({ type: 'warning', backbone: 'down', message: `Session backbone unavailable -- ${probe.detail}` });
+  } else if (probe.ok && backboneDown) {
+    backboneDown = false;
+    audit('BACKBONE-UP', probe.detail);
+    broadcastAll({ type: 'warning', backbone: 'up', message: 'Session backbone reachable again' });
+  }
+}
+
 // ─── Housekeeping (single 60s timer) ─────────────────────────────
 setInterval(() => {
   const now = Date.now();
@@ -1975,6 +2070,9 @@ setInterval(() => {
       audit('AUTH', `Inactivity lock (periodic)`, ws._ip);
     }
   }
+  // T10: backbone liveness -- one WSL probe per minute, isolated from the
+  // housekeeping above so a WSL hiccup cannot skip token expiry.
+  try { checkBackbone(); } catch (e) { audit('WARN', 'backbone check failed: ' + e.message); }
 }, 60 * 1000);
 
 // ─── Skill & Command Discovery ───────────────────────────────────
