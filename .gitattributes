@@ -1,0 +1,5 @@
+# Scripts and unit files that execute INSIDE WSL must keep LF endings.
+# This clone runs with core.autocrlf=true, which would otherwise check them
+# out as CRLF and break them at boot with `\r: command not found`.
+*.sh text eol=lf
+*.service text eol=lf

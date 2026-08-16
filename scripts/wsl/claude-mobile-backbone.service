@@ -1,0 +1,38 @@
+[Unit]
+Description=Claude Mobile session backbone
+Documentation=https://github.com/Mister-ams/claude-mobile
+# The backbone outlives the Windows-side Node server, so it only needs a
+# usable userspace -- not the network, which WSL brings up on its own.
+After=local-fs.target
+
+[Service]
+Type=simple
+
+# ─── THE ONLY LINE WAVE 5 (T33) CHANGES ─────────────────────────────────
+# W0 backbone: dtach. Sessions are dtach daemons created on demand by
+# server.js through WSL interop; this process exists to hold the distro up
+# so those daemons survive the Node server exiting.
+#
+# W5 swaps this single line for the herdr daemon, e.g.
+#   ExecStart=/usr/local/bin/herdr daemon --socket /run/claude-mobile/herdr.sock
+# Nothing else in this unit is backbone-specific, so nothing else moves.
+ExecStart=/usr/local/lib/claude-mobile/backbone-dtach.sh
+# ────────────────────────────────────────────────────────────────────────
+
+# Consumed by the W0 script; harmless to a future herdr ExecStart.
+Environment=CM_SOCKET_DIR=/tmp
+Environment=CM_DTACH_PREFIX=cm
+
+Restart=always
+RestartSec=5
+
+# Sessions are created through WSL interop and therefore live OUTSIDE this
+# unit's cgroup. KillMode=process is the belt-and-braces version of that
+# fact: a restart of the backbone must never take live sessions with it.
+KillMode=process
+
+# server.js runs `wsl -u root`, so session sockets are root-owned.
+User=root
+
+[Install]
+WantedBy=multi-user.target
