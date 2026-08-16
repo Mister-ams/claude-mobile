@@ -362,6 +362,24 @@ if $IS_WINDOWS; then
     fi
     echo \"dtach installed, node \$(node -v), pm2 \$(pm2 -v 2>/dev/null | tail -1)\"
   " 2>/dev/null && ok "WSL tools installed" || warn "WSL setup had issues -- dtach persistence may not work"
+
+  # -- Session backbone under systemd --
+  # Without this, WSL can tear the distro down once the Node server exits and
+  # every session goes with it.
+  say "Installing the WSL session backbone (systemd)..."
+  REPO_WIN="$(cygpath -w "$PWD" 2>/dev/null || echo "$PWD")"
+  REPO_WSL="$(wsl -d "$WSL_DISTRO" -- wslpath -a "$REPO_WIN" 2>/dev/null | tr -d '\r')"
+  if [ -n "$REPO_WSL" ]; then
+    # Piped through sed because a CRLF checkout (core.autocrlf=true) would
+    # otherwise fail with `\r: command not found`; the source dir is passed
+    # explicitly since piping makes $0 unreliable.
+    wsl -d "$WSL_DISTRO" -u root -- bash -c \
+      "sed 's/\r\$//' '$REPO_WSL/scripts/wsl/install-backbone.sh' > /tmp/cm-install-backbone.sh && bash /tmp/cm-install-backbone.sh '$REPO_WSL/scripts/wsl'" \
+      && ok "Session backbone enabled" \
+      || warn "Backbone setup failed -- sessions may not survive a WSL restart"
+  else
+    warn "Could not map the repo path into WSL -- skipping backbone setup"
+  fi
 elif ! $IS_WINDOWS; then
   if ! command -v dtach &>/dev/null; then
     warn "dtach not installed. Session persistence requires dtach."
