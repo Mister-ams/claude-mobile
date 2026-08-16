@@ -999,16 +999,24 @@ function makeGridTerm() {
   return grid;
 }
 
-function measureCharWidth(grid) {
-  if (grid.charWidth > 0) return grid.charWidth;
+// Measures one monospace cell inside `container`, at whatever font the
+// container currently resolves. T14 made the font size a setting, so every
+// cols/rows calculation has to go through a live probe -- the old hardcoded
+// 7.8px in newSession() was only ever right at 13px.
+function probeCell(container) {
   const probe = document.createElement('span');
   probe.style.cssText = 'position:absolute;visibility:hidden;font:inherit;line-height:inherit;white-space:pre';
   probe.textContent = 'X';
-  grid.wrap.appendChild(probe);
-  const w = probe.getBoundingClientRect().width;
-  grid.wrap.removeChild(probe);
-  grid.charWidth = w;
-  return w;
+  container.appendChild(probe);
+  const r = probe.getBoundingClientRect();
+  container.removeChild(probe);
+  return { w: r.width, h: r.height };
+}
+
+function measureCharWidth(grid) {
+  if (grid.charWidth > 0) return grid.charWidth;
+  grid.charWidth = probeCell(grid.wrap).w;
+  return grid.charWidth;
 }
 
 function ensureRowHeight(grid) {
@@ -1308,6 +1316,29 @@ function commitRename() {
   }
 }
 
+// ── T13: layout mode ─────────────────────────────────────────────
+// One source of truth for "is this a tablet-or-wider viewport", shared by
+// the CSS breakpoints (820px), the persistent tab strip below, the swipe
+// gating (T15) and the keyboard/font defaults (T12/T14). Kept as a
+// matchMedia object rather than an innerWidth read so the transition fires
+// an event -- an iPad rotating portrait->landscape crosses the boundary
+// without a reload.
+const WIDE_LAYOUT_QUERY = '(min-width: 820px)';
+const wideMQ = window.matchMedia(WIDE_LAYOUT_QUERY);
+
+function isWideLayout() { return wideMQ.matches; }
+
+function onLayoutChange() {
+  document.body.classList.toggle('wide', isWideLayout());
+  applyHwKeyboard();    // T12: the default (on for tablets) tracks the boundary
+  applyFontSize();      // T14: so does the default font size
+  syncSwipeHandlers();  // T15: swipe nav is bound only at narrow widths
+  renderTabs();
+}
+
+wideMQ.addEventListener('change', onLayoutChange);
+document.body.classList.toggle('wide', isWideLayout());
+
 function renderTabs() {
   const pill = $('tab-pill');
   const pillName = pill.querySelector('.pill-name');
@@ -1343,7 +1374,11 @@ function closeSwitcher() {
 
 function renderSwitcher() {
   const sw = $('tab-switcher');
-  if (!sw.classList.contains('open')) return;
+  // T13: at tablet width the strip is always on screen (CSS pins it inline
+  // inside #tabs), so it must stay populated even without the .open class
+  // the phone overlay uses.
+  const persistent = isWideLayout();
+  if (!persistent && !sw.classList.contains('open')) return;
   sw.innerHTML = '';
   sessionList.forEach(s => {
     const item = document.createElement('div');
@@ -1377,17 +1412,39 @@ function renderSwitcher() {
     empty.textContent = 'No sessions';
     sw.appendChild(empty);
   }
+  if (persistent) {
+    // The phone reaches "new session" by pulling up on the count button or
+    // swiping past the last tab; neither exists in the tablet layout, so the
+    // strip carries the affordance itself.
+    const add = document.createElement('div');
+    add.className = 'switcher-item switcher-new';
+    add.textContent = '+';
+    add.setAttribute('role', 'button');
+    add.setAttribute('aria-label', 'New session');
+    add.onclick = () => newSession();
+    sw.appendChild(add);
+  }
 }
 
 function newSession() {
   if (!ws || ws.readyState !== 1) return;
   const num = sessionList.length + 1;
   const defaultDir = (projects && projects.length) ? projects[0].dir : '';
-  // Send screen dimensions so dtach session matches phone width
-  const termArea = document.getElementById('term-area');
-  const charW = 7.8; // approximate char width at 13px SF Mono
-  const lineH = 13 * 1.286; // fontSize * lineHeight
-  const cols = Math.floor((termArea?.clientWidth || 320) / charW);
+  // Send screen dimensions so the new session starts at this client's width.
+  // T14: measure the cell instead of assuming 7.8px -- that constant was the
+  // char width at 13px SF Mono only, and the font size is now a setting, so
+  // it over-reported columns by ~23% at 16px.
+  const live = activeSession !== null ? computeGridDims(gridTerms[activeSession]) : null;
+  let cols = live ? live.cols : 50;
+  if (!live) {
+    const probeWrap = document.createElement('div');
+    probeWrap.className = 'grid-term';
+    probeWrap.style.cssText = 'position:absolute;visibility:hidden;width:100%;height:0';
+    termArea.appendChild(probeWrap);
+    const cell = probeCell(probeWrap);
+    termArea.removeChild(probeWrap);
+    if (cell.w > 0) cols = Math.max(10, Math.floor((termArea.clientWidth || 320) / cell.w));
+  }
   const rows = 200;
   queueSend({ type: 'create', name: 'SESSION ' + num, dir: defaultDir, cols, rows });
 }
@@ -1471,7 +1528,7 @@ function animatedSwitchTo(targetId, direction) {
 // Using document-level avoids iOS event bubbling issues with nested elements
 let swipeActive = false;
 
-document.addEventListener('touchstart', e => {
+function onSwipeStart(e) {
   if (e.touches.length !== 1) return;
   const t = e.touches[0];
   // Only activate for touches inside the terminal area
@@ -1484,9 +1541,9 @@ document.addEventListener('touchstart', e => {
   swiping = false;
   swipeDx = 0;
   swipePeekWrap = null;
-}, { passive: true });
+}
 
-document.addEventListener('touchmove', e => {
+function onSwipeMove(e) {
   if (!swipeActive || e.touches.length !== 1) return;
   const t = e.touches[0];
   const dx = t.clientX - swipeStartX;
@@ -1547,7 +1604,7 @@ document.addEventListener('touchmove', e => {
     newHint.style.width = '0';
     newHint.classList.remove('ready');
   }
-}, { passive: true });
+}
 
 function endSwipe() {
   hintL.classList.remove('flash');
@@ -1644,8 +1701,52 @@ function snapBack(activeWrap) {
   }
 }
 
-document.addEventListener('touchend', endSwipe, { passive: true });
-document.addEventListener('touchcancel', endSwipe, { passive: true });
+// ── T15: swipe navigation is a narrow-width behaviour ────────────────
+// Finger-following session switching exists because a 390px screen shows
+// exactly one session, so the only way between them is a gesture. On an
+// iPad the persistent tab strip (T13) shows every session at once, the
+// keyboard has Cmd-Shift-arrows (T12), and a horizontal drag from near the
+// edge is an iPadOS system gesture -- so here the swipe earns little and
+// competes with the OS. The handlers are genuinely bound/unbound rather
+// than early-returning: a bound document-level touchmove listener still
+// costs iOS a hit-test on every frame of a system gesture.
+//
+// The code stays. A phone is still a supported client, and rotating an
+// iPad or resizing a desktop window across 820px re-binds it live.
+let swipeHandlersBound = false;
+
+function swipeNavigationActive() { return swipeHandlersBound; }
+
+function bindSwipeHandlers() {
+  if (swipeHandlersBound) return;
+  document.addEventListener('touchstart', onSwipeStart, { passive: true });
+  document.addEventListener('touchmove', onSwipeMove, { passive: true });
+  document.addEventListener('touchend', endSwipe, { passive: true });
+  document.addEventListener('touchcancel', endSwipe, { passive: true });
+  swipeHandlersBound = true;
+}
+
+function unbindSwipeHandlers() {
+  if (!swipeHandlersBound) return;
+  document.removeEventListener('touchstart', onSwipeStart);
+  document.removeEventListener('touchmove', onSwipeMove);
+  document.removeEventListener('touchend', endSwipe);
+  document.removeEventListener('touchcancel', endSwipe);
+  swipeHandlersBound = false;
+  // Abandon any gesture that was mid-flight when the boundary was crossed.
+  // swipeDx is zeroed first so endSwipe snaps back instead of committing a
+  // session switch the user never finished asking for.
+  if (swipeActive || swiping) { swipeDx = 0; endSwipe(); }
+  swipeActive = false;
+  swiping = false;
+  swipeDx = 0;
+}
+
+function syncSwipeHandlers() {
+  if (isWideLayout()) unbindSwipeHandlers(); else bindSwipeHandlers();
+}
+
+syncSwipeHandlers();
 
 let lastSent = '';
 
@@ -1745,6 +1846,14 @@ function updateSendBtn() {
 
 let lastMsgHeight = 0;
 function autoGrow() {
+  // T14: while the compose box is collapsed (hardware-keyboard mode, not
+  // focused) it is sized by CSS. An inline height from here would win the
+  // cascade and re-expand it after every send.
+  if (document.body.classList.contains('hwkb') && document.activeElement !== msgInput) {
+    msgInput.style.height = '';
+    lastMsgHeight = -1;
+    return;
+  }
   // Only measure if content changed length (avoid unnecessary reflows)
   const len = msgInput.value.length;
   if (len === lastMsgHeight) return;
@@ -1889,7 +1998,13 @@ function showAutocomplete(filter) {
 
 msgInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); acEl.classList.remove('show'); }
-  if (e.key === 'Escape') acEl.classList.remove('show');
+  if (e.key === 'Escape') {
+    acEl.classList.remove('show');
+    // T12: Esc is the way back out of the compose box into direct keystroke
+    // mode. Without this the box is a one-way door on a hardware keyboard --
+    // nothing but a tap on the terminal releases focus.
+    if (hwKeyboardEnabled()) { e.preventDefault(); msgInput.blur(); }
+  }
 });
 msgInput.addEventListener('input', () => {
   autoGrow(); updateSendBtn();
@@ -1903,23 +2018,319 @@ msgInput.addEventListener('input', () => {
 msgInput.addEventListener('blur', () => {
   setTimeout(() => acEl.classList.remove('show'), 150);
 });
+// T14: the collapsed/expanded compose box is a CSS :focus-within state, but
+// autoGrow's inline height has to be recomputed across the transition.
+msgInput.addEventListener('focus', () => { lastMsgHeight = -1; autoGrow(); });
+msgInput.addEventListener('blur', () => { lastMsgHeight = -1; autoGrow(); });
+
+// ══ T12: hardware keyboard ══════════════════════════════════════════
+// Until now there was no path from a physical key to the PTY at all. Every
+// keydown listener in this file is scoped to a form field (session rename,
+// TOTP box, inactivity tracker, compose box), and text reached the PTY only
+// as one batched qsend(t + '\r') out of the compose box. That is a
+// reasonable design for a phone, where the software keyboard already owns
+// the bottom 40% of the screen -- and useless on an iPad with a hardware
+// keyboard, where Esc, Ctrl-C, Tab-completion and arrow-key history are
+// simply unreachable.
+//
+// This forwards keystrokes straight to the PTY whenever a terminal is on
+// screen and no form field has focus. The compose box stays for long or
+// multi-line prompts: Cmd-K focuses it, Esc leaves it, a tap on the
+// terminal leaves it.
+//
+// ATOMICITY (CLAUDE.md): text and Enter must reach the PTY as a SINGLE
+// write -- separate writes race in the pipeline. So printable keys
+// accumulate in kbPending for one short tick and Enter flushes
+// pending + '\r' as ONE message. A fast typist, a key-repeat burst or a
+// paste delivered as synthetic keydowns can therefore never split a line
+// from its carriage return. Every other key flushes pending first, which
+// preserves order (queueSend is a serialized promise chain).
+//
+// The whole feature sits behind a persisted setting -- default ON at tablet
+// width, OFF on a phone, where the software keyboard drives the compose box
+// and a stray physical key would be a surprise. If it misbehaves in the
+// field it can be switched off from the gear menu without a deploy.
+const HW_KB_KEY = 'cm-hw-keyboard';
+
+function hwKeyboardEnabled() {
+  const v = localStorage.getItem(HW_KB_KEY);
+  if (v === 'on') return true;
+  if (v === 'off') return false;
+  return isWideLayout();  // default: on for tablets, off for phones
+}
+
+function setHwKeyboard(on) {
+  localStorage.setItem(HW_KB_KEY, on ? 'on' : 'off');
+  applyHwKeyboard();
+}
+
+function applyHwKeyboard() {
+  const on = hwKeyboardEnabled();
+  document.body.classList.toggle('hwkb', on);
+  const box = $('set-hwkb');
+  if (box) box.checked = on;
+  msgInput.placeholder = on ? 'Compose (Cmd-K)...' : 'Type a message...';
+}
+
+// ── T14: terminal font size ─────────────────────────────────────────
+// The font was 13px because on a phone the software keyboard eats ~40% of
+// the viewport and that is the only size that leaves useful context in the
+// strip that remains. A hardware keyboard never raises that keyboard, so
+// the constraint is gone: at 1366px, 16px still gives ~140 columns against
+// the iPhone's ~48, and readable beats dense.
+//
+// A font change MUST end in a PTY resize -- the server's headless mirror is
+// sized in cells, so if the client re-fits and the server does not, every
+// row wraps against the wrong width until the next unrelated resize.
+const FONT_SIZE_KEY = 'cm-font-size';
+const FONT_MIN = 10, FONT_MAX = 24;
+const FONT_DEFAULT_PHONE = 13, FONT_DEFAULT_TABLET = 16;
+
+function defaultFontSize() { return isWideLayout() ? FONT_DEFAULT_TABLET : FONT_DEFAULT_PHONE; }
+
+function getFontSize() {
+  const v = parseInt(localStorage.getItem(FONT_SIZE_KEY), 10);
+  if (Number.isFinite(v) && v >= FONT_MIN && v <= FONT_MAX) return v;
+  return defaultFontSize();
+}
+
+function setFontSize(px) {
+  const v = Math.max(FONT_MIN, Math.min(FONT_MAX, Math.round(Number(px) || 0)));
+  localStorage.setItem(FONT_SIZE_KEY, String(v));
+  applyFontSize();
+}
+
+function applyFontSize() {
+  const px = getFontSize();
+  document.documentElement.style.setProperty('--term-font-size', px + 'px');
+  // xterm fallback path: its renderer owns its own font metrics.
+  Object.keys(terms).forEach(id => {
+    try { terms[id].options.fontSize = px; } catch (e) { clientLog('font xterm: ' + e.message); }
+  });
+  // Grid path: both cached metrics are now stale.
+  Object.keys(gridTerms).forEach(id => {
+    gridTerms[id].charWidth = 0;
+    gridTerms[id].rowHeight = 0;
+  });
+  const val = $('set-font-val'); if (val) val.textContent = px;
+  const slider = $('set-font'); if (slider) slider.value = px;
+  // Re-window on the next frame (row height changed), then tell the server.
+  scheduleOnce(() => {
+    Object.keys(gridTerms).forEach(id => renderGridWindow(gridTerms[id]));
+    doResize();
+    refreshSettingsPanel();
+  });
+}
+
+// ── Settings panel ──
+function settingsOpen() { return $('settings-panel').classList.contains('open'); }
+
+function openSettings() {
+  $('settings-panel').classList.add('open');
+  $('settings-btn').setAttribute('aria-expanded', 'true');
+  refreshSettingsPanel();
+}
+
+function closeSettings() {
+  $('settings-panel').classList.remove('open');
+  $('settings-btn').setAttribute('aria-expanded', 'false');
+}
+
+function toggleSettings() { settingsOpen() ? closeSettings() : openSettings(); }
+
+function refreshSettingsPanel() {
+  const box = $('set-hwkb');
+  if (box) box.checked = hwKeyboardEnabled();
+  const px = getFontSize();
+  const val = $('set-font-val'); if (val) val.textContent = px;
+  const slider = $('set-font'); if (slider) slider.value = px;
+  const cols = $('set-cols');
+  if (cols) {
+    const d = activeSession !== null ? computeGridDims(gridTerms[activeSession]) : null;
+    cols.textContent = d ? `Terminal is ${d.cols} x ${d.rows} cells.` : '';
+  }
+}
+
+$('settings-btn').addEventListener('click', e => { e.preventDefault(); toggleSettings(); });
+$('set-hwkb').addEventListener('change', e => setHwKeyboard(e.target.checked));
+$('set-font').addEventListener('input', e => setFontSize(e.target.value));
+document.addEventListener('click', e => {
+  if (!settingsOpen()) return;
+  if (e.target.closest('#settings-panel') || e.target.closest('#settings-btn')) return;
+  closeSettings();
+});
+
+// ── Key -> byte translation ──
+// Bare VT sequences, matching what a real terminal emits. Home/End use the
+// CSI H/F forms already used by clearPrompt(), so the two input paths agree.
+const KB_SPECIAL = {
+  Enter: '\r',
+  Backspace: '\x7f',
+  Tab: '\t',
+  Escape: '\x1b',
+  ArrowUp: '\x1b[A', ArrowDown: '\x1b[B', ArrowRight: '\x1b[C', ArrowLeft: '\x1b[D',
+  Home: '\x1b[H', End: '\x1b[F',
+  PageUp: '\x1b[5~', PageDown: '\x1b[6~',
+  Insert: '\x1b[2~', Delete: '\x1b[3~',
+  F1: '\x1bOP', F2: '\x1bOQ', F3: '\x1bOR', F4: '\x1bOS',
+  F5: '\x1b[15~', F6: '\x1b[17~', F7: '\x1b[18~', F8: '\x1b[19~',
+  F9: '\x1b[20~', F10: '\x1b[21~', F11: '\x1b[23~', F12: '\x1b[24~',
+};
+// Cursor/navigation keys that take a modifier parameter (CSI 1 ; mod X).
+const KB_CURSOR = { ArrowUp: 'A', ArrowDown: 'B', ArrowRight: 'C', ArrowLeft: 'D', Home: 'H', End: 'F' };
+// Control codes that are not Ctrl+letter.
+const KB_CTRL_PUNCT = {
+  '[': '\x1b', '\\': '\x1c', ']': '\x1d', '^': '\x1e', '_': '\x1f',
+  ' ': '\x00', '@': '\x00', '?': '\x7f',
+};
+
+function keyToSequence(e) {
+  const k = e.key;
+  // Modified cursor keys: CSI 1 ; mod <letter>. mod = 1 + shift + 2*alt + 4*ctrl.
+  if (KB_CURSOR[k]) {
+    const mod = 1 + (e.shiftKey ? 1 : 0) + (e.altKey ? 2 : 0) + (e.ctrlKey ? 4 : 0);
+    if (mod > 1) return '\x1b[1;' + mod + KB_CURSOR[k];
+    return KB_SPECIAL[k];
+  }
+  // Tab must be claimed (preventDefault) or focus escapes the terminal to
+  // the next tabbable element -- which on this page is the compose box.
+  if (k === 'Tab') return e.shiftKey ? '\x1b[Z' : '\t';
+  if (e.ctrlKey && !e.altKey && k.length === 1) {
+    const lower = k.toLowerCase();
+    if (lower >= 'a' && lower <= 'z') return String.fromCharCode(lower.charCodeAt(0) - 96);
+    if (KB_CTRL_PUNCT[k] !== undefined) return KB_CTRL_PUNCT[k];
+    return null;  // unknown Ctrl chord -- leave it to the browser
+  }
+  if (KB_SPECIAL[k] !== undefined) return KB_SPECIAL[k];
+  // Printable. Alt/Option prefixes ESC, the standard meta encoding.
+  if (k.length === 1 && !e.ctrlKey && !e.metaKey) return e.altKey ? '\x1b' + k : k;
+  return null;
+}
+
+// ── Atomic write buffer ──
+const KB_COALESCE_MS = 4;
+let kbPending = '';
+let kbFlushTimer = 0;
+
+function kbQueueChar(s) {
+  kbPending += s;
+  if (kbFlushTimer) return;
+  kbFlushTimer = setTimeout(() => { kbFlushTimer = 0; kbFlush(); }, KB_COALESCE_MS);
+}
+
+function kbFlush(extra) {
+  if (kbFlushTimer) { clearTimeout(kbFlushTimer); kbFlushTimer = 0; }
+  const data = kbPending + (extra || '');
+  kbPending = '';
+  if (data) qsend(data);
+}
+
+// ── Focus rules ──
+function isTypingTarget(el) {
+  if (!el) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
+function appIsVisible() {
+  // offsetParent is null exactly when the element (or an ancestor) is
+  // display:none, which is the pre-auth state of #app. The lock overlay
+  // leaves #app displayed, so it needs its own check.
+  return !!appEl && appEl.offsetParent !== null && !authScreen.classList.contains('active');
+}
+
+function terminalHasKeyboardFocus() {
+  if (!hwKeyboardEnabled()) return false;
+  if (activeSession === null) return false;
+  if (!appIsVisible()) return false;
+  if (settingsOpen()) return false;
+  return !isTypingTarget(document.activeElement);
+}
+
+function focusCompose() {
+  msgInput.focus();
+  const end = msgInput.value.length;
+  try { msgInput.setSelectionRange(end, end); } catch (e) { /* not supported */ }
+}
+
+// ── Cmd-based app shortcuts ──
+// Cmd chords never reach the PTY: on iPadOS they are the app-level verbs.
+// Anything not claimed here falls through to the browser (Cmd-R, Cmd-Tab).
+function handleAppShortcut(e) {
+  if (!e.metaKey || e.ctrlKey) return false;
+  if (!appIsVisible()) return false;
+  const k = e.key;
+  if (k === 'k' || k === 'K') { e.preventDefault(); focusCompose(); return true; }
+  if (k === '/') { e.preventDefault(); toggleSettings(); return true; }
+  if (!e.shiftKey && k >= '1' && k <= '9') {
+    const idx = Number(k) - 1;
+    if (idx < sessionList.length) { e.preventDefault(); switchTo(sessionList[idx].id); return true; }
+    return false;
+  }
+  if (e.shiftKey && (k === 'ArrowRight' || k === 'ArrowLeft')) {
+    e.preventDefault();
+    navigateTab(k === 'ArrowRight' ? 1 : -1);
+    return true;
+  }
+  return false;
+}
+
+function onGlobalKeyDown(e) {
+  if (e.defaultPrevented) return;
+  // IME composition (Japanese/Chinese input, and the iOS autocorrect bar in
+  // some locales) delivers keyCode 229 until the composition commits.
+  // Forwarding those would send the pre-edit buffer twice.
+  if (e.isComposing || e.keyCode === 229) return;
+  if (e.key === 'Escape' && settingsOpen()) { e.preventDefault(); closeSettings(); return; }
+  if (handleAppShortcut(e)) return;
+  if (!terminalHasKeyboardFocus()) return;
+  if (e.metaKey) return;
+  const seq = keyToSequence(e);
+  if (seq === null || seq === undefined) return;
+  e.preventDefault();
+  if (e.key === 'Enter') { kbFlush('\r'); return; }   // atomic: pending text + CR
+  if (e.key.length === 1 && !e.ctrlKey && !e.altKey) { kbQueueChar(seq); return; }
+  kbFlush(seq);
+}
+
+document.addEventListener('keydown', onGlobalKeyDown);
+
+// Cmd-V / trackpad paste into the terminal. One write, plain text, no
+// bracketed paste -- the Claude Code TUI ignores \r after a paste sequence
+// (CLAUDE.md), so the compose box path and this one agree.
+document.addEventListener('paste', e => {
+  if (!terminalHasKeyboardFocus()) return;
+  const text = e.clipboardData && e.clipboardData.getData('text');
+  if (!text) return;
+  e.preventDefault();
+  kbFlush(text);
+});
+
+applyHwKeyboard();
+applyFontSize();
+
+// T19 of W5: grid mode has no fit addon -- dims come from a probe span.
+// Extracted from doResize by T14 so the font-size setting, newSession and
+// the settings readout all compute columns the same way.
+function computeGridDims(grid) {
+  if (!grid || grid.wrap.clientWidth === 0) return null;
+  const cell = probeCell(grid.wrap);
+  if (cell.w <= 0 || cell.h <= 0) return null;
+  return {
+    cols: Math.max(10, Math.floor(grid.wrap.clientWidth / cell.w)),
+    rows: Math.max(5, Math.floor(grid.wrap.clientHeight / cell.h)),
+  };
+}
 
 let lastCols = 0, lastRows = 0;
 function doResize() {
   if (activeSession === null) return;
-  // T19 of W5: grid mode has no fit addon. Compute dims from a probe span.
   if (RENDERER_MODE === 'grid') {
     const grid = gridTerms[activeSession];
-    if (!grid || grid.wrap.clientWidth === 0) return;
-    const probe = document.createElement('span');
-    probe.style.cssText = 'position:absolute;visibility:hidden;font:inherit;line-height:inherit;white-space:pre';
-    probe.textContent = 'X';
-    grid.wrap.appendChild(probe);
-    const r = probe.getBoundingClientRect();
-    grid.wrap.removeChild(probe);
-    if (r.width <= 0 || r.height <= 0) return;
-    const cols = Math.max(10, Math.floor(grid.wrap.clientWidth / r.width));
-    const rows = Math.max(5, Math.floor(grid.wrap.clientHeight / r.height));
+    const dims = computeGridDims(grid);
+    if (!dims) return;
+    const { cols, rows } = dims;
     // Skip iff the SERVER already has these dims (per the latest snapshot).
     // Don't compare against lastCols -- another client connected to the same
     // session can resize the PTY out from under us, and a stale local cache
@@ -2011,10 +2422,14 @@ document.addEventListener('touchmove', e => {
 // Prevent ALL double-tap zoom (comprehensive)
 document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
 
-// Prevent pinch zoom
-document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
-document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
-document.addEventListener('gestureend', e => e.preventDefault(), { passive: false });
+// Prevent pinch zoom -- narrow widths only (T14). The zoom lock exists
+// because pinch-zoom competed with a cramped 390px layout; at tablet width
+// the terminal is full-screen with a settable font, so zoom is an
+// accessibility affordance rather than a source of accidental scale. The
+// viewport meta no longer sets user-scalable=no either.
+document.addEventListener('gesturestart', e => { if (!isWideLayout()) e.preventDefault(); }, { passive: false });
+document.addEventListener('gesturechange', e => { if (!isWideLayout()) e.preventDefault(); }, { passive: false });
+document.addEventListener('gestureend', e => { if (!isWideLayout()) e.preventDefault(); }, { passive: false });
 
 
 // ── Send Button Fix (touch-based, not onclick) ──
