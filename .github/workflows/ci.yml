@@ -9,6 +9,26 @@ on:
       - master
 
 jobs:
+  deps:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # npm ci installs exactly the tree in package-lock.json and fails when
+      # package.json and the lockfile have drifted. install.sh and update.sh
+      # run the same command, so CI proves what the installers actually do.
+      - name: install from lockfile
+        run: npm ci
+
+      - name: audit (high severity and above)
+        run: npm audit --audit-level=high
+
   syntax:
     name: syntax checks
     runs-on: ubuntu-latest
@@ -22,7 +42,14 @@ jobs:
       - name: server.js syntax
         run: node --check server.js
 
-      - name: public/index.html inline JS syntax
+      # The client is now an external file, so it is checked directly rather
+      # than regex-extracted out of the HTML.
+      - name: public/app.js syntax
+        run: node --check public/app.js
+
+      # index.html should no longer carry an inline script block at all.
+      # Guard the extraction against regressing.
+      - name: no inline script blocks in index.html
         run: |
           node -e "
             const fs = require('fs');
@@ -37,6 +64,18 @@ jobs:
                 ok = false;
               }
             }
-            console.log(count + ' inline scripts checked, ' + (ok ? 'all OK' : 'ERRORS'));
+            if (count > 0) {
+              console.error(count + ' inline script block(s) found -- the client belongs in public/app.js');
+              process.exit(1);
+            }
+            console.log('no inline script blocks, as expected');
             process.exit(ok ? 0 : 1);
           "
+
+      # index.html loads /app.js?v=<version> as the cache-bust. iOS Safari
+      # serves stale assets across a pm2 restart even under no-cache headers
+      # (HANDOVER.md), so that query is what actually busts it -- and it is
+      # only load-bearing if it tracks package.json. Enforced here rather than
+      # left to a manual step.
+      - name: asset version matches package.json
+        run: npm run verify:asset-version

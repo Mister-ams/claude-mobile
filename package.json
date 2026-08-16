@@ -1,11 +1,12 @@
 {
   "name": "claude-mobile",
-  "version": "3.2.19",
+  "version": "3.3.0",
   "private": true,
   "description": "Mobile bridge for Claude Code sessions",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "verify:asset-version": "node verify-asset-version.js"
   },
   "dependencies": {
     "@simplewebauthn/server": "^10.0.1",
