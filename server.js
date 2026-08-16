@@ -352,6 +352,11 @@ loadOrCreateIdentityKey();
 
 // ─── E2E Encryption (P1: ECDH + AES-256-GCM) ───────────────────
 
+// W4/C1 -- IV domain separation. One key is shared in both directions, so the
+// first IV byte marks who sent the frame. These MUST match public/app.js.
+const IV_DIR_SERVER = 1;   // server -> client
+const IV_DIR_CLIENT = 0;   // client -> server
+
 // Convert DER-encoded ECDSA signature to IEEE P1363 (raw r||s) for Web Crypto
 function derToP1363(derSig, keySize) {
   const n = keySize; // 32 bytes for P-256
@@ -441,7 +446,16 @@ function secureSend(ws, obj) {
   }
   ws._sendSeq++;
   // Counter-based IV: 4-byte zero prefix + 8-byte big-endian counter
+  // W4/C1 -- DIRECTION BYTE. Both endpoints derive the SAME AES-256-GCM key
+  // (identical HKDF salt and info) and both counters start at 1. Without a
+  // direction marker the server's message #1 and the client's message #1 share
+  // an (key, IV) pair -- catastrophic for GCM. The server's first encrypted
+  // frame is a fixed known plaintext ({type:'encrypted',status:'ok'}) and the
+  // client's is the TOTP, so XORing the two ciphertexts recovered the code in
+  // cleartext; the two auth tags under one nonce also leak the GHASH subkey,
+  // turning passive observation into forgery. server->client = 1, client->server = 0.
   const iv = Buffer.alloc(12);
+  iv[0] = IV_DIR_SERVER;
   iv.writeBigUInt64BE(BigInt(ws._sendSeq), 4);
   const seqBuf = Buffer.alloc(8);
   seqBuf.writeBigUInt64BE(BigInt(ws._sendSeq));
@@ -476,6 +490,14 @@ function secureReceive(ws, rawStr) {
     try {
       const data = Buffer.from(parsed.e, 'base64url');
       const iv = data.subarray(0, 12);
+      // W4/C1 -- the peer must use the CLIENT direction. Rejecting the
+      // server's own direction byte blocks reflection: a server->client frame
+      // replayed back at the right sequence position would otherwise decrypt
+      // and authenticate cleanly.
+      if (iv[0] !== IV_DIR_CLIENT) {
+        audit('SECURITY', `IV direction byte wrong: expected ${IV_DIR_CLIENT}, got ${iv[0]}`, ws._ip);
+        return null;
+      }
       const tag = data.subarray(data.length - 16);
       const ciphertext = data.subarray(12, data.length - 16);
       const seqBuf = Buffer.alloc(8);
