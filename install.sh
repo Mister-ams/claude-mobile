@@ -380,6 +380,17 @@ if $IS_WINDOWS; then
   else
     warn "Could not map the repo path into WSL -- skipping backbone setup"
   fi
+
+  # -- Logon startup task --
+  # Without this a reboot takes the whole stack down and nothing brings it
+  # back. That is exactly how the service stayed dead for weeks.
+  say "Registering the logon startup task..."
+  INSTALL_WIN="$(cygpath -w "$PWD" 2>/dev/null || echo "$PWD")"
+  REGISTER_WIN="$(cygpath -w "$PWD/scripts/register-startup.ps1" 2>/dev/null || echo "$PWD/scripts/register-startup.ps1")"
+  powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$REGISTER_WIN" \
+    -InstallDir "$INSTALL_WIN" -Port "$PORT" -Distro "$WSL_DISTRO" \
+    && ok "Startup task registered -- the stack now survives a reboot" \
+    || warn "Could not register the startup task -- run scripts/register-startup.ps1 by hand"
 elif ! $IS_WINDOWS; then
   if ! command -v dtach &>/dev/null; then
     warn "dtach not installed. Session persistence requires dtach."
