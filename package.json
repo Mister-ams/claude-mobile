@@ -5,7 +5,8 @@
   "description": "Mobile bridge for Claude Code sessions",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "verify:asset-version": "node verify-asset-version.js"
   },
   "dependencies": {
     "@simplewebauthn/server": "^10.0.1",
