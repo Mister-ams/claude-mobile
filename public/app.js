@@ -1322,6 +1322,7 @@ function isWideLayout() { return wideMQ.matches; }
 
 function onLayoutChange() {
   document.body.classList.toggle('wide', isWideLayout());
+  applyHwKeyboard();  // T12: the default (on for tablets) tracks the boundary
   renderTabs();
 }
 
@@ -1925,7 +1926,13 @@ function showAutocomplete(filter) {
 
 msgInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); acEl.classList.remove('show'); }
-  if (e.key === 'Escape') acEl.classList.remove('show');
+  if (e.key === 'Escape') {
+    acEl.classList.remove('show');
+    // T12: Esc is the way back out of the compose box into direct keystroke
+    // mode. Without this the box is a one-way door on a hardware keyboard --
+    // nothing but a tap on the terminal releases focus.
+    if (hwKeyboardEnabled()) { e.preventDefault(); msgInput.blur(); }
+  }
 });
 msgInput.addEventListener('input', () => {
   autoGrow(); updateSendBtn();
@@ -1939,6 +1946,233 @@ msgInput.addEventListener('input', () => {
 msgInput.addEventListener('blur', () => {
   setTimeout(() => acEl.classList.remove('show'), 150);
 });
+
+// ══ T12: hardware keyboard ══════════════════════════════════════════
+// Until now there was no path from a physical key to the PTY at all. Every
+// keydown listener in this file is scoped to a form field (session rename,
+// TOTP box, inactivity tracker, compose box), and text reached the PTY only
+// as one batched qsend(t + '\r') out of the compose box. That is a
+// reasonable design for a phone, where the software keyboard already owns
+// the bottom 40% of the screen -- and useless on an iPad with a hardware
+// keyboard, where Esc, Ctrl-C, Tab-completion and arrow-key history are
+// simply unreachable.
+//
+// This forwards keystrokes straight to the PTY whenever a terminal is on
+// screen and no form field has focus. The compose box stays for long or
+// multi-line prompts: Cmd-K focuses it, Esc leaves it, a tap on the
+// terminal leaves it.
+//
+// ATOMICITY (CLAUDE.md): text and Enter must reach the PTY as a SINGLE
+// write -- separate writes race in the pipeline. So printable keys
+// accumulate in kbPending for one short tick and Enter flushes
+// pending + '\r' as ONE message. A fast typist, a key-repeat burst or a
+// paste delivered as synthetic keydowns can therefore never split a line
+// from its carriage return. Every other key flushes pending first, which
+// preserves order (queueSend is a serialized promise chain).
+//
+// The whole feature sits behind a persisted setting -- default ON at tablet
+// width, OFF on a phone, where the software keyboard drives the compose box
+// and a stray physical key would be a surprise. If it misbehaves in the
+// field it can be switched off from the gear menu without a deploy.
+const HW_KB_KEY = 'cm-hw-keyboard';
+
+function hwKeyboardEnabled() {
+  const v = localStorage.getItem(HW_KB_KEY);
+  if (v === 'on') return true;
+  if (v === 'off') return false;
+  return isWideLayout();  // default: on for tablets, off for phones
+}
+
+function setHwKeyboard(on) {
+  localStorage.setItem(HW_KB_KEY, on ? 'on' : 'off');
+  applyHwKeyboard();
+}
+
+function applyHwKeyboard() {
+  const on = hwKeyboardEnabled();
+  document.body.classList.toggle('hwkb', on);
+  const box = $('set-hwkb');
+  if (box) box.checked = on;
+  msgInput.placeholder = on ? 'Compose (Cmd-K)...' : 'Type a message...';
+}
+
+// ── Settings panel ──
+function settingsOpen() { return $('settings-panel').classList.contains('open'); }
+
+function openSettings() {
+  $('settings-panel').classList.add('open');
+  $('settings-btn').setAttribute('aria-expanded', 'true');
+  refreshSettingsPanel();
+}
+
+function closeSettings() {
+  $('settings-panel').classList.remove('open');
+  $('settings-btn').setAttribute('aria-expanded', 'false');
+}
+
+function toggleSettings() { settingsOpen() ? closeSettings() : openSettings(); }
+
+function refreshSettingsPanel() {
+  const box = $('set-hwkb');
+  if (box) box.checked = hwKeyboardEnabled();
+}
+
+$('settings-btn').addEventListener('click', e => { e.preventDefault(); toggleSettings(); });
+$('set-hwkb').addEventListener('change', e => setHwKeyboard(e.target.checked));
+document.addEventListener('click', e => {
+  if (!settingsOpen()) return;
+  if (e.target.closest('#settings-panel') || e.target.closest('#settings-btn')) return;
+  closeSettings();
+});
+
+// ── Key -> byte translation ──
+// Bare VT sequences, matching what a real terminal emits. Home/End use the
+// CSI H/F forms already used by clearPrompt(), so the two input paths agree.
+const KB_SPECIAL = {
+  Enter: '\r',
+  Backspace: '\x7f',
+  Tab: '\t',
+  Escape: '\x1b',
+  ArrowUp: '\x1b[A', ArrowDown: '\x1b[B', ArrowRight: '\x1b[C', ArrowLeft: '\x1b[D',
+  Home: '\x1b[H', End: '\x1b[F',
+  PageUp: '\x1b[5~', PageDown: '\x1b[6~',
+  Insert: '\x1b[2~', Delete: '\x1b[3~',
+  F1: '\x1bOP', F2: '\x1bOQ', F3: '\x1bOR', F4: '\x1bOS',
+  F5: '\x1b[15~', F6: '\x1b[17~', F7: '\x1b[18~', F8: '\x1b[19~',
+  F9: '\x1b[20~', F10: '\x1b[21~', F11: '\x1b[23~', F12: '\x1b[24~',
+};
+// Cursor/navigation keys that take a modifier parameter (CSI 1 ; mod X).
+const KB_CURSOR = { ArrowUp: 'A', ArrowDown: 'B', ArrowRight: 'C', ArrowLeft: 'D', Home: 'H', End: 'F' };
+// Control codes that are not Ctrl+letter.
+const KB_CTRL_PUNCT = {
+  '[': '\x1b', '\\': '\x1c', ']': '\x1d', '^': '\x1e', '_': '\x1f',
+  ' ': '\x00', '@': '\x00', '?': '\x7f',
+};
+
+function keyToSequence(e) {
+  const k = e.key;
+  // Modified cursor keys: CSI 1 ; mod <letter>. mod = 1 + shift + 2*alt + 4*ctrl.
+  if (KB_CURSOR[k]) {
+    const mod = 1 + (e.shiftKey ? 1 : 0) + (e.altKey ? 2 : 0) + (e.ctrlKey ? 4 : 0);
+    if (mod > 1) return '\x1b[1;' + mod + KB_CURSOR[k];
+    return KB_SPECIAL[k];
+  }
+  // Tab must be claimed (preventDefault) or focus escapes the terminal to
+  // the next tabbable element -- which on this page is the compose box.
+  if (k === 'Tab') return e.shiftKey ? '\x1b[Z' : '\t';
+  if (e.ctrlKey && !e.altKey && k.length === 1) {
+    const lower = k.toLowerCase();
+    if (lower >= 'a' && lower <= 'z') return String.fromCharCode(lower.charCodeAt(0) - 96);
+    if (KB_CTRL_PUNCT[k] !== undefined) return KB_CTRL_PUNCT[k];
+    return null;  // unknown Ctrl chord -- leave it to the browser
+  }
+  if (KB_SPECIAL[k] !== undefined) return KB_SPECIAL[k];
+  // Printable. Alt/Option prefixes ESC, the standard meta encoding.
+  if (k.length === 1 && !e.ctrlKey && !e.metaKey) return e.altKey ? '\x1b' + k : k;
+  return null;
+}
+
+// ── Atomic write buffer ──
+const KB_COALESCE_MS = 4;
+let kbPending = '';
+let kbFlushTimer = 0;
+
+function kbQueueChar(s) {
+  kbPending += s;
+  if (kbFlushTimer) return;
+  kbFlushTimer = setTimeout(() => { kbFlushTimer = 0; kbFlush(); }, KB_COALESCE_MS);
+}
+
+function kbFlush(extra) {
+  if (kbFlushTimer) { clearTimeout(kbFlushTimer); kbFlushTimer = 0; }
+  const data = kbPending + (extra || '');
+  kbPending = '';
+  if (data) qsend(data);
+}
+
+// ── Focus rules ──
+function isTypingTarget(el) {
+  if (!el) return false;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
+function appIsVisible() {
+  // offsetParent is null exactly when the element (or an ancestor) is
+  // display:none, which is the pre-auth state of #app. The lock overlay
+  // leaves #app displayed, so it needs its own check.
+  return !!appEl && appEl.offsetParent !== null && !authScreen.classList.contains('active');
+}
+
+function terminalHasKeyboardFocus() {
+  if (!hwKeyboardEnabled()) return false;
+  if (activeSession === null) return false;
+  if (!appIsVisible()) return false;
+  if (settingsOpen()) return false;
+  return !isTypingTarget(document.activeElement);
+}
+
+function focusCompose() {
+  msgInput.focus();
+  const end = msgInput.value.length;
+  try { msgInput.setSelectionRange(end, end); } catch (e) { /* not supported */ }
+}
+
+// ── Cmd-based app shortcuts ──
+// Cmd chords never reach the PTY: on iPadOS they are the app-level verbs.
+// Anything not claimed here falls through to the browser (Cmd-R, Cmd-Tab).
+function handleAppShortcut(e) {
+  if (!e.metaKey || e.ctrlKey) return false;
+  if (!appIsVisible()) return false;
+  const k = e.key;
+  if (k === 'k' || k === 'K') { e.preventDefault(); focusCompose(); return true; }
+  if (k === '/') { e.preventDefault(); toggleSettings(); return true; }
+  if (!e.shiftKey && k >= '1' && k <= '9') {
+    const idx = Number(k) - 1;
+    if (idx < sessionList.length) { e.preventDefault(); switchTo(sessionList[idx].id); return true; }
+    return false;
+  }
+  if (e.shiftKey && (k === 'ArrowRight' || k === 'ArrowLeft')) {
+    e.preventDefault();
+    navigateTab(k === 'ArrowRight' ? 1 : -1);
+    return true;
+  }
+  return false;
+}
+
+function onGlobalKeyDown(e) {
+  if (e.defaultPrevented) return;
+  // IME composition (Japanese/Chinese input, and the iOS autocorrect bar in
+  // some locales) delivers keyCode 229 until the composition commits.
+  // Forwarding those would send the pre-edit buffer twice.
+  if (e.isComposing || e.keyCode === 229) return;
+  if (e.key === 'Escape' && settingsOpen()) { e.preventDefault(); closeSettings(); return; }
+  if (handleAppShortcut(e)) return;
+  if (!terminalHasKeyboardFocus()) return;
+  if (e.metaKey) return;
+  const seq = keyToSequence(e);
+  if (seq === null || seq === undefined) return;
+  e.preventDefault();
+  if (e.key === 'Enter') { kbFlush('\r'); return; }   // atomic: pending text + CR
+  if (e.key.length === 1 && !e.ctrlKey && !e.altKey) { kbQueueChar(seq); return; }
+  kbFlush(seq);
+}
+
+document.addEventListener('keydown', onGlobalKeyDown);
+
+// Cmd-V / trackpad paste into the terminal. One write, plain text, no
+// bracketed paste -- the Claude Code TUI ignores \r after a paste sequence
+// (CLAUDE.md), so the compose box path and this one agree.
+document.addEventListener('paste', e => {
+  if (!terminalHasKeyboardFocus()) return;
+  const text = e.clipboardData && e.clipboardData.getData('text');
+  if (!text) return;
+  e.preventDefault();
+  kbFlush(text);
+});
+
+applyHwKeyboard();
 
 let lastCols = 0, lastRows = 0;
 function doResize() {
