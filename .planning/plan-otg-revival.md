@@ -79,6 +79,13 @@ not wait behind the rest of the wave.
   across `pm2 restart`, and a separate JS file gets its own cache lifetime,
   so without busting it staleness gets worse, not better. Read the version
   from `package.json` at server start and template it into the served HTML.
+  **AMENDED 2026-08-16 (shipped differently, deliberately):** the version query
+  is hardcoded in `index.html` and `verify-asset-version.js` enforces the match
+  in CI, rather than templating at server start. Same guarantee -- the query
+  cannot drift from `package.json` without failing the build -- with less
+  coupling and no per-request string work. `server.js` was owned by a
+  concurrent track when T03 was built. The judge flagged the literal deviation
+  (PR #4 pass 2); recorded and accepted rather than churned.
 - Verification: page loads and a session streams normally on desktop + iPad;
   hard-reload after a version bump serves the new file (check the query
   string in the Network tab).
@@ -427,9 +434,9 @@ negative.
 
 ---
 
-## Wave 5 -- herdr backbone (4.0.0)
+## Wave 5 -- herdr backbone (4.0.0) -- CANCELLED, see STATE + spike report
 
-GATED on S1. **Requires a tech design first** (`dt.engineering` ->
+**CANCELLED 2026-08-16.** S1 returned NO-GO: herdr drops OSC-8 hyperlinks and exposes no cell/grid data (T31 impossible), conversation resume is unverified and unreachable under the current launch mode, agent-state depends on a remotely-fetched manifest outside the version pin, and v0.8.0 ships no Windows binary so the Node server cannot reach the WSL socket. Original text retained below for the record. GATED on S1. **Requires a tech design first** (`dt.engineering` ->
 `tech-design-herdr-backbone.md`) because the integration shape depends on
 spike answers, especially question 1 (whose grid drives the client).
 
