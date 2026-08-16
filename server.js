@@ -2,7 +2,7 @@ const express = require('express');
 const { WebSocketServer } = require('ws');
 const pty = require('node-pty');
 const { Terminal: HeadlessTerminal } = require('@xterm/headless');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 const http = require('http');
 const path = require('path');
@@ -89,6 +89,7 @@ function audit(category, message, ip) {
 
 // ─── dtach session persistence (via WSL) ─────────────────────────
 const WSL_DISTRO = config.wslDistro || 'Ubuntu-24.04';
+const DTACH_DIR = '/tmp';
 const DTACH_PREFIX = 'cm'; // socket files: /tmp/cm-0.dtach, cm-1.dtach, ...
 
 let wslAvailable = false;
@@ -100,7 +101,7 @@ function setLastError(message) {
 
 function probeWSL() {
   try {
-    execSync(`wsl -d ${WSL_DISTRO} -- echo 1`, { encoding: 'utf8', timeout: 5000 });
+    wslRun(['--exec', 'echo', '1'], { timeout: 5000 });
     wslAvailable = true;
     return true;
   } catch (e) {
@@ -126,10 +127,38 @@ function initWSL() {
   setTimeout(() => clearInterval(retryInterval), 120000);
 }
 
-function wslExec(cmd) {
-  return execSync(`wsl -d ${WSL_DISTRO} -u root -- bash -c "${cmd.replace(/"/g, '\\"')}"`, {
-    encoding: 'utf8', timeout: 10000
+// T23 (N1): every WSL call goes through execFileSync with an argv array. The
+// old wslExec built one command string --
+//   execSync(`wsl -d ${D} -u root -- bash -c "${cmd.replace(/"/g,'\\"')}"`)
+// -- escaping double quotes only, and routed it through cmd.exe, which does not
+// honour \" as an escape; backticks and $() also expanded inside the
+// double-quoted bash string. Nothing client-reachable fed it (project dirs are
+// allowlist-checked by exact match and session ids are numeric Map keys), but a
+// project directory containing a backtick, $ or & made it root RCE inside WSL.
+// execFileSync launches the binary directly: no cmd.exe, no shell parsing of
+// our arguments on the Windows side.
+//
+// It also has to be `--exec`, not `--`. `wsl.exe -- <cmd>` does NOT exec the
+// command: it joins everything after `--` into one string and hands that to the
+// default login shell, which re-parses it. Measured on Ubuntu-24.04:
+//   --      bash -c 'printf "%s|" "$0" "$@"' A B  ->  "/bin/bash||"
+//   --exec  bash -c 'printf "%s|" "$0" "$@"' A B  ->  "A|B|"
+// Under `--` the positional parameters never arrive because the outer shell
+// consumed them, which also means the old code had TWO shell layers -- cmd.exe's
+// and that one -- and a single round of quote escaping could not survive either.
+// `--exec` is the documented no-shell form: $(), backticks, &, | and spaces all
+// arrive literally.
+function wslRun(argv, opts = {}) {
+  return execFileSync('wsl.exe', ['-d', WSL_DISTRO, ...argv], {
+    encoding: 'utf8', timeout: 10000, windowsHide: true, ...opts,
   }).trim();
+}
+
+// Where bash is genuinely needed (globs, ||, redirection) the script text is a
+// FIXED literal and every value arrives as a positional parameter: data to
+// bash, never syntax. $0 is a label, so the first param is $1.
+function wslBash(script, params = []) {
+  return wslRun(['-u', 'root', '--exec', 'bash', '-c', script, 'claude-mobile', ...params.map(String)]);
 }
 
 function winPathToWsl(winPath) {
@@ -144,11 +173,11 @@ function wslPathToWin(wslPath) {
     .replace(/\//g, '\\');
 }
 
-function dtachSocket(id) { return `/tmp/${DTACH_PREFIX}-${id}.dtach`; }
+function dtachSocket(id) { return `${DTACH_DIR}/${DTACH_PREFIX}-${id}.dtach`; }
 
 function listDtachSessions() {
   try {
-    const out = wslExec(`ls /tmp/${DTACH_PREFIX}-*.dtach 2>/dev/null || true`);
+    const out = wslBash('ls "$1"/"$2"-*.dtach 2>/dev/null || true', [DTACH_DIR, DTACH_PREFIX]);
     if (!out) return [];
     return out.split('\n').filter(Boolean).map(p => {
       const match = p.match(/cm-(\d+)\.dtach$/);
@@ -166,16 +195,19 @@ function listDtachSessions() {
 // real terminal), so we create a bash shell first, attach, then send
 // the claude command via the pty.
 function createDtachDaemon(id, wslDir) {
-  const socket = dtachSocket(id);
-  const safeDir = wslDir.replace(/'/g, "'\\''");
-  wslExec(`cd '${safeDir}' && TERM=xterm-256color dtach -n ${socket} -z bash`);
+  // $1 = project dir, $2 = socket. Both are parameters, so a directory
+  // containing a backtick, $ or & is a literal path, not shell syntax.
+  wslBash('cd "$1" && exec env TERM=xterm-256color dtach -n "$2" -z bash',
+    [wslDir, dtachSocket(id)]);
 }
 
 // Attach to an existing dtach session via node-pty
 function attachToDtach(id, cols, rows) {
   const socket = dtachSocket(id);
+  // --exec for the same reason as wslRun: `--` would route the socket path
+  // through the distro's login shell before dtach ever sees it.
   return pty.spawn('wsl.exe', [
-    '-d', WSL_DISTRO, '-u', 'root', '--',
+    '-d', WSL_DISTRO, '-u', 'root', '--exec',
     'dtach', '-a', socket
   ], {
     name: 'xterm-256color', cols: cols || 80, rows: rows || 24,
@@ -187,7 +219,7 @@ function dtachSessionAlive(id) {
   const socket = dtachSocket(id);
   try {
     // Check socket file exists (dtach cleans up on process exit)
-    wslExec(`test -S ${socket}`);
+    wslBash('test -S "$1"', [socket]);
     return true;
   } catch (e) { audit('WARN', 'dtachSessionAlive: ' + e.message); return false; }
 }
@@ -195,10 +227,13 @@ function dtachSessionAlive(id) {
 function killDtachSession(id) {
   const socket = dtachSocket(id);
   try {
-    // Find and kill the process attached to this socket
-    const pid = wslExec(`lsof -t ${socket} 2>/dev/null || true`);
-    if (pid) wslExec(`kill ${pid} 2>/dev/null || true`);
-    wslExec(`rm -f ${socket}`);
+    // Find and kill the process attached to this socket. lsof can return
+    // several pids; the old code relied on shell word-splitting to kill them
+    // all, so keep that behaviour explicitly (and only for numeric pids).
+    const found = wslBash('lsof -t "$1" 2>/dev/null || true', [socket]);
+    const pids = found.split('\n').map(p => p.trim()).filter(p => /^\d+$/.test(p));
+    for (const pid of pids) wslBash('kill "$1" 2>/dev/null || true', [pid]);
+    wslBash('rm -f "$1"', [socket]);
   } catch (e) {
     audit('WARN', 'killDtachSession failed for ' + id + ': ' + e.message);
   }
