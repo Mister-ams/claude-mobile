@@ -49,6 +49,39 @@ $IS_LINUX && PLATFORM="Linux"
 say "Platform: $PLATFORM"
 echo ""
 
+# ── Secret file hardening ────────────────────────────────
+# These files must never inherit their directory's ACLs. On Windows the
+# inherited grants hand Modify on the identity PRIVATE key and the TOTP
+# seed to every local account in groups like CodexSandboxUsers; the POSIX
+# equivalent is a group/other-readable mode. Both are closed here.
+# Idempotent -- safe to run repeatedly.
+SECRET_FILES=(".totp-secret" ".server-identity-key" ".credentials.json")
+
+lock_secret_file() {
+  local f="$1"
+  [ -e "$f" ] || return 0
+  if $IS_WINDOWS; then
+    local winpath acct
+    winpath="$(cygpath -w "$f" 2>/dev/null || echo "$f")"
+    acct="${USERNAME:-$USER}"
+    # /inheritance:r drops inherited ACEs; /grant:r replaces rather than appends.
+    MSYS_NO_PATHCONV=1 icacls "$winpath" /inheritance:r \
+      /grant:r "${acct}:F" "SYSTEM:F" "Administrators:F" >/dev/null 2>&1
+  else
+    chmod 600 "$f" >/dev/null 2>&1
+  fi
+}
+
+harden_secrets() {
+  local f
+  for f in "${SECRET_FILES[@]}"; do
+    lock_secret_file "$f" || warn "Could not lock permissions on $f"
+  done
+  # The audit log lives outside the install dir and records session metadata.
+  lock_secret_file "$HOME/.claude-mobile-audit.log" \
+    || warn "Could not lock permissions on ~/.claude-mobile-audit.log"
+}
+
 # ════════════════════════════════════════════════════════
 # PHASE 1: PREREQUISITE CHECK
 # ════════════════════════════════════════════════════════
@@ -282,7 +315,15 @@ say "Phase 3/4: Installing dependencies..."
 echo ""
 
 # -- npm deps --
-npm install --production 2>&1 | tail -3
+# npm ci, not npm install: it installs exactly the tree in package-lock.json.
+# With `npm install` the lockfile is advisory and every caret range re-resolves
+# on each run, so a compromised upstream patch release lands silently.
+if [ -f package-lock.json ]; then
+  npm ci --omit=dev 2>&1 | tail -3
+else
+  warn "No package-lock.json -- falling back to npm install (tree is not reproducible)"
+  npm install --omit=dev 2>&1 | tail -3
+fi
 ok "Node dependencies installed"
 
 # -- PM2 --
@@ -332,12 +373,23 @@ elif ! $IS_WINDOWS; then
   fi
 fi
 
+# -- Secret file permissions --
+say "Hardening secret file permissions..."
+harden_secrets
+ok "Secrets restricted to owner, SYSTEM, Administrators"
+
 # ════════════════════════════════════════════════════════
 # PHASE 4: START + TOTP SETUP
 # ════════════════════════════════════════════════════════
 echo ""
 say "Phase 4/4: Starting server for TOTP setup..."
 echo ""
+
+# TOTP setup CREATES .totp-secret / .server-identity-key / .credentials.json,
+# so they must be re-hardened after the server has run. Ctrl+C sends SIGINT to
+# the whole process group and would skip any code placed after `wait`, so this
+# runs from an EXIT trap instead.
+trap 'harden_secrets >/dev/null 2>&1 || true' EXIT
 
 node server.js &
 SERVER_PID=$!
