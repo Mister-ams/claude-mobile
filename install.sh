@@ -78,7 +78,13 @@ harden_secrets() {
     lock_secret_file "$f" || warn "Could not lock permissions on $f"
   done
   # The audit log lives outside the install dir and records session metadata.
-  lock_secret_file "$HOME/.claude-mobile-audit.log" \
+  # lock_secret_file no-ops on a file that does not exist yet, so CREATE it
+  # first. Otherwise the server creates it at runtime, where it inherits the
+  # permissive directory ACLs this function exists to close -- meaning a fresh
+  # install would never lock it, only the second install ever would.
+  local audit="$HOME/.claude-mobile-audit.log"
+  [ -e "$audit" ] || : > "$audit" 2>/dev/null || true
+  lock_secret_file "$audit" \
     || warn "Could not lock permissions on ~/.claude-mobile-audit.log"
 }
 
@@ -321,8 +327,12 @@ echo ""
 if [ -f package-lock.json ]; then
   npm ci --omit=dev 2>&1 | tail -3
 else
-  warn "No package-lock.json -- falling back to npm install (tree is not reproducible)"
-  npm install --omit=dev 2>&1 | tail -3
+  # No silent fallback to `npm install`. package-lock.json is committed, so a
+  # missing one means a broken checkout -- and installing anyway would
+  # re-resolve every caret range unchecked, which is exactly the posture this
+  # task removed. The audit gate that just caught a HIGH in ws only means
+  # something if the installed tree IS the audited tree.
+  fail "package-lock.json is missing -- refusing to install an unpinned tree. Restore it (git checkout -- package-lock.json) and re-run."
 fi
 ok "Node dependencies installed"
 

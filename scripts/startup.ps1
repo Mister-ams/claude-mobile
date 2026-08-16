@@ -82,6 +82,13 @@ try {
 # The serve config lives in tailscaled and normally survives a reboot, but it
 # is silently lost on a tailscaled state reset -- and losing it is invisible
 # from the laptop, since localhost keeps working. Re-assert it every time.
+#
+# That invisibility is exactly why $script:ServeOk is tracked and folded into
+# the final verdict below. The phone reaches this box ONLY through the serve
+# proxy, so "localhost answers" is not evidence the stack is usable; an
+# earlier revision exited 0 "healthy" on a localhost check alone, which would
+# have reported success while remote access was dead.
+$script:ServeOk = $false
 try {
   $ts = Get-Command tailscale -ErrorAction SilentlyContinue
   $tsExe = if ($ts) { $ts.Source } else { 'C:\Program Files\Tailscale\tailscale.exe' }
@@ -90,12 +97,21 @@ try {
     $status = (& $tsExe serve status 2>&1) -join "`n"
     if ($status -match "localhost:$Port") {
       Write-Log 'INFO' "tailscale serve already proxying to localhost:$Port"
+      $script:ServeOk = $true
     } else {
       Write-Log 'INFO' 're-asserting tailscale serve'
       & $tsExe serve --bg "http://localhost:$Port" 2>&1 | ForEach-Object { Write-Log 'INFO' "tailscale: $_" }
+      # Confirm it took, rather than trusting the exit code.
+      $recheck = (& $tsExe serve status 2>&1) -join "`n"
+      if ($recheck -match "localhost:$Port") {
+        Write-Log 'INFO' 'tailscale serve re-asserted and confirmed'
+        $script:ServeOk = $true
+      } else {
+        Write-Log 'ERROR' 'tailscale serve did NOT take -- remote access is DOWN'
+      }
     }
   } else {
-    Write-Log 'WARN' 'tailscale.exe not found -- remote access will be unavailable'
+    Write-Log 'ERROR' "tailscale.exe not found at $tsExe -- remote access is DOWN"
   }
 } catch {
   Write-Log 'ERROR' "tailscale step failed: $($_.Exception.Message)"
@@ -140,10 +156,16 @@ try {
   Write-Log 'ERROR' "PM2 step failed: $($_.Exception.Message)"
 }
 
-if (Test-ServerUp) {
-  Write-Log 'INFO' 'startup complete -- stack healthy'
+# The stack is only healthy if BOTH the server answers locally AND the serve
+# proxy is in place. Either one alone leaves the phone with nothing to talk to.
+$serverOk = Test-ServerUp
+if ($serverOk -and $script:ServeOk) {
+  Write-Log 'INFO' 'startup complete -- stack healthy (server up, serve proxy in place)'
   exit 0
 } else {
-  Write-Log 'ERROR' 'startup complete -- stack UNHEALTHY'
+  $why = @()
+  if (-not $serverOk)         { $why += "server not answering on port $Port" }
+  if (-not $script:ServeOk)   { $why += 'tailscale serve proxy not in place (remote access down)' }
+  Write-Log 'ERROR' ('startup complete -- stack UNHEALTHY: ' + ($why -join '; '))
   exit 1
 }

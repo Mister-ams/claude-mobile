@@ -61,9 +61,14 @@ chmod 0644 "$UNIT_DST"
 echo "  installed $UNIT_DST"
 
 if [ "$(ps -p 1 -o comm=)" != "systemd" ]; then
-  echo "  !! systemd is not PID 1 yet -- run 'wsl --shutdown' on Windows, then"
-  echo "     re-run this script to enable the unit."
-  exit 0
+  # This is the FRESH-INSTALL path: /etc/wsl.conf was only just written and
+  # the distro has not restarted, so systemd is not PID 1 and the unit cannot
+  # be enabled yet. Exit NON-ZERO. Returning 0 here let install.sh report
+  # success with the unit installed but never enabled -- no boot resilience
+  # at all, silently, which is the exact failure this wave exists to remove.
+  echo "  !! systemd is not PID 1 yet -- unit INSTALLED but NOT ENABLED."
+  echo "     Run 'wsl --shutdown' on Windows, then re-run this script."
+  exit 75   # EX_TEMPFAIL -- retriable, distinct from a real install failure
 fi
 
 systemctl daemon-reload

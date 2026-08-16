@@ -109,8 +109,12 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
   if [ -f package-lock.json ]; then
     npm ci --omit=dev
   else
-    warn "No package-lock.json -- falling back to npm install (tree is not reproducible)"
-    npm install --omit=dev
+    # No silent fallback to `npm install`. package-lock.json is committed, so
+    # a missing one means a broken checkout -- and installing anyway would
+    # re-resolve every caret range unchecked, which is exactly the posture
+    # this task removed. The audit gate only means something if the installed
+    # tree IS the audited tree.
+    fail "package-lock.json is missing -- refusing to install an unpinned tree. Restore it (git checkout -- package-lock.json) and re-run."
   fi
   ok "Dependencies updated"
 fi
