@@ -39,6 +39,54 @@ const COALESCE_IDLE_MS = 16;
 const COALESCE_MAX_BYTES = 4096;
 const COALESCE_MAX_AGE_MS = 64;
 
+// ─── Audit log ───────────────────────────────────────────────────
+// Declared here, above every caller: audit() used to sit below the identity-key
+// and TOTP loaders, so their startup lines hit the temporal dead zone and were
+// dropped with only a stderr note ("Cannot access 'AUDIT_PATH' before
+// initialization"). An audit log that silently loses its first entries is not
+// an audit log.
+const AUDIT_PATH = path.join(os.homedir(), '.claude-mobile-audit.log');
+// T06: size-based rotation. Rotate at 5 MB and keep 2 rotated files
+// (.log.1 = previous, .log.2 = the one before that); older ones are dropped.
+const AUDIT_MAX_BYTES = 5 * 1024 * 1024;
+const AUDIT_KEEP = 2;
+// Seeded from the file on first write, then tracked in-process so the request
+// path costs one append rather than a stat plus an append.
+let auditBytes = null;
+
+function rotateAuditLog() {
+  try {
+    const oldest = `${AUDIT_PATH}.${AUDIT_KEEP}`;
+    if (fs.existsSync(oldest)) fs.unlinkSync(oldest);
+    for (let i = AUDIT_KEEP - 1; i >= 1; i--) {
+      const from = `${AUDIT_PATH}.${i}`;
+      if (fs.existsSync(from)) fs.renameSync(from, `${AUDIT_PATH}.${i + 1}`);
+    }
+    fs.renameSync(AUDIT_PATH, `${AUDIT_PATH}.1`);
+  } catch (e) {
+    process.stderr.write('audit rotate failed: ' + e.message + '\n');
+  }
+  // Reset either way -- a failed rotation must not retry on every line.
+  auditBytes = 0;
+}
+
+function audit(category, message, ip) {
+  const ts = new Date().toISOString();
+  const line = `${ts} [${category}] ${ip ? `(${ip}) ` : ''}${message}\n`;
+  try {
+    if (auditBytes === null) {
+      try { auditBytes = fs.statSync(AUDIT_PATH).size; } catch (e) { auditBytes = 0; }
+    }
+    const bytes = Buffer.byteLength(line);
+    if (auditBytes + bytes > AUDIT_MAX_BYTES) rotateAuditLog();
+    fs.appendFileSync(AUDIT_PATH, line);
+    auditBytes += bytes;
+  } catch (e) {
+    process.stderr.write('audit write failed: ' + e.message + '\n');
+  }
+  console.log(`  [audit] ${category}: ${message}`);
+}
+
 // ─── dtach session persistence (via WSL) ─────────────────────────
 const WSL_DISTRO = config.wslDistro || 'Ubuntu-24.04';
 const DTACH_PREFIX = 'cm'; // socket files: /tmp/cm-0.dtach, cm-1.dtach, ...
@@ -487,18 +535,6 @@ function recordIPFailure(ip) {
 
 function checkRateLimits(ip) {
   return checkGlobalRate() && checkIPRate(ip);
-}
-
-// ─── Audit log ───────────────────────────────────────────────────
-const AUDIT_PATH = path.join(os.homedir(), '.claude-mobile-audit.log');
-
-function audit(category, message, ip) {
-  const ts = new Date().toISOString();
-  const line = `${ts} [${category}] ${ip ? `(${ip}) ` : ''}${message}\n`;
-  try { fs.appendFileSync(AUDIT_PATH, line); } catch (e) {
-    process.stderr.write('audit write failed: ' + e.message + '\n');
-  }
-  console.log(`  [audit] ${category}: ${message}`);
 }
 
 // ─── Env var whitelist for pty ───────────────────────────────────
@@ -977,8 +1013,12 @@ function detectAttention(sessionId) {
     }
   }
 
-  const preview = lines.slice(-3).map(l => l.substring(0, 80)).join(' | ');
-  audit('ATTN-MISS', `session=${sessionId} lines=${lines.length} lastLine=[${lastLine.substring(0, 60)}] preview=[${preview}]`);
+  // T06 (R-LOG): never log terminal content. Same shape as the INPUT path --
+  // length plus a 12-hex sha256 prefix, which still lets repeated misses be
+  // correlated without putting session text on disk.
+  const tail = lines.slice(-3).join('\n');
+  const tailHash = crypto.createHash('sha256').update(tail).digest('hex').slice(0, 12);
+  audit('ATTN-MISS', `session=${sessionId} lines=${lines.length} lastLineLen=${lastLine.length} tailLen=${tail.length} tailHash=${tailHash}`);
   return null;
 }
 
