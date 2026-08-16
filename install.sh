@@ -26,6 +26,19 @@ fail() { echo -e "${RED}  [FAIL]${RESET} $1"; exit 1; }
 skip() { echo -e "${DIM}  [--]${RESET} $1"; }
 ask()  { echo -en "${BOLD}${BLUE}>>>${RESET} $1: "; read -r REPLY; }
 
+# ── Guarantees ───────────────────────────────────────────
+# Some steps are advisory (a missing optional tool). Others ARE the point of
+# this installer -- boot resilience and secret permissions. Those must never
+# be downgraded to a warning that scrolls past while the script prints
+# success: the May outage lasted weeks precisely because a failure was
+# invisible. A broken guarantee is recorded here and re-reported, loudly, at
+# the end, and the installer exits non-zero.
+REQUIRED_FAILURES=()
+require_failed() {
+  REQUIRED_FAILURES+=("$1")
+  echo -e "${RED}  [BROKEN]${RESET} $1"
+}
+
 # ── Banner ───────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}+==========================================+${RESET}"
@@ -72,10 +85,13 @@ lock_secret_file() {
   fi
 }
 
+# Returns non-zero if ANY file could not be locked, so the caller can refuse
+# to print success. Previously every failure was a warning and the caller
+# announced success unconditionally.
 harden_secrets() {
-  local f
+  local f rc=0
   for f in "${SECRET_FILES[@]}"; do
-    lock_secret_file "$f" || warn "Could not lock permissions on $f"
+    lock_secret_file "$f" || { warn "Could not lock permissions on $f"; rc=1; }
   done
   # The audit log lives outside the install dir and records session metadata.
   # lock_secret_file no-ops on a file that does not exist yet, so CREATE it
@@ -85,7 +101,8 @@ harden_secrets() {
   local audit="$HOME/.claude-mobile-audit.log"
   [ -e "$audit" ] || : > "$audit" 2>/dev/null || true
   lock_secret_file "$audit" \
-    || warn "Could not lock permissions on ~/.claude-mobile-audit.log"
+    || { warn "Could not lock permissions on ~/.claude-mobile-audit.log"; rc=1; }
+  return $rc
 }
 
 # ════════════════════════════════════════════════════════
@@ -325,7 +342,11 @@ echo ""
 # With `npm install` the lockfile is advisory and every caret range re-resolves
 # on each run, so a compromised upstream patch release lands silently.
 if [ -f package-lock.json ]; then
+  # PIPESTATUS, not the pipeline's status: `npm ci | tail` reports TAIL's exit
+  # code, so under `set -e` a failed install would sail past unnoticed and the
+  # script would announce "Node dependencies installed".
   npm ci --omit=dev 2>&1 | tail -3
+  [ "${PIPESTATUS[0]}" -eq 0 ] || fail "npm ci failed -- dependencies are NOT installed."
 else
   # No silent fallback to `npm install`. package-lock.json is committed, so a
   # missing one means a broken checkout -- and installing anyway would
@@ -383,12 +404,22 @@ if $IS_WINDOWS; then
     # Piped through sed because a CRLF checkout (core.autocrlf=true) would
     # otherwise fail with `\r: command not found`; the source dir is passed
     # explicitly since piping makes $0 unreliable.
+    BACKBONE_RC=0
     wsl -d "$WSL_DISTRO" -u root -- bash -c \
       "sed 's/\r\$//' '$REPO_WSL/scripts/wsl/install-backbone.sh' > /tmp/cm-install-backbone.sh && bash /tmp/cm-install-backbone.sh '$REPO_WSL/scripts/wsl'" \
-      && ok "Session backbone enabled" \
-      || warn "Backbone setup failed -- sessions may not survive a WSL restart"
+      || BACKBONE_RC=$?
+    if [ "$BACKBONE_RC" -eq 0 ]; then
+      ok "Session backbone enabled"
+    elif [ "$BACKBONE_RC" -eq 75 ]; then
+      # EX_TEMPFAIL: the unit is installed but systemd was not PID 1 yet, so
+      # it could not be enabled. Retriable, but NOT done -- T08 is unmet until
+      # the distro restarts and this is re-run.
+      require_failed "Session backbone INSTALLED but NOT ENABLED (systemd was not PID 1). Run 'wsl --shutdown', then re-run this installer."
+    else
+      require_failed "Backbone setup failed (exit $BACKBONE_RC) -- sessions will NOT survive a WSL restart."
+    fi
   else
-    warn "Could not map the repo path into WSL -- skipping backbone setup"
+    require_failed "Could not map the repo path into WSL -- backbone not installed, sessions will NOT survive a WSL restart."
   fi
 
   # -- Logon startup task --
@@ -400,7 +431,7 @@ if $IS_WINDOWS; then
   powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$REGISTER_WIN" \
     -InstallDir "$INSTALL_WIN" -Port "$PORT" -Distro "$WSL_DISTRO" \
     && ok "Startup task registered -- the stack now survives a reboot" \
-    || warn "Could not register the startup task -- run scripts/register-startup.ps1 by hand"
+    || require_failed "Could not register the startup task -- A REBOOT WILL TAKE THE STACK DOWN AND NOTHING WILL BRING IT BACK. Run scripts/register-startup.ps1 by hand."
 elif ! $IS_WINDOWS; then
   if ! command -v dtach &>/dev/null; then
     warn "dtach not installed. Session persistence requires dtach."
@@ -414,8 +445,14 @@ fi
 
 # -- Secret file permissions --
 say "Hardening secret file permissions..."
-harden_secrets
-ok "Secrets restricted to owner, SYSTEM, Administrators"
+if harden_secrets; then
+  ok "Secrets restricted to owner, SYSTEM, Administrators"
+else
+  # Do not print success for a guarantee that did not hold. .server-identity-key
+  # holds the identity private key; leaving it group-writable is the finding
+  # this task exists to close.
+  require_failed "Secret file permissions could NOT be hardened -- .totp-secret / .server-identity-key may remain group-writable."
+fi
 
 # ════════════════════════════════════════════════════════
 # PHASE 4: START + TOTP SETUP
@@ -439,10 +476,36 @@ if ! kill -0 $SERVER_PID 2>/dev/null; then
 fi
 ok "Server running on port $PORT (PID $SERVER_PID)"
 
+# ── Guarantee report ─────────────────────────────────────
+# Printed BEFORE the success banner. If a boot-resilience or secret-permission
+# guarantee did not hold, say so plainly rather than letting a warning scroll
+# past under a banner that reads "Ready". The whole reason this wave exists is
+# that a failure went unnoticed for weeks.
+if [ ${#REQUIRED_FAILURES[@]} -gt 0 ]; then
+  echo ""
+  echo -e "${RED}${BOLD}+============================================================+${RESET}"
+  echo -e "${RED}${BOLD}|  INSTALL INCOMPLETE -- ${#REQUIRED_FAILURES[@]} guarantee(s) NOT met${RESET}"
+  echo -e "${RED}${BOLD}+============================================================+${RESET}"
+  for f in "${REQUIRED_FAILURES[@]}"; do
+    echo -e "${RED}  - ${f}${RESET}"
+  done
+  echo ""
+  echo -e "${YELLOW}  The server may still run, but the guarantees above are NOT in${RESET}"
+  echo -e "${YELLOW}  place. Fix them and re-run this installer.${RESET}"
+  echo ""
+  # The script ends in `wait`, so exit status is unreliable as a signal.
+  # Record it for any caller that checks, and keep the message on screen.
+  INSTALL_DEGRADED=1
+fi
+
 # ── Summary ──────────────────────────────────────────────
 echo ""
 echo -e "${BOLD}+============================================================+${RESET}"
-echo -e "${BOLD}|              Claude Mobile v${VERSION} -- Ready                  |${RESET}"
+if [ "${INSTALL_DEGRADED:-0}" -eq 1 ]; then
+  echo -e "${BOLD}|         Claude Mobile v${VERSION} -- DEGRADED (see above)        |${RESET}"
+else
+  echo -e "${BOLD}|              Claude Mobile v${VERSION} -- Ready                  |${RESET}"
+fi
 echo -e "${BOLD}+============================================================+${RESET}"
 echo -e "${BOLD}|${RESET}                                                            ${BOLD}|${RESET}"
 echo -e "${BOLD}|${RESET}  ${BOLD}Step 1: Set up TOTP (on your laptop)${RESET}                      ${BOLD}|${RESET}"

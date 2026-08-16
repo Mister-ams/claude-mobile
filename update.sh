@@ -45,13 +45,18 @@ lock_secret_file() {
   fi
 }
 
+# Returns non-zero if ANY file could not be locked, so the caller can refuse
+# to report success for a guarantee that did not hold.
 harden_secrets() {
-  local f
+  local f rc=0
   for f in "${SECRET_FILES[@]}"; do
-    lock_secret_file "$f" || warn "Could not lock permissions on $f"
+    lock_secret_file "$f" || { warn "Could not lock permissions on $f"; rc=1; }
   done
-  lock_secret_file "$HOME/.claude-mobile-audit.log" \
-    || warn "Could not lock permissions on ~/.claude-mobile-audit.log"
+  local audit="$HOME/.claude-mobile-audit.log"
+  [ -e "$audit" ] || : > "$audit" 2>/dev/null || true
+  lock_secret_file "$audit" \
+    || { warn "Could not lock permissions on ~/.claude-mobile-audit.log"; rc=1; }
+  return $rc
 }
 
 # Find install directory
@@ -99,9 +104,14 @@ if [ "${STASHED:-0}" = "1" ]; then
   git stash pop || warn "Stash pop failed -- check manually"
 fi
 
-# Update npm deps if package.json changed
-if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/null | grep -q "package.json"; then
-  say "package.json changed -- updating dependencies..."
+# Update npm deps if EITHER manifest moved.
+# package-lock.json matters on its own: a security fix is very often
+# lockfile-only (the fixed version already satisfies the existing caret range,
+# so package.json never changes). Triggering on package.json alone would skip
+# exactly those -- including the ws HIGH advisory this repo just patched --
+# and leave the installed tree behind the audited one indefinitely.
+if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/null | grep -qE '^(package\.json|package-lock\.json)$'; then
+  say "Dependency manifest changed -- updating dependencies..."
   # npm ci, not npm install: installs exactly the tree in package-lock.json.
   # With `npm install` the lockfile is advisory and every caret range
   # re-resolves on each update, so a compromised upstream patch release
@@ -119,9 +129,16 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
   ok "Dependencies updated"
 fi
 
-# Re-assert secret file permissions (see harden_secrets above)
-harden_secrets
-ok "Secret file permissions verified"
+# Re-assert secret file permissions (see harden_secrets above).
+# Do not claim "verified" for a check that failed: .server-identity-key holds
+# the identity private key, and leaving it group-writable is the finding this
+# task exists to close.
+if harden_secrets; then
+  ok "Secret file permissions verified"
+else
+  warn "Secret file permissions could NOT be fully hardened -- .totp-secret / .server-identity-key may remain group-writable. Fix before relying on this host."
+  UPDATE_DEGRADED=1
+fi
 
 # Update WSL deps if on Windows and server.js changed
 if $IS_WINDOWS && wsl --list --quiet 2>/dev/null | grep -qi "Ubuntu-24.04"; then
@@ -143,4 +160,9 @@ else
 fi
 
 echo ""
-say "Done. Preserved: .totp-secret, .credentials.json, .server-identity-key, config.json"
+if [ "${UPDATE_DEGRADED:-0}" -eq 1 ]; then
+  warn "Update finished DEGRADED -- see the warnings above; a guarantee did not hold."
+else
+  say "Done. Preserved: .totp-secret, .credentials.json, .server-identity-key, config.json"
+fi
+exit "${UPDATE_DEGRADED:-0}"
