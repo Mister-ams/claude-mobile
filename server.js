@@ -2,7 +2,7 @@ const express = require('express');
 const { WebSocketServer } = require('ws');
 const pty = require('node-pty');
 const { Terminal: HeadlessTerminal } = require('@xterm/headless');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const crypto = require('crypto');
 const http = require('http');
 const path = require('path');
@@ -39,8 +39,57 @@ const COALESCE_IDLE_MS = 16;
 const COALESCE_MAX_BYTES = 4096;
 const COALESCE_MAX_AGE_MS = 64;
 
+// ─── Audit log ───────────────────────────────────────────────────
+// Declared here, above every caller: audit() used to sit below the identity-key
+// and TOTP loaders, so their startup lines hit the temporal dead zone and were
+// dropped with only a stderr note ("Cannot access 'AUDIT_PATH' before
+// initialization"). An audit log that silently loses its first entries is not
+// an audit log.
+const AUDIT_PATH = path.join(os.homedir(), '.claude-mobile-audit.log');
+// T06: size-based rotation. Rotate at 5 MB and keep 2 rotated files
+// (.log.1 = previous, .log.2 = the one before that); older ones are dropped.
+const AUDIT_MAX_BYTES = 5 * 1024 * 1024;
+const AUDIT_KEEP = 2;
+// Seeded from the file on first write, then tracked in-process so the request
+// path costs one append rather than a stat plus an append.
+let auditBytes = null;
+
+function rotateAuditLog() {
+  try {
+    const oldest = `${AUDIT_PATH}.${AUDIT_KEEP}`;
+    if (fs.existsSync(oldest)) fs.unlinkSync(oldest);
+    for (let i = AUDIT_KEEP - 1; i >= 1; i--) {
+      const from = `${AUDIT_PATH}.${i}`;
+      if (fs.existsSync(from)) fs.renameSync(from, `${AUDIT_PATH}.${i + 1}`);
+    }
+    fs.renameSync(AUDIT_PATH, `${AUDIT_PATH}.1`);
+  } catch (e) {
+    process.stderr.write('audit rotate failed: ' + e.message + '\n');
+  }
+  // Reset either way -- a failed rotation must not retry on every line.
+  auditBytes = 0;
+}
+
+function audit(category, message, ip) {
+  const ts = new Date().toISOString();
+  const line = `${ts} [${category}] ${ip ? `(${ip}) ` : ''}${message}\n`;
+  try {
+    if (auditBytes === null) {
+      try { auditBytes = fs.statSync(AUDIT_PATH).size; } catch (e) { auditBytes = 0; }
+    }
+    const bytes = Buffer.byteLength(line);
+    if (auditBytes + bytes > AUDIT_MAX_BYTES) rotateAuditLog();
+    fs.appendFileSync(AUDIT_PATH, line);
+    auditBytes += bytes;
+  } catch (e) {
+    process.stderr.write('audit write failed: ' + e.message + '\n');
+  }
+  console.log(`  [audit] ${category}: ${message}`);
+}
+
 // ─── dtach session persistence (via WSL) ─────────────────────────
 const WSL_DISTRO = config.wslDistro || 'Ubuntu-24.04';
+const DTACH_DIR = '/tmp';
 const DTACH_PREFIX = 'cm'; // socket files: /tmp/cm-0.dtach, cm-1.dtach, ...
 
 let wslAvailable = false;
@@ -52,7 +101,7 @@ function setLastError(message) {
 
 function probeWSL() {
   try {
-    execSync(`wsl -d ${WSL_DISTRO} -- echo 1`, { encoding: 'utf8', timeout: 5000 });
+    wslRun(['--exec', 'echo', '1'], { timeout: 5000 });
     wslAvailable = true;
     return true;
   } catch (e) {
@@ -78,10 +127,38 @@ function initWSL() {
   setTimeout(() => clearInterval(retryInterval), 120000);
 }
 
-function wslExec(cmd) {
-  return execSync(`wsl -d ${WSL_DISTRO} -u root -- bash -c "${cmd.replace(/"/g, '\\"')}"`, {
-    encoding: 'utf8', timeout: 10000
+// T23 (N1): every WSL call goes through execFileSync with an argv array. The
+// old wslExec built one command string --
+//   execSync(`wsl -d ${D} -u root -- bash -c "${cmd.replace(/"/g,'\\"')}"`)
+// -- escaping double quotes only, and routed it through cmd.exe, which does not
+// honour \" as an escape; backticks and $() also expanded inside the
+// double-quoted bash string. Nothing client-reachable fed it (project dirs are
+// allowlist-checked by exact match and session ids are numeric Map keys), but a
+// project directory containing a backtick, $ or & made it root RCE inside WSL.
+// execFileSync launches the binary directly: no cmd.exe, no shell parsing of
+// our arguments on the Windows side.
+//
+// It also has to be `--exec`, not `--`. `wsl.exe -- <cmd>` does NOT exec the
+// command: it joins everything after `--` into one string and hands that to the
+// default login shell, which re-parses it. Measured on Ubuntu-24.04:
+//   --      bash -c 'printf "%s|" "$0" "$@"' A B  ->  "/bin/bash||"
+//   --exec  bash -c 'printf "%s|" "$0" "$@"' A B  ->  "A|B|"
+// Under `--` the positional parameters never arrive because the outer shell
+// consumed them, which also means the old code had TWO shell layers -- cmd.exe's
+// and that one -- and a single round of quote escaping could not survive either.
+// `--exec` is the documented no-shell form: $(), backticks, &, | and spaces all
+// arrive literally.
+function wslRun(argv, opts = {}) {
+  return execFileSync('wsl.exe', ['-d', WSL_DISTRO, ...argv], {
+    encoding: 'utf8', timeout: 10000, windowsHide: true, ...opts,
   }).trim();
+}
+
+// Where bash is genuinely needed (globs, ||, redirection) the script text is a
+// FIXED literal and every value arrives as a positional parameter: data to
+// bash, never syntax. $0 is a label, so the first param is $1.
+function wslBash(script, params = []) {
+  return wslRun(['-u', 'root', '--exec', 'bash', '-c', script, 'claude-mobile', ...params.map(String)]);
 }
 
 function winPathToWsl(winPath) {
@@ -96,11 +173,11 @@ function wslPathToWin(wslPath) {
     .replace(/\//g, '\\');
 }
 
-function dtachSocket(id) { return `/tmp/${DTACH_PREFIX}-${id}.dtach`; }
+function dtachSocket(id) { return `${DTACH_DIR}/${DTACH_PREFIX}-${id}.dtach`; }
 
 function listDtachSessions() {
   try {
-    const out = wslExec(`ls /tmp/${DTACH_PREFIX}-*.dtach 2>/dev/null || true`);
+    const out = wslBash('ls "$1"/"$2"-*.dtach 2>/dev/null || true', [DTACH_DIR, DTACH_PREFIX]);
     if (!out) return [];
     return out.split('\n').filter(Boolean).map(p => {
       const match = p.match(/cm-(\d+)\.dtach$/);
@@ -118,16 +195,19 @@ function listDtachSessions() {
 // real terminal), so we create a bash shell first, attach, then send
 // the claude command via the pty.
 function createDtachDaemon(id, wslDir) {
-  const socket = dtachSocket(id);
-  const safeDir = wslDir.replace(/'/g, "'\\''");
-  wslExec(`cd '${safeDir}' && TERM=xterm-256color dtach -n ${socket} -z bash`);
+  // $1 = project dir, $2 = socket. Both are parameters, so a directory
+  // containing a backtick, $ or & is a literal path, not shell syntax.
+  wslBash('cd "$1" && exec env TERM=xterm-256color dtach -n "$2" -z bash',
+    [wslDir, dtachSocket(id)]);
 }
 
 // Attach to an existing dtach session via node-pty
 function attachToDtach(id, cols, rows) {
   const socket = dtachSocket(id);
+  // --exec for the same reason as wslRun: `--` would route the socket path
+  // through the distro's login shell before dtach ever sees it.
   return pty.spawn('wsl.exe', [
-    '-d', WSL_DISTRO, '-u', 'root', '--',
+    '-d', WSL_DISTRO, '-u', 'root', '--exec',
     'dtach', '-a', socket
   ], {
     name: 'xterm-256color', cols: cols || 80, rows: rows || 24,
@@ -135,22 +215,50 @@ function attachToDtach(id, cols, rows) {
   });
 }
 
+// Liveness means a process is HOLDING the socket, not merely that the file
+// exists. /tmp is on the ext4 rootfs in this distro rather than tmpfs, so socket
+// FILES survive a WSL shutdown while the daemons behind them do not: the old
+// `test -S` reported those phantoms as alive and recovery attached to nothing --
+// exactly the case the new boot-resilience work makes routine. lsof is already
+// how killDtachSession finds the holder, so reuse it rather than invent a
+// second mechanism. Returns 'alive' | 'stale' (exists, unheld) | 'gone'.
+function dtachSocketState(socket) {
+  return wslBash(
+    'if [ ! -S "$1" ]; then echo gone; ' +
+    'elif [ -n "$(lsof -t "$1" 2>/dev/null)" ]; then echo alive; ' +
+    'else echo stale; fi',
+    [socket]);
+}
+
 function dtachSessionAlive(id) {
   const socket = dtachSocket(id);
   try {
-    // Check socket file exists (dtach cleans up on process exit)
-    wslExec(`test -S ${socket}`);
-    return true;
+    const state = dtachSocketState(socket);
+    if (state === 'alive') return true;
+    // Re-probe before unlinking: the second WSL round-trip also supplies the
+    // spacing, so a socket that was created microseconds ago is not mistaken
+    // for a phantom during createSession's attach retry loop.
+    if (state === 'stale' && dtachSocketState(socket) === 'stale') {
+      // Nothing holds it, so unlinking cannot orphan a live session -- and a
+      // socket that still HAS a holder is never touched here.
+      audit('SESSION', `Stale dtach socket with no holder removed: cm-${id}`);
+      try { wslBash('rm -f "$1"', [socket]); }
+      catch (e) { audit('WARN', `stale socket unlink failed for cm-${id}: ${e.message}`); }
+    }
+    return false;
   } catch (e) { audit('WARN', 'dtachSessionAlive: ' + e.message); return false; }
 }
 
 function killDtachSession(id) {
   const socket = dtachSocket(id);
   try {
-    // Find and kill the process attached to this socket
-    const pid = wslExec(`lsof -t ${socket} 2>/dev/null || true`);
-    if (pid) wslExec(`kill ${pid} 2>/dev/null || true`);
-    wslExec(`rm -f ${socket}`);
+    // Find and kill the process attached to this socket. lsof can return
+    // several pids; the old code relied on shell word-splitting to kill them
+    // all, so keep that behaviour explicitly (and only for numeric pids).
+    const found = wslBash('lsof -t "$1" 2>/dev/null || true', [socket]);
+    const pids = found.split('\n').map(p => p.trim()).filter(p => /^\d+$/.test(p));
+    for (const pid of pids) wslBash('kill "$1" 2>/dev/null || true', [pid]);
+    wslBash('rm -f "$1"', [socket]);
   } catch (e) {
     audit('WARN', 'killDtachSession failed for ' + id + ': ' + e.message);
   }
@@ -489,18 +597,6 @@ function checkRateLimits(ip) {
   return checkGlobalRate() && checkIPRate(ip);
 }
 
-// ─── Audit log ───────────────────────────────────────────────────
-const AUDIT_PATH = path.join(os.homedir(), '.claude-mobile-audit.log');
-
-function audit(category, message, ip) {
-  const ts = new Date().toISOString();
-  const line = `${ts} [${category}] ${ip ? `(${ip}) ` : ''}${message}\n`;
-  try { fs.appendFileSync(AUDIT_PATH, line); } catch (e) {
-    process.stderr.write('audit write failed: ' + e.message + '\n');
-  }
-  console.log(`  [audit] ${category}: ${message}`);
-}
-
 // ─── Env var whitelist for pty ───────────────────────────────────
 const ENV_WHITELIST = [
   'PATH', 'HOME', 'USERPROFILE', 'LOCALAPPDATA', 'APPDATA',
@@ -577,6 +673,65 @@ function saveCredentials() {
 // Active challenges for WebAuthn
 const challenges = new Map(); // challengeId -> { challenge, expires }
 
+// ─── Same-origin policy (T18 + T19) ──────────────────────────────
+// The only legitimate origins are this server's own pages: the tailnet host
+// that `tailscale serve` fronts, and localhost for the setup page.
+const ALLOWED_ORIGINS = new Set([
+  `http://localhost:${PORT}`,
+  `http://127.0.0.1:${PORT}`,
+  `http://[::1]:${PORT}`,
+]);
+if (config.tailscaleHostname) {
+  ALLOWED_ORIGINS.add(`https://${String(config.tailscaleHostname).toLowerCase()}`);
+  ALLOWED_ORIGINS.add(`http://${String(config.tailscaleHostname).toLowerCase()}`);
+}
+
+function isAllowedOrigin(origin) {
+  return ALLOWED_ORIGINS.has(String(origin || '').trim().toLowerCase().replace(/\/$/, ''));
+}
+
+// T19 (R3): CSRF guard for state-changing endpoints. The localhost gate alone
+// does not stop a malicious page open in the LAPTOP's browser: a bodyless POST
+// with no custom headers is a CORS "simple request", so it fires with no
+// preflight and the attacker never needs to read the response -- enough to
+// overwrite .totp-secret and break the operator's authenticator.
+//
+// Accepted evidence that the request is same-origin, in order:
+//   1. Sec-Fetch-Site: same-origin -- every current browser sends it, and a
+//      cross-site page cannot forge it (it is a forbidden header name).
+//   2. an Origin header on the allowlist -- for browsers predating (1); they
+//      still attach Origin to cross-origin POSTs, which is what rejects them.
+//   3. no browser headers at all, plus an application/json body -- non-browser
+//      tooling. A cross-site page cannot imitate this: a no-cors fetch may not
+//      set that content type, and a CORS fetch would need a preflight that this
+//      server never answers.
+// A bodyless POST with no browser evidence is exactly the simple-request shape
+// the finding describes, so it is refused.
+function requireSameSite(req, res, next) {
+  const site = req.headers['sec-fetch-site'];
+  const origin = req.headers.origin;
+  const contentType = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  const hasBody = Number(req.headers['content-length'] || 0) > 0 || !!req.headers['transfer-encoding'];
+
+  let sameSite = null; // true | false | null = no browser evidence either way
+  if (site) sameSite = (site === 'same-origin' || site === 'none');
+  else if (origin) sameSite = isAllowedOrigin(origin);
+
+  if (sameSite === false) {
+    audit('SECURITY', `Cross-site ${req.method} ${req.path} rejected (sec-fetch-site=${site || 'n/a'}, origin=${String(origin || 'n/a').slice(0, 120)})`, req.ip);
+    return res.status(403).json({ error: 'Cross-site request rejected' });
+  }
+  if (hasBody && contentType !== 'application/json') {
+    audit('SECURITY', `${req.method} ${req.path} rejected: content-type ${contentType || 'none'}`, req.ip);
+    return res.status(415).json({ error: 'application/json required' });
+  }
+  if (!hasBody && sameSite === null) {
+    audit('SECURITY', `${req.method} ${req.path} rejected: no same-origin evidence`, req.ip);
+    return res.status(403).json({ error: 'Same-origin request required' });
+  }
+  next();
+}
+
 // ─── Express ─────────────────────────────────────────────────────
 const app = express();
 // Trust X-Forwarded-For from loopback (tailscale serve proxies HTTPS -> localhost)
@@ -597,6 +752,8 @@ app.use((_req, res, next) => {
     "base-uri 'self'",
     "form-action 'self'",
   ].join('; '));
+  // T20 (R6): never leak this origin (or anything in a URL) to a third party.
+  res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -619,7 +776,7 @@ app.get('/api/setup/status', (req, res) => {
   });
 });
 
-app.post('/api/setup/init', async (req, res) => {
+app.post('/api/setup/init', requireSameSite, async (req, res) => {
   if (!isLocalhost(req)) return res.status(403).json({ error: 'Localhost only' });
   if (isSetupComplete()) return res.json({ error: 'Already configured' });
   const secret = totpConfigured() ? totpSecret : generateTotpSecret();
@@ -633,7 +790,7 @@ app.post('/api/setup/init', async (req, res) => {
   }
 });
 
-app.post('/api/setup/verify', (req, res) => {
+app.post('/api/setup/verify', requireSameSite, (req, res) => {
   if (!isLocalhost(req)) return res.status(403).json({ error: 'Localhost only' });
   if (verifyTotp(req.body.code)) {
     audit('SETUP', 'TOTP verified -- setup complete');
@@ -643,9 +800,12 @@ app.post('/api/setup/verify', (req, res) => {
   }
 });
 
-// Auth middleware for HTTP routes
+// Auth middleware for HTTP routes.
+// T20 (R6): the ?st=<token> query source is gone. No client ever used it, and
+// a token in a URL lands in browser history, and in the Referer of any
+// subresource the page loads.
 function requireSession(req, res, next) {
-  const token = req.headers['x-session-token'] || req.body?.sessionToken || req.query?.st;
+  const token = req.headers['x-session-token'] || req.body?.sessionToken;
   if (!validateSessionToken(token, req.ip)) return res.status(401).json({ error: 'Unauthorized' });
   next();
 }
@@ -777,7 +937,7 @@ app.post('/api/passkey/auth-verify', async (req, res) => {
 
 
 // Kill switch
-app.post('/api/kill', requireSession, (req, res) => {
+app.post('/api/kill', requireSameSite, requireSession, (req, res) => {
   audit('SYSTEM', 'Remote kill switch activated', req.ip);
   res.json({ status: 'shutting down' });
   setTimeout(() => process.exit(0), 500);
@@ -794,7 +954,7 @@ app.get('/api/auth/status', (_req, res) => {
 });
 
 // TOTP setup (requires session token -- bootstrap or passkey authed)
-app.post('/api/totp/setup', requireSession, (req, res) => {
+app.post('/api/totp/setup', requireSameSite, requireSession, (req, res) => {
   if (totpConfigured()) {
     return res.json({ already: true, uri: getTotpUri() });
   }
@@ -803,7 +963,7 @@ app.post('/api/totp/setup', requireSession, (req, res) => {
   res.json({ uri: getTotpUri(), secret: totpSecret });
 });
 
-app.post('/api/totp/verify-setup', requireSession, (req, res) => {
+app.post('/api/totp/verify-setup', requireSameSite, requireSession, (req, res) => {
   if (verifyTotp(req.body.code)) {
     audit('AUTH', 'TOTP setup verified');
     res.json({ verified: true });
@@ -814,7 +974,7 @@ app.post('/api/totp/verify-setup', requireSession, (req, res) => {
 
 // ─── TOTP Re-enrollment (localhost-only) ──────────────────────
 
-app.post('/api/totp/reset', async (req, res) => {
+app.post('/api/totp/reset', requireSameSite, async (req, res) => {
   if (!isLocalhost(req)) return res.status(403).json({ error: 'Localhost only' });
   try {
     generateTotpSecret();
@@ -828,7 +988,7 @@ app.post('/api/totp/reset', async (req, res) => {
   }
 });
 
-app.post('/api/totp/verify-reset', express.json(), (req, res) => {
+app.post('/api/totp/verify-reset', requireSameSite, express.json(), (req, res) => {
   if (!isLocalhost(req)) return res.status(403).json({ error: 'Localhost only' });
   if (verifyTotp(req.body.code)) {
     // Clear all lockouts
@@ -887,7 +1047,31 @@ app.get('/health', (req, res) => {
 });
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server, maxPayload: 1024 * 1024 }); // 1MB max message
+
+// T18 (R2): WebSocket upgrades are exempt from CORS, and the *.ts.net name
+// resolves in PUBLIC DNS with a valid certificate, so without this check any
+// page open in a browser on a tailnet device can open a socket here. It can
+// never authenticate -- the session token lives in a JS variable, never a
+// cookie, and that stays true -- but it can burn the global limiter: 20 failed
+// auths trigger a 10-minute GLOBAL lockout, repeatable indefinitely, which is a
+// drive-by denial of the operator's own remote access.
+//
+// A missing Origin is allowed: browsers always send one on an upgrade (which is
+// what makes this effective against the drive-by case), while non-browser
+// tooling on the tailnet sends none and could forge any value anyway.
+function verifyUpgrade(info) {
+  const origin = info.req.headers.origin;
+  if (!origin || isAllowedOrigin(origin)) return true;
+  audit('SECURITY', `WebSocket upgrade rejected: origin=${String(origin).slice(0, 120)}`,
+    info.req.socket?.remoteAddress);
+  return false;
+}
+
+const wss = new WebSocketServer({
+  server,
+  maxPayload: 1024 * 1024, // 1MB max message
+  verifyClient: verifyUpgrade,
+});
 
 // ─── Sessions ────────────────────────────────────────────────────
 const sessions = new Map();
@@ -977,8 +1161,12 @@ function detectAttention(sessionId) {
     }
   }
 
-  const preview = lines.slice(-3).map(l => l.substring(0, 80)).join(' | ');
-  audit('ATTN-MISS', `session=${sessionId} lines=${lines.length} lastLine=[${lastLine.substring(0, 60)}] preview=[${preview}]`);
+  // T06 (R-LOG): never log terminal content. Same shape as the INPUT path --
+  // length plus a 12-hex sha256 prefix, which still lets repeated misses be
+  // correlated without putting session text on disk.
+  const tail = lines.slice(-3).join('\n');
+  const tailHash = crypto.createHash('sha256').update(tail).digest('hex').slice(0, 12);
+  audit('ATTN-MISS', `session=${sessionId} lines=${lines.length} lastLineLen=${lastLine.length} tailLen=${tail.length} tailHash=${tailHash}`);
   return null;
 }
 
@@ -1313,6 +1501,18 @@ function wireSessionProc(session) {
   });
 }
 
+// T21 (R5): one sanitizer for session names, used by both create and rename.
+// Control characters are stripped first: createSession audit-logs the name, so
+// an embedded newline in a create message forged whole audit-log lines. The
+// markup strip and the 50-char bound are what rename already did.
+function sanitizeSessionName(name) {
+  return String(name == null ? '' : name)
+    .replace(/[\x00-\x1f\x7f]/g, ' ')
+    .replace(/[<>"'&]/g, '')
+    .slice(0, 50)
+    .trim();
+}
+
 async function createSession(name, dir, cols, rows) {
   if (sessions.size >= MAX_SESSIONS) return null;
   const id = nextId++;
@@ -1381,6 +1581,16 @@ function recoverDtachSessions() {
     const name = saved?.name || `Recovered-${idNum}`;
     const dir = saved?.dir || 'unknown';
 
+    // A socket file with no process behind it is a phantom -- routine after a
+    // WSL restart, since /tmp is on the rootfs here. dtachSessionAlive reports
+    // it and clears it, so the leftover heals on read instead of being attached
+    // to an empty socket.
+    if (!dtachSessionAlive(idNum)) {
+      console.log(`  Skipped phantom socket: ${metaKey} (no process holds it)`);
+      audit('SESSION', `Recovery skipped phantom socket: ${metaKey}`);
+      continue;
+    }
+
     try {
       const proc = attachToDtach(idNum, 80, 24);
       console.log(`  dtach attach: pid=${proc.pid} for ${metaKey}`);
@@ -1407,13 +1617,28 @@ function recoverDtachSessions() {
 const allClients = new Set();
 const MAX_CONNECTIONS_PER_IP = 10;
 
+function isLoopbackIP(addr) {
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+}
+
+// T22 (A2): walk the X-Forwarded-For chain from the SOCKET end and return the
+// first hop that is not trusted -- the same algorithm proxy-addr runs for
+// Express's `trust proxy: 'loopback'` two functions away, so the HTTP and
+// WebSocket paths now attribute the same client.
+//
+// The old code took xff.split(',')[0], the LEFTMOST entry: the position an
+// attacker fully controls, because a proxy appends the real peer on the right.
+// tailscale serve happens to strip inbound XFF, which is the only reason this
+// was not exploitable -- an external behaviour this code never verified.
 function getClientIP(ws) {
   // tailscale serve proxies from localhost -- trust X-Forwarded-For from loopback only
   const peerIP = ws._socket?._peername?.address || ws._req?.socket?.remoteAddress || 'unknown';
-  const isLoopback = peerIP === '127.0.0.1' || peerIP === '::1' || peerIP === '::ffff:127.0.0.1';
-  if (isLoopback) {
-    const xff = ws._req?.headers?.['x-forwarded-for'];
-    if (xff) return xff.split(',')[0].trim();
+  if (!isLoopbackIP(peerIP)) return peerIP;
+  const xff = ws._req?.headers?.['x-forwarded-for'];
+  if (!xff) return peerIP;
+  const hops = String(xff).split(',').map(h => h.trim()).filter(Boolean);
+  for (let i = hops.length - 1; i >= 0; i--) {
+    if (!isLoopbackIP(hops[i])) return hops[i];
   }
   return peerIP;
 }
@@ -1615,7 +1840,7 @@ wss.on('connection', (ws, req) => {
           secureSend(ws, { type: 'error', message: 'Directory not in allowed project list' });
           break;
         }
-        const created = await createSession(msg.name || 'Session', dir, msg.cols, msg.rows);
+        const created = await createSession(sanitizeSessionName(msg.name) || 'Session', dir, msg.cols, msg.rows);
         if (created) {
           broadcastSessions();
           secureSend(ws, { type: 'created', session: created.id });
@@ -1710,7 +1935,8 @@ wss.on('connection', (ws, req) => {
 
       case 'rename': {
         if (!targetSession || !msg.name) break;
-        const name = String(msg.name).slice(0, 50).replace(/[<>"'&]/g, '');
+        const name = sanitizeSessionName(msg.name);
+        if (!name) break;
         targetSession.name = name;
         broadcastSessions();
         saveSessionMeta();
@@ -1750,6 +1976,66 @@ wss.on('connection', (ws, req) => {
   });
 });
 
+// ─── Backbone watchdog (T10) ─────────────────────────────────────
+// The session backbone in W0 is dtach inside WSL. W5 replaces it with the herdr
+// daemon: swap probeBackbone() for a socket `ping` and everything around it --
+// the state machine, the audit line, the client push -- stays as is.
+//
+// Detect and report only. No auto-restart in this wave.
+let backboneDown = false;
+
+// One WSL round trip: is dtach reachable, and which sockets are actually held
+// by a process? Returns { ok, wslDown, detail }.
+function probeBackbone() {
+  try {
+    const out = wslBash(
+      'command -v dtach >/dev/null 2>&1 || { echo NODTACH; exit 0; }; ' +
+      'for s in "$1"/"$2"-*.dtach; do [ -S "$s" ] || continue; ' +
+      'if [ -n "$(lsof -t "$s" 2>/dev/null)" ]; then echo "$s"; fi; done',
+      [DTACH_DIR, DTACH_PREFIX]);
+    if (out.includes('NODTACH')) {
+      return { ok: false, wslDown: false, detail: `dtach is missing in ${WSL_DISTRO}` };
+    }
+    const held = new Set(out.split('\n').map(s => s.trim()).filter(Boolean));
+    const orphaned = [...sessions.keys()].filter(id => !held.has(dtachSocket(id)));
+    if (orphaned.length) {
+      return {
+        ok: false, wslDown: false,
+        detail: `no live dtach process for ${orphaned.map(id => `cm-${id}`).join(', ')}`,
+      };
+    }
+    return { ok: true, wslDown: false, detail: `dtach reachable, ${held.size} live socket(s)` };
+  } catch (e) {
+    // wsl.exe writes its own errors as UTF-16, so strip the NULs and take the
+    // first line; otherwise the whole probe script gets echoed into the log.
+    const stderr = String(e.stderr || '').replace(/\0/g, '').trim().split('\n')[0];
+    const why = stderr || `exit ${e.status === undefined ? '?' : e.status}`;
+    return { ok: false, wslDown: true, detail: `WSL (${WSL_DISTRO}) unreachable: ${why.slice(0, 120)}` };
+  }
+}
+
+function checkBackbone() {
+  const probe = probeBackbone();
+  if (probe.wslDown) {
+    wslAvailable = false;
+    setLastError(probe.detail);
+  } else if (probe.ok) {
+    wslAvailable = true;
+  }
+  if (!probe.ok && !backboneDown) {
+    backboneDown = true;
+    audit('BACKBONE-DOWN', probe.detail);
+    // `backbone` is the field a client renders as a banner; type stays
+    // `warning` so today's client still surfaces it rather than dropping an
+    // unknown message on the floor.
+    broadcastAll({ type: 'warning', backbone: 'down', message: `Session backbone unavailable -- ${probe.detail}` });
+  } else if (probe.ok && backboneDown) {
+    backboneDown = false;
+    audit('BACKBONE-UP', probe.detail);
+    broadcastAll({ type: 'warning', backbone: 'up', message: 'Session backbone reachable again' });
+  }
+}
+
 // ─── Housekeeping (single 60s timer) ─────────────────────────────
 setInterval(() => {
   const now = Date.now();
@@ -1784,6 +2070,9 @@ setInterval(() => {
       audit('AUTH', `Inactivity lock (periodic)`, ws._ip);
     }
   }
+  // T10: backbone liveness -- one WSL probe per minute, isolated from the
+  // housekeeping above so a WSL hiccup cannot skip token expiry.
+  try { checkBackbone(); } catch (e) { audit('WARN', 'backbone check failed: ' + e.message); }
 }, 60 * 1000);
 
 // ─── Skill & Command Discovery ───────────────────────────────────
