@@ -334,6 +334,12 @@ $('totp-input')?.addEventListener('keydown', e => {
   if (e.key === 'Enter') { e.preventDefault(); authAction('totp'); }
 });
 
+// T04a: the two auth buttons carried onclick="authAction(...)" in the markup.
+// Bound here instead so script-src can drop 'unsafe-inline' (T04) -- CSP
+// blocks inline handler attributes, not just inline <script> blocks.
+$('passkey-btn').addEventListener('click', () => authAction('passkey'));
+$('auth-submit-btn').addEventListener('click', () => authAction('totp'));
+
 ['touchstart', 'keydown', 'mousemove', 'click'].forEach(evt => {
   document.addEventListener(evt, resetInactivityTimer, { passive: true });
 });
@@ -1316,6 +1322,13 @@ function commitRename() {
   }
 }
 
+// T04a: was onfocus="this.select()" onblur="commitRename()"
+// onkeydown="if(event.key==='Enter'){this.blur()}" on #sname. `this` in those
+// attributes was the input itself, which is the `sname` binding here.
+sname.addEventListener('focus', () => sname.select());
+sname.addEventListener('blur', () => commitRename());
+sname.addEventListener('keydown', e => { if (e.key === 'Enter') sname.blur(); });
+
 // ── T13: layout mode ─────────────────────────────────────────────
 // One source of truth for "is this a tablet-or-wider viewport", shared by
 // the CSS breakpoints (820px), the persistent tab strip below, the swipe
@@ -1371,6 +1384,13 @@ function toggleSwitcher() {
 function closeSwitcher() {
   $('tab-switcher').classList.remove('open');
 }
+
+// T04a: #tab-pill carried onclick="scrollBottom()" and #tab-count-btn
+// onclick="toggleSwitcher()". The count button also has touch handlers of its
+// own (pull-up = new session, further down); those are untouched -- this is
+// only the tap.
+$('tab-pill').addEventListener('click', () => scrollBottom());
+$('tab-count-btn').addEventListener('click', () => toggleSwitcher());
 
 function renderSwitcher() {
   const sw = $('tab-switcher');
@@ -1448,6 +1468,9 @@ function newSession() {
   const rows = 200;
   queueSend({ type: 'create', name: 'SESSION ' + num, dir: defaultDir, cols, rows });
 }
+
+// T04a: was onclick="newSession()" on #empty-state.
+emptyState.addEventListener('click', () => newSession());
 
 // ── Safari-style Gesture Navigation (with slide animation) ──
 const SWIPE_THRESHOLD = 80;
@@ -1866,6 +1889,48 @@ function qsend(k) {
   if (!ws || ws.readyState !== 1 || activeSession === null) return;
   queueSend({ type: 'input', data: k });
 }
+
+// ── Quick-action bar (T04a: moved off inline on* attributes) ──
+// Three separate concerns used to live in the markup, and all three are
+// load-bearing:
+//
+//   1. #qbar onmousedown -> preventDefault, unconditionally. A mousedown
+//      default action moves focus, which would blur the compose box; the
+//      button still gets its click because preventDefault on mousedown does
+//      not cancel the click.
+//   2. #qbar ontouchstart -> preventDefault ONLY when the touch missed a
+//      button. Same blur protection for the bar background, but a touch that
+//      landed on a .qb must run its course so the button's own touchend
+//      handler below fires. Cancelling it at touchstart would kill the press.
+//   3. .qb ontouchend -> preventDefault + action, PLUS onclick -> action.
+//      The pair is the iOS double-fire guard: preventDefault on touchend
+//      suppresses the compatibility click the browser would synthesise, so a
+//      tap runs the action once via touchend and a mouse click runs it once
+//      via click. Same shape as the send button.
+//
+// preventDefault needs { passive: false } explicitly here -- these are added
+// with addEventListener rather than parsed as attributes, and touch listeners
+// are the ones browsers make passive by default.
+const QUICK_ACTIONS = {
+  clear: () => clearPrompt(),
+  edit: () => editLast(),
+  esc: () => qsend('\x1b'),
+  up: () => qsend('\x1b[A'),
+  down: () => qsend('\x1b[B'),
+};
+
+const qbarEl = $('qbar');
+qbarEl.addEventListener('mousedown', e => e.preventDefault(), { passive: false });
+qbarEl.addEventListener('touchstart', e => {
+  if (!e.target.closest('.qb')) e.preventDefault();
+}, { passive: false });
+
+qbarEl.querySelectorAll('.qb').forEach(btn => {
+  const run = QUICK_ACTIONS[btn.dataset.qb];
+  if (!run) { clientLog('qbar: no action for ' + btn.dataset.qb); return; }
+  btn.addEventListener('touchend', e => { e.preventDefault(); run(); }, { passive: false });
+  btn.addEventListener('click', () => run());
+});
 
 function toggleDiag() {
   const el = $('diag');
@@ -2500,6 +2565,9 @@ function toggleTheme() {
   if (!meta) { meta = document.createElement('meta'); meta.name = 'theme-color'; document.head.appendChild(meta); }
   meta.content = isLight ? '#f6f7f9' : '#111418';
 }
+
+// T04a: was onclick="toggleTheme()" on #theme-toggle.
+$('theme-toggle').addEventListener('click', () => toggleTheme());
 
 // Restore saved theme
 if (localStorage.getItem('cm-theme') === 'light') {
