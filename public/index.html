@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+  <!-- T14: maximum-scale=1.0 / user-scalable=no dropped. The zoom lock was
+       there because pinch-zoom competed with a cramped 390px layout; with a
+       full-screen terminal and a settable font size it only removes an
+       accessibility escape hatch. interactive-widget=resizes-content stays
+       for the software-keyboard case (phones, and iPads with no keyboard
+       attached). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Claude">
@@ -60,6 +66,12 @@
         <input type="checkbox" id="set-hwkb">
       </div>
       <p class="set-note">Keys go straight to the terminal unless the compose box has focus. Cmd-K composes, Esc returns.</p>
+      <div class="set-row">
+        <label for="set-font">Terminal font</label>
+        <span class="set-val"><span id="set-font-val">13</span>px</span>
+      </div>
+      <input type="range" id="set-font" min="10" max="24" step="1" aria-label="Terminal font size">
+      <p class="set-note" id="set-cols"></p>
     </div>
   </div>
 

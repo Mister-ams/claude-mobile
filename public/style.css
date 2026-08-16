@@ -34,6 +34,10 @@
   --term-bg:       #111418;
   --term-fg:       #f6f7f9;
   --term-cursor:   #2d72d2;
+  /* T14: terminal font size. Set from localStorage by applyFontSize() --
+     13px is the phone default, tablets start at 16px. The cell grid reads
+     it directly; the xterm fallback gets it through term.options.fontSize. */
+  --term-font-size: 13px;
 }
 /* ── Light Mode ── */
 .light {
@@ -215,6 +219,28 @@ html, body {
 #settings-panel input[type="checkbox"] {
   width: 20px; height: 20px; accent-color: var(--accent); flex-shrink: 0;
 }
+#settings-panel input[type="range"] {
+  width: 100%; accent-color: var(--accent); margin: 2px 0;
+}
+#settings-panel .set-val {
+  font-size: 12px; color: var(--text-sec);
+  font-family: 'SF Mono', 'Menlo', monospace;
+}
+
+/* ── T14: full-screen terminal on a hardware keyboard ──
+   Direct keystrokes make the compose box the exception rather than the
+   primary input path, so it collapses to a slim bar and the terminal keeps
+   the space. Focus (Cmd-K, or a tap) expands it again -- :focus-within
+   rather than a JS class so there is no state to desynchronise.
+   #msg keeps its 16px font even when collapsed: iOS zooms the viewport
+   when a field smaller than 16px takes focus. */
+body.hwkb #input-bar:not(:focus-within) { padding-top: 1px; padding-bottom: 1px; }
+body.hwkb #input-bar:not(:focus-within) #msg {
+  min-height: 22px; height: 22px; padding: 1px 8px;
+  color: var(--dim); overflow: hidden;
+}
+body.hwkb #input-bar:not(:focus-within) #send,
+body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 /* ── Notification pulse on pill ── */
 #tab-pill .pill-notify {
   display: none; width: 8px; height: 8px; border-radius: 50%;
@@ -307,7 +333,7 @@ html, body {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
-  font-size: 13px;
+  font-size: var(--term-font-size, 13px);
   line-height: 1.286;
   white-space: pre;
   background: var(--bg, #111418);
