@@ -33,6 +33,10 @@ function clientLog(msg) {
 let e2eKey = null; // CryptoKey for AES-256-GCM
 let e2eSendSeq = 0, e2eRecvSeq = 0;
 let e2eReady = false;
+// W4/C1 -- IV domain separation. One key is shared in both directions, so the
+// first IV byte marks who sent the frame. These MUST match server.js.
+const IV_DIR_SERVER = 1;   // server -> client
+const IV_DIR_CLIENT = 0;   // client -> server
 let pendingAuth = null; // { method, totpCode } -- deferred until E2E ready
 let sendQueue = Promise.resolve();
 
@@ -163,8 +167,14 @@ async function secureSend(obj) {
     return;
   }
   e2eSendSeq++;
-  // Counter-based IV: 4 zero bytes + 8-byte big-endian counter
+  // W4/C1 -- IV = direction byte, 3 zero bytes, 8-byte BE counter.
+  // Both endpoints derive the SAME key and both counters start at 1, so
+  // without the direction byte the server's frame #1 and the client's frame #1
+  // shared an (key, IV) pair -- a catastrophic GCM nonce reuse. The server's
+  // first frame is a fixed known plaintext and this one is the TOTP, so XORing
+  // the two ciphertexts recovered the code in cleartext. MUST match server.js.
   const iv = new Uint8Array(12);
+  iv[0] = IV_DIR_CLIENT;
   const dv = new DataView(iv.buffer);
   dv.setBigUint64(4, BigInt(e2eSendSeq));
   const seqBuf = new Uint8Array(8);
@@ -186,8 +196,31 @@ function queueSend(obj) {
 async function secureReceive(rawData) {
   let parsed;
   try { parsed = JSON.parse(rawData); } catch { clientLog('JSON parse failed'); return null; }
-  if (parsed.type === 'key-exchange') return parsed;
-  if (parsed.type === 'encrypted') return parsed; // handshake ack
+  // W4/C2 + C3 -- these two short-circuits used to sit ABOVE the
+  // anti-downgrade guard at the bottom of this function, which made both
+  // exploitable:
+  //   C2: an injected plaintext {"type":"encrypted"} fired the deferred
+  //       pendingAuth while e2eReady was still false, and secureSend's
+  //       pre-E2E branch then transmitted the TOTP in CLEARTEXT.
+  //   C3: a plaintext key-exchange accepted mid-session reset e2eKey and both
+  //       counters, letting an attacker re-handshake behind one confirm() tap.
+  // Once a handshake has begun, neither is legitimate. The server already
+  // refuses post-handshake rekey; the client now matches it.
+  if (parsed.type === 'key-exchange') {
+    if (e2eReady || e2eSendSeq > 0) {
+      clientLog('SECURITY: key-exchange after handshake rejected');
+      return null;
+    }
+    return parsed;
+  }
+  if (parsed.type === 'encrypted') {
+    if (e2eReady) return parsed;          // the genuine ack, during handshake
+    if (!e2eKey) {
+      clientLog('SECURITY: plaintext "encrypted" ack before key derivation rejected');
+      return null;
+    }
+    return parsed;
+  }
   if (parsed.e) {
     if (!e2eReady || !e2eKey) return null;
     if (parsed.n <= e2eRecvSeq) {
@@ -200,6 +233,12 @@ async function secureReceive(rawData) {
     try {
       const data = base64urlDecode(parsed.e);
       const iv = data.subarray(0, 12);
+      // W4/C1 -- the peer must use the SERVER direction. Rejecting our own
+      // direction byte blocks reflection of a client frame back at us.
+      if (iv[0] !== IV_DIR_SERVER) {
+        clientLog('SECURITY: IV direction byte wrong, expected ' + IV_DIR_SERVER + ' got ' + iv[0]);
+        return null;
+      }
       const ciphertext = data.subarray(12); // includes tag (Web Crypto handles it)
       const seqBuf = new Uint8Array(8);
       new DataView(seqBuf.buffer).setBigUint64(0, BigInt(parsed.n));

@@ -352,6 +352,11 @@ loadOrCreateIdentityKey();
 
 // ─── E2E Encryption (P1: ECDH + AES-256-GCM) ───────────────────
 
+// W4/C1 -- IV domain separation. One key is shared in both directions, so the
+// first IV byte marks who sent the frame. These MUST match public/app.js.
+const IV_DIR_SERVER = 1;   // server -> client
+const IV_DIR_CLIENT = 0;   // client -> server
+
 // Convert DER-encoded ECDSA signature to IEEE P1363 (raw r||s) for Web Crypto
 function derToP1363(derSig, keySize) {
   const n = keySize; // 32 bytes for P-256
@@ -441,7 +446,16 @@ function secureSend(ws, obj) {
   }
   ws._sendSeq++;
   // Counter-based IV: 4-byte zero prefix + 8-byte big-endian counter
+  // W4/C1 -- DIRECTION BYTE. Both endpoints derive the SAME AES-256-GCM key
+  // (identical HKDF salt and info) and both counters start at 1. Without a
+  // direction marker the server's message #1 and the client's message #1 share
+  // an (key, IV) pair -- catastrophic for GCM. The server's first encrypted
+  // frame is a fixed known plaintext ({type:'encrypted',status:'ok'}) and the
+  // client's is the TOTP, so XORing the two ciphertexts recovered the code in
+  // cleartext; the two auth tags under one nonce also leak the GHASH subkey,
+  // turning passive observation into forgery. server->client = 1, client->server = 0.
   const iv = Buffer.alloc(12);
+  iv[0] = IV_DIR_SERVER;
   iv.writeBigUInt64BE(BigInt(ws._sendSeq), 4);
   const seqBuf = Buffer.alloc(8);
   seqBuf.writeBigUInt64BE(BigInt(ws._sendSeq));
@@ -476,6 +490,14 @@ function secureReceive(ws, rawStr) {
     try {
       const data = Buffer.from(parsed.e, 'base64url');
       const iv = data.subarray(0, 12);
+      // W4/C1 -- the peer must use the CLIENT direction. Rejecting the
+      // server's own direction byte blocks reflection: a server->client frame
+      // replayed back at the right sequence position would otherwise decrypt
+      // and authenticate cleanly.
+      if (iv[0] !== IV_DIR_CLIENT) {
+        audit('SECURITY', `IV direction byte wrong: expected ${IV_DIR_CLIENT}, got ${iv[0]}`, ws._ip);
+        return null;
+      }
       const tag = data.subarray(data.length - 16);
       const ciphertext = data.subarray(12, data.length - 16);
       const seqBuf = Buffer.alloc(8);
@@ -721,11 +743,18 @@ function requireSameSite(req, res, next) {
     audit('SECURITY', `Cross-site ${req.method} ${req.path} rejected (sec-fetch-site=${site || 'n/a'}, origin=${String(origin || 'n/a').slice(0, 120)})`, req.ip);
     return res.status(403).json({ error: 'Cross-site request rejected' });
   }
-  if (hasBody && contentType !== 'application/json') {
+  // application/json is required UNCONDITIONALLY, not merely when a body is
+  // present. That requirement IS the CSRF defence: a cross-origin page cannot
+  // set this content type without triggering a preflight, so these endpoints
+  // stop being "simple" requests and a drive-by POST can never reach them.
+  // Exempting bodyless requests reopened exactly that hole. It was exempted
+  // only because setup.js POSTed bodyless; setup.js now sends `{}` with the
+  // header (T04b), so the guard can be absolute.
+  if (contentType !== 'application/json') {
     audit('SECURITY', `${req.method} ${req.path} rejected: content-type ${contentType || 'none'}`, req.ip);
     return res.status(415).json({ error: 'application/json required' });
   }
-  if (!hasBody && sameSite === null) {
+  if (sameSite === null) {
     audit('SECURITY', `${req.method} ${req.path} rejected: no same-origin evidence`, req.ip);
     return res.status(403).json({ error: 'Same-origin request required' });
   }
@@ -743,9 +772,22 @@ app.use((req, res, next) => {
 app.use((_req, res, next) => {
   res.setHeader('Content-Security-Policy', [
     "default-src 'none'",
-    "script-src 'self' 'unsafe-inline'",
+    // T04: no 'unsafe-inline'. It is what made the OSC-8 javascript: XSS
+    // executable in the authenticated origin (fixed in 3.2.19). Dropping it
+    // required three things first: the client block moved to app.js (T03),
+    // the 21 inline handler attributes converted to addEventListener (T04a),
+    // and setup.html's block moved to setup.js (T04b). gen-icon.html was
+    // moved out of public/ rather than fixed -- an unreferenced dev utility
+    // that was being served to every tailnet peer.
+    "script-src 'self'",
+    // style-src keeps 'unsafe-inline': the grid renderer sets per-cell inline
+    // styles via applySgr, so removing it needs a CSS-custom-property rewrite.
+    // Tracked separately -- style injection is not the XSS path that mattered.
     "style-src 'self' 'unsafe-inline'",
-    "connect-src 'self' ws: wss:",
+    // T04: narrowed from `'self' ws: wss:`. The wildcard schemes allowed an
+    // injected script to open a socket to ANY host -- an open exfiltration
+    // channel. The client only ever connects to its own origin.
+    "connect-src 'self'",
     "img-src 'self' data: blob:",
     "font-src 'self'",
     "frame-ancestors 'none'",
