@@ -552,3 +552,79 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ══ T13: responsive breakpoints ════════════════════════════════════
+   Everything above this line is phone-first by construction -- the
+   original client only ever ran on a 390px iPhone, so widths are pinned
+   to phone values (280px auth copy, 180px session name, 100px pill dir)
+   and the session switcher is a bottom overlay because one session fills
+   the screen. On an iPad none of that holds: there is room for the tab
+   strip to stay on screen, and the terminal should own the viewport.
+
+   820px  = iPad portrait and up (tablet layout: persistent tab strip,
+            full-viewport terminal, phone width caps lifted).
+   1180px = iPad landscape / desktop (more generous chrome).
+
+   html/body are overflow:hidden, so no breakpoint can introduce a
+   horizontal body scroll. */
+@media (min-width: 820px) {
+  /* -- phone width caps lifted -- */
+  #auth-screen .sub { max-width: 420px; }
+  .auth-card { width: 360px; }
+  .sess-name { max-width: 420px; font-size: 18px; }
+  .sess-dir { font-size: 12px; }
+  #tab-pill .pill-dir { max-width: 260px; }
+
+  #header { padding: 8px 16px; padding-top: max(8px, env(safe-area-inset-top)); }
+  .term-wrap {
+    left: max(10px, env(safe-area-inset-left));
+    right: max(10px, env(safe-area-inset-right));
+  }
+
+  /* -- full-viewport terminal --
+     The quick-action bar exists to reach Esc/Up/Down without a keyboard.
+     A tablet has one, and T12 forwards those keys directly, so the bar is
+     pure vertical cost here. */
+  #qbar { display: none; }
+
+  /* -- persistent tab strip --
+     The pill + count button + slide-up overlay are a one-session-at-a-time
+     affordance. With room on screen the sessions live in the bar itself. */
+  #tab-pill, #tab-count-btn { display: none; }
+  #tab-switcher, #tab-switcher.open {
+    display: flex; position: static; flex: 1 1 auto;
+    max-height: none; overflow-x: auto; overflow-y: hidden;
+    border-top: none; box-shadow: none; background: none;
+    gap: 6px; align-items: stretch; min-width: 0;
+  }
+  #tab-switcher .switcher-item {
+    width: auto; flex: 0 0 auto; max-width: 220px;
+    min-height: 36px; padding: 6px 10px;
+    border: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--surface-alt);
+  }
+  #tab-switcher .switcher-item.active {
+    border-color: var(--accent); border-left-width: 1px;
+    background: var(--accent-muted); color: var(--text);
+  }
+  #tab-switcher .switcher-new {
+    justify-content: center; min-width: 44px;
+    color: var(--accent-light); font-weight: 700; font-size: 16px;
+  }
+  #tabs {
+    padding: 6px 16px;
+    padding-bottom: calc(6px + max(8px, env(safe-area-inset-bottom)));
+  }
+
+  /* Swipe affordances are a narrow-width behaviour (T15). */
+  #swipe-hint-left, #swipe-hint-right, #new-session-hint { display: none; }
+}
+
+@media (min-width: 1180px) {
+  .sess-name { max-width: 600px; }
+  .auth-card { width: 400px; }
+  #header { padding: 10px 20px; padding-top: max(10px, env(safe-area-inset-top)); }
+  #tabs { padding: 8px 20px; padding-bottom: calc(8px + max(8px, env(safe-area-inset-bottom))); }
+  #input-bar { padding: 4px 20px; }
+  #tab-switcher .switcher-item { max-width: 300px; }
+}
