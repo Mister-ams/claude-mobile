@@ -9,6 +9,26 @@ on:
       - master
 
 jobs:
+  deps:
+    name: dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # npm ci installs exactly the tree in package-lock.json and fails when
+      # package.json and the lockfile have drifted. install.sh and update.sh
+      # run the same command, so CI proves what the installers actually do.
+      - name: install from lockfile
+        run: npm ci
+
+      - name: audit (high severity and above)
+        run: npm audit --audit-level=high
+
   syntax:
     name: syntax checks
     runs-on: ubuntu-latest
