@@ -630,6 +630,48 @@ function isAllowedOrigin(origin) {
   return ALLOWED_ORIGINS.has(String(origin || '').trim().toLowerCase().replace(/\/$/, ''));
 }
 
+// T19 (R3): CSRF guard for state-changing endpoints. The localhost gate alone
+// does not stop a malicious page open in the LAPTOP's browser: a bodyless POST
+// with no custom headers is a CORS "simple request", so it fires with no
+// preflight and the attacker never needs to read the response -- enough to
+// overwrite .totp-secret and break the operator's authenticator.
+//
+// Accepted evidence that the request is same-origin, in order:
+//   1. Sec-Fetch-Site: same-origin -- every current browser sends it, and a
+//      cross-site page cannot forge it (it is a forbidden header name).
+//   2. an Origin header on the allowlist -- for browsers predating (1); they
+//      still attach Origin to cross-origin POSTs, which is what rejects them.
+//   3. no browser headers at all, plus an application/json body -- non-browser
+//      tooling. A cross-site page cannot imitate this: a no-cors fetch may not
+//      set that content type, and a CORS fetch would need a preflight that this
+//      server never answers.
+// A bodyless POST with no browser evidence is exactly the simple-request shape
+// the finding describes, so it is refused.
+function requireSameSite(req, res, next) {
+  const site = req.headers['sec-fetch-site'];
+  const origin = req.headers.origin;
+  const contentType = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
+  const hasBody = Number(req.headers['content-length'] || 0) > 0 || !!req.headers['transfer-encoding'];
+
+  let sameSite = null; // true | false | null = no browser evidence either way
+  if (site) sameSite = (site === 'same-origin' || site === 'none');
+  else if (origin) sameSite = isAllowedOrigin(origin);
+
+  if (sameSite === false) {
+    audit('SECURITY', `Cross-site ${req.method} ${req.path} rejected (sec-fetch-site=${site || 'n/a'}, origin=${String(origin || 'n/a').slice(0, 120)})`, req.ip);
+    return res.status(403).json({ error: 'Cross-site request rejected' });
+  }
+  if (hasBody && contentType !== 'application/json') {
+    audit('SECURITY', `${req.method} ${req.path} rejected: content-type ${contentType || 'none'}`, req.ip);
+    return res.status(415).json({ error: 'application/json required' });
+  }
+  if (!hasBody && sameSite === null) {
+    audit('SECURITY', `${req.method} ${req.path} rejected: no same-origin evidence`, req.ip);
+    return res.status(403).json({ error: 'Same-origin request required' });
+  }
+  next();
+}
+
 // ─── Express ─────────────────────────────────────────────────────
 const app = express();
 // Trust X-Forwarded-For from loopback (tailscale serve proxies HTTPS -> localhost)
@@ -672,7 +714,7 @@ app.get('/api/setup/status', (req, res) => {
   });
 });
 
-app.post('/api/setup/init', async (req, res) => {
+app.post('/api/setup/init', requireSameSite, async (req, res) => {
   if (!isLocalhost(req)) return res.status(403).json({ error: 'Localhost only' });
   if (isSetupComplete()) return res.json({ error: 'Already configured' });
   const secret = totpConfigured() ? totpSecret : generateTotpSecret();
@@ -686,7 +728,7 @@ app.post('/api/setup/init', async (req, res) => {
   }
 });
 
-app.post('/api/setup/verify', (req, res) => {
+app.post('/api/setup/verify', requireSameSite, (req, res) => {
   if (!isLocalhost(req)) return res.status(403).json({ error: 'Localhost only' });
   if (verifyTotp(req.body.code)) {
     audit('SETUP', 'TOTP verified -- setup complete');
@@ -830,7 +872,7 @@ app.post('/api/passkey/auth-verify', async (req, res) => {
 
 
 // Kill switch
-app.post('/api/kill', requireSession, (req, res) => {
+app.post('/api/kill', requireSameSite, requireSession, (req, res) => {
   audit('SYSTEM', 'Remote kill switch activated', req.ip);
   res.json({ status: 'shutting down' });
   setTimeout(() => process.exit(0), 500);
@@ -847,7 +889,7 @@ app.get('/api/auth/status', (_req, res) => {
 });
 
 // TOTP setup (requires session token -- bootstrap or passkey authed)
-app.post('/api/totp/setup', requireSession, (req, res) => {
+app.post('/api/totp/setup', requireSameSite, requireSession, (req, res) => {
   if (totpConfigured()) {
     return res.json({ already: true, uri: getTotpUri() });
   }
@@ -856,7 +898,7 @@ app.post('/api/totp/setup', requireSession, (req, res) => {
   res.json({ uri: getTotpUri(), secret: totpSecret });
 });
 
-app.post('/api/totp/verify-setup', requireSession, (req, res) => {
+app.post('/api/totp/verify-setup', requireSameSite, requireSession, (req, res) => {
   if (verifyTotp(req.body.code)) {
     audit('AUTH', 'TOTP setup verified');
     res.json({ verified: true });
@@ -867,7 +909,7 @@ app.post('/api/totp/verify-setup', requireSession, (req, res) => {
 
 // ─── TOTP Re-enrollment (localhost-only) ──────────────────────
 
-app.post('/api/totp/reset', async (req, res) => {
+app.post('/api/totp/reset', requireSameSite, async (req, res) => {
   if (!isLocalhost(req)) return res.status(403).json({ error: 'Localhost only' });
   try {
     generateTotpSecret();
@@ -881,7 +923,7 @@ app.post('/api/totp/reset', async (req, res) => {
   }
 });
 
-app.post('/api/totp/verify-reset', express.json(), (req, res) => {
+app.post('/api/totp/verify-reset', requireSameSite, express.json(), (req, res) => {
   if (!isLocalhost(req)) return res.status(403).json({ error: 'Localhost only' });
   if (verifyTotp(req.body.code)) {
     // Clear all lockouts
