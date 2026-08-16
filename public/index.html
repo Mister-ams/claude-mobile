@@ -25,14 +25,18 @@
   <div class="auth-card">
     <p class="sub" id="auth-label">Authenticate to connect</p>
 
-    <button class="auth-primary" id="passkey-btn" onclick="authAction('passkey')"
+    <!-- T04a: every handler on this page is bound with addEventListener in
+         app.js. No inline on* attributes anywhere -- CSP script-src governs
+         handler ATTRIBUTES as well as script blocks, so an onclick= here
+         would silently stop working the moment 'unsafe-inline' is dropped. -->
+    <button class="auth-primary" id="passkey-btn"
             aria-label="Login with Face ID">Login with Face ID</button>
 
     <div id="totp-section">
       <p class="sub">Enter verification code</p>
       <input type="tel" id="totp-input" class="totp-input" maxlength="6" placeholder="000000"
              autocapitalize="off" autocomplete="one-time-code" aria-label="TOTP verification code">
-      <button class="auth-btn" id="auth-submit-btn" onclick="authAction('totp')">Verify</button>
+      <button class="auth-btn" id="auth-submit-btn">Verify</button>
     </div>
 
     <div id="setup-msg">
@@ -50,7 +54,6 @@
       <div style="display:flex;align-items:center">
         <span class="dot" id="dot"></span>
         <input type="text" class="sess-name" id="sname" value="No session"
-               onfocus="this.select()" onblur="commitRename()" onkeydown="if(event.key==='Enter'){this.blur()}"
                autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false"
                aria-label="Session name">
       </div>
@@ -81,19 +84,21 @@
       <div class="scroll-divider"></div>
       <div class="scroll-zone scroll-zone-down" id="sz-down"><div class="scroll-flash" id="sf-down"></div><span class="scroll-icon">&#9660;</span></div>
     </div>
-    <div id="empty-state" onclick="newSession()" role="button" aria-label="Start new Claude session">
+    <div id="empty-state" role="button" aria-label="Start new Claude session">
       <div class="empty-icon">+</div>
       <p>Tap to start a Claude session</p>
     </div>
   </div>
 
   <div id="diag"></div>
-  <div id="qbar" onmousedown="event.preventDefault()" ontouchstart="if(!event.target.closest('.qb'))event.preventDefault()">
-    <button class="qb" ontouchend="event.preventDefault();clearPrompt()" onclick="clearPrompt()" aria-label="Clear prompt">Clear</button>
-    <button class="qb" ontouchend="event.preventDefault();editLast()" onclick="editLast()" aria-label="Edit last message">Edit</button>
-    <button class="qb" ontouchend="event.preventDefault();qsend('\x1b')" onclick="qsend('\x1b')" aria-label="Escape">Esc</button>
-    <button class="qb" ontouchend="event.preventDefault();qsend('\x1b[A')" onclick="qsend('\x1b[A')" aria-label="Arrow up">Up</button>
-    <button class="qb" ontouchend="event.preventDefault();qsend('\x1b[B')" onclick="qsend('\x1b[B')" aria-label="Arrow down">Down</button>
+  <!-- data-qb names the action; app.js owns the byte sequence and the
+       touchend/click pairing (the iOS double-fire guard). -->
+  <div id="qbar">
+    <button class="qb" data-qb="clear" aria-label="Clear prompt">Clear</button>
+    <button class="qb" data-qb="edit" aria-label="Edit last message">Edit</button>
+    <button class="qb" data-qb="esc" aria-label="Escape">Esc</button>
+    <button class="qb" data-qb="up" aria-label="Arrow up">Up</button>
+    <button class="qb" data-qb="down" aria-label="Arrow down">Down</button>
   </div>
 
   <div style="position:relative">
@@ -116,13 +121,13 @@
 
   <div id="tabs">
     <div id="tab-switcher"></div>
-    <button id="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme"><span id="theme-char">&#9790;</span></button>
-    <div id="tab-pill" onclick="scrollBottom()" role="button" aria-label="Scroll to bottom">
+    <button id="theme-toggle" aria-label="Toggle theme"><span id="theme-char">&#9790;</span></button>
+    <div id="tab-pill" role="button" aria-label="Scroll to bottom">
       <span class="pill-notify"></span>
       <span class="pill-name">No session</span>
       <span class="pill-dir"></span>
     </div>
-    <button id="tab-count-btn" onclick="toggleSwitcher()" aria-label="Switch tabs"><span class="count-text">0</span><span class="attn-badge"></span></button>
+    <button id="tab-count-btn" aria-label="Switch tabs"><span class="count-text">0</span><span class="attn-badge"></span></button>
   </div>
   <div id="swipe-hint-left"></div>
   <div id="swipe-hint-right"></div>
