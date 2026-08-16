@@ -78,6 +78,11 @@ Setup: open `http://localhost:3456/setup` on laptop to configure TOTP.
 - Port 3456 must be free (PM2 manages lifecycle; `pm2 stop claude-mobile` to free it)
 - Passkeys must be re-registered if tailscaleHostname changes (rpID binding)
 - Text and Enter must be sent as single atomic pty write (qsend(t + '\r')) -- separate writes race in the pipeline
+- iOS Safari serves stale HTML across `pm2 restart` despite `Cache-Control: no-cache, no-store, must-revalidate`. Tab close + reopen busts it; in-tab reload sometimes does not
+- iOS Safari probes fallback char metrics if SF Mono / Menlo has not resolved at measurement time -- 7.13px instead of 7.81px, a 5-col over-estimate. The `document.fonts.ready` callback corrects it
+- Multi-client PTY resize race: clients on the same session each send their own resize, last writer wins. `doResize` must compare against `grid.cols` (snapshot ground truth), never a local `lastCols` cache
+- `touch-action: pan-y` is required on scroll containers under iOS; `auto` lets iOS evaluate horizontal pans first and breaks JS swipe handlers
+- ResizeObserver is the cheapest signal for "session became visible after being switched away" -- catches the display:none -> block transition that snapshots arriving while hidden mis-render against (clientHeight=0)
 
 ## Renderer
 
@@ -89,7 +94,10 @@ Per-WS `gridRenderer` flag set from the `connect` message's `renderer` field (`s
 
 ## Current State
 
-v3.2.18 (head: 8b3baf2). Render-pipeline initiative CLOSED 2026-05-04: 18 patch releases across W1-W7. Grid is default; xterm fallback retained. [verified -- git log + pm2 list]
+v3.3.0. Grid renderer is default; xterm fallback retained via `?renderer=xterm`.
 
-Pointers: `HANDOVER.md` (current state + decisions), `.planning/STATE-render-pipeline.yaml` (canonical per-wave commits + retrospective), `memory/project_w6_history_render_bug.md` (post-mortem of the cutover bug), `guide-tui-rendering-references.md` (OpenTUI + CLI rendering analysis).
-Completed (archived): scrollback-and-dtach, v3.1.3-hardening, v3.1.4-should-fix, v3.1.6-review-fixes, architecture-cleanup, audit-v3.1.3-review, render-pipeline (W1-W7).
+Current state, open items, the herdr evaluation and the security assessment live in the
+auto-memory project file `project_otg.md` -- that is the single pointer, kept outside this repo.
+
+Repo-local references: `memory/project_w6_history_render_bug.md` (grid-cutover post-mortem),
+`guide-tui-rendering-references.md` (OpenTUI + CLI rendering analysis), `README.md` (install + run).

@@ -67,13 +67,13 @@ One line, shipped in 3.2.7 (commit dc29012):
 
 ## Verification chain
 
-End-to-end proof landed in three layers before the cutover retry:
+End-to-end proof landed in three layers before the cutover retry. The
+probe scripts themselves were retired with `.planning/`; what they
+established is recorded here.
 
-1. `.planning/spike-w6-connect-probe.js` -- WS-level: bare connect returns
-   `scrollback`, renderer-tagged returns `snapshot`. Confirmed the server
-   contract asymmetry.
-2. `.planning/spike-w6-browser-test.py` + `spike-w6-input-inject.js` --
-   Playwright A/B against the same fresh session at iPhone 14 viewport:
+1. WS-level probe: bare connect returns `scrollback`, renderer-tagged
+   connect returns `snapshot`. Confirmed the server contract asymmetry.
+2. Playwright A/B against the same fresh session at iPhone 14 viewport:
    unpatched -> post-reconnect marker NOT visible (frozen); patched ->
    marker visible (live).
 3. Audit log on 3.2.7 prod: `[SNAPSHOT] cm-1 viewport=31 scrollback=1045
@@ -97,7 +97,7 @@ same IP. Forced a full Safari tab close + reopen to bust the cache.
 
 - 11 follow-on grid-mode polish patches (3.2.7..3.2.17) shipped before
   the T24 retry, addressing every visible regression discovered during
-  soak testing. See `.planning/STATE-render-pipeline.yaml`.
+  soak testing. The constraints they established are in `CLAUDE.md`.
 - T24 retry shipped 3.2.18 on 2026-05-04. Cutover successful.
 - T26-T28 (delete legacy WS scrollback handler, drop xterm.js vendor,
   sweep CLAUDE.md) explicitly held -- legacy xterm path stays as a
