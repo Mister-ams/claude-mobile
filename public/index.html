@@ -50,6 +50,17 @@
       </div>
       <div class="sess-dir" id="sdir"></div>
     </div>
+    <button id="settings-btn" aria-label="Settings" aria-expanded="false" aria-controls="settings-panel">&#9881;</button>
+    <!-- T12: client settings. Wired with addEventListener in app.js rather
+         than inline onclick so the panel survives the T04 CSP tightening
+         that drops 'unsafe-inline' from script-src. -->
+    <div id="settings-panel" role="group" aria-label="Client settings">
+      <div class="set-row">
+        <label for="set-hwkb">Hardware keyboard</label>
+        <input type="checkbox" id="set-hwkb">
+      </div>
+      <p class="set-note">Keys go straight to the terminal unless the compose box has focus. Cmd-K composes, Esc returns.</p>
+    </div>
   </div>
 
   <div id="term-area">
