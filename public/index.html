@@ -999,15 +999,31 @@ function applySgr(span, sgr) {
   // sgr.hyperlink handled in renderRow (T21).
 }
 
+// Terminal output is untrusted: any OSC 8 escape Claude prints -- from a
+// README, a fetched page, a package name -- reaches renderRow. Assigning it
+// straight to el.href admits javascript: and data: URIs into the
+// authenticated origin. Parse with the URL API rather than matching the raw
+// string: the parser strips embedded tab/CR/LF, so "java\nscript:" cannot
+// slip a regex.
+const SAFE_LINK_SCHEMES = ['http:', 'https:', 'mailto:'];
+function safeHref(raw) {
+  if (typeof raw !== 'string' || !raw) return null;
+  try {
+    const u = new URL(raw, location.href);
+    return SAFE_LINK_SCHEMES.includes(u.protocol) ? u.href : null;
+  } catch (e) { return null; }
+}
+
 function renderRow(runs) {
   const div = document.createElement('div');
   div.className = 'grid-row';
   for (const run of runs) {
     // T21: cells inside an OSC 8 link become anchors instead of spans.
     let el;
-    if (run.sgr && run.sgr.hyperlink) {
+    const href = run.sgr && run.sgr.hyperlink ? safeHref(run.sgr.hyperlink) : null;
+    if (href) {
       el = document.createElement('a');
-      el.href = run.sgr.hyperlink;
+      el.href = href;
       el.target = '_blank';
       el.rel = 'noopener noreferrer';
     } else {
