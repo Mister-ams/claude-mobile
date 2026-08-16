@@ -1535,13 +1535,28 @@ function recoverDtachSessions() {
 const allClients = new Set();
 const MAX_CONNECTIONS_PER_IP = 10;
 
+function isLoopbackIP(addr) {
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1';
+}
+
+// T22 (A2): walk the X-Forwarded-For chain from the SOCKET end and return the
+// first hop that is not trusted -- the same algorithm proxy-addr runs for
+// Express's `trust proxy: 'loopback'` two functions away, so the HTTP and
+// WebSocket paths now attribute the same client.
+//
+// The old code took xff.split(',')[0], the LEFTMOST entry: the position an
+// attacker fully controls, because a proxy appends the real peer on the right.
+// tailscale serve happens to strip inbound XFF, which is the only reason this
+// was not exploitable -- an external behaviour this code never verified.
 function getClientIP(ws) {
   // tailscale serve proxies from localhost -- trust X-Forwarded-For from loopback only
   const peerIP = ws._socket?._peername?.address || ws._req?.socket?.remoteAddress || 'unknown';
-  const isLoopback = peerIP === '127.0.0.1' || peerIP === '::1' || peerIP === '::ffff:127.0.0.1';
-  if (isLoopback) {
-    const xff = ws._req?.headers?.['x-forwarded-for'];
-    if (xff) return xff.split(',')[0].trim();
+  if (!isLoopbackIP(peerIP)) return peerIP;
+  const xff = ws._req?.headers?.['x-forwarded-for'];
+  if (!xff) return peerIP;
+  const hops = String(xff).split(',').map(h => h.trim()).filter(Boolean);
+  for (let i = hops.length - 1; i >= 0; i--) {
+    if (!isLoopbackIP(hops[i])) return hops[i];
   }
   return peerIP;
 }
