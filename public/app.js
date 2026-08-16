@@ -999,16 +999,24 @@ function makeGridTerm() {
   return grid;
 }
 
-function measureCharWidth(grid) {
-  if (grid.charWidth > 0) return grid.charWidth;
+// Measures one monospace cell inside `container`, at whatever font the
+// container currently resolves. T14 made the font size a setting, so every
+// cols/rows calculation has to go through a live probe -- the old hardcoded
+// 7.8px in newSession() was only ever right at 13px.
+function probeCell(container) {
   const probe = document.createElement('span');
   probe.style.cssText = 'position:absolute;visibility:hidden;font:inherit;line-height:inherit;white-space:pre';
   probe.textContent = 'X';
-  grid.wrap.appendChild(probe);
-  const w = probe.getBoundingClientRect().width;
-  grid.wrap.removeChild(probe);
-  grid.charWidth = w;
-  return w;
+  container.appendChild(probe);
+  const r = probe.getBoundingClientRect();
+  container.removeChild(probe);
+  return { w: r.width, h: r.height };
+}
+
+function measureCharWidth(grid) {
+  if (grid.charWidth > 0) return grid.charWidth;
+  grid.charWidth = probeCell(grid.wrap).w;
+  return grid.charWidth;
 }
 
 function ensureRowHeight(grid) {
@@ -1323,6 +1331,7 @@ function isWideLayout() { return wideMQ.matches; }
 function onLayoutChange() {
   document.body.classList.toggle('wide', isWideLayout());
   applyHwKeyboard();  // T12: the default (on for tablets) tracks the boundary
+  applyFontSize();    // T14: so does the default font size
   renderTabs();
 }
 
@@ -1420,11 +1429,21 @@ function newSession() {
   if (!ws || ws.readyState !== 1) return;
   const num = sessionList.length + 1;
   const defaultDir = (projects && projects.length) ? projects[0].dir : '';
-  // Send screen dimensions so dtach session matches phone width
-  const termArea = document.getElementById('term-area');
-  const charW = 7.8; // approximate char width at 13px SF Mono
-  const lineH = 13 * 1.286; // fontSize * lineHeight
-  const cols = Math.floor((termArea?.clientWidth || 320) / charW);
+  // Send screen dimensions so the new session starts at this client's width.
+  // T14: measure the cell instead of assuming 7.8px -- that constant was the
+  // char width at 13px SF Mono only, and the font size is now a setting, so
+  // it over-reported columns by ~23% at 16px.
+  const live = activeSession !== null ? computeGridDims(gridTerms[activeSession]) : null;
+  let cols = live ? live.cols : 50;
+  if (!live) {
+    const probeWrap = document.createElement('div');
+    probeWrap.className = 'grid-term';
+    probeWrap.style.cssText = 'position:absolute;visibility:hidden;width:100%;height:0';
+    termArea.appendChild(probeWrap);
+    const cell = probeCell(probeWrap);
+    termArea.removeChild(probeWrap);
+    if (cell.w > 0) cols = Math.max(10, Math.floor((termArea.clientWidth || 320) / cell.w));
+  }
   const rows = 200;
   queueSend({ type: 'create', name: 'SESSION ' + num, dir: defaultDir, cols, rows });
 }
@@ -1782,6 +1801,14 @@ function updateSendBtn() {
 
 let lastMsgHeight = 0;
 function autoGrow() {
+  // T14: while the compose box is collapsed (hardware-keyboard mode, not
+  // focused) it is sized by CSS. An inline height from here would win the
+  // cascade and re-expand it after every send.
+  if (document.body.classList.contains('hwkb') && document.activeElement !== msgInput) {
+    msgInput.style.height = '';
+    lastMsgHeight = -1;
+    return;
+  }
   // Only measure if content changed length (avoid unnecessary reflows)
   const len = msgInput.value.length;
   if (len === lastMsgHeight) return;
@@ -1946,6 +1973,10 @@ msgInput.addEventListener('input', () => {
 msgInput.addEventListener('blur', () => {
   setTimeout(() => acEl.classList.remove('show'), 150);
 });
+// T14: the collapsed/expanded compose box is a CSS :focus-within state, but
+// autoGrow's inline height has to be recomputed across the transition.
+msgInput.addEventListener('focus', () => { lastMsgHeight = -1; autoGrow(); });
+msgInput.addEventListener('blur', () => { lastMsgHeight = -1; autoGrow(); });
 
 // ══ T12: hardware keyboard ══════════════════════════════════════════
 // Until now there was no path from a physical key to the PTY at all. Every
@@ -1996,6 +2027,56 @@ function applyHwKeyboard() {
   msgInput.placeholder = on ? 'Compose (Cmd-K)...' : 'Type a message...';
 }
 
+// ── T14: terminal font size ─────────────────────────────────────────
+// The font was 13px because on a phone the software keyboard eats ~40% of
+// the viewport and that is the only size that leaves useful context in the
+// strip that remains. A hardware keyboard never raises that keyboard, so
+// the constraint is gone: at 1366px, 16px still gives ~140 columns against
+// the iPhone's ~48, and readable beats dense.
+//
+// A font change MUST end in a PTY resize -- the server's headless mirror is
+// sized in cells, so if the client re-fits and the server does not, every
+// row wraps against the wrong width until the next unrelated resize.
+const FONT_SIZE_KEY = 'cm-font-size';
+const FONT_MIN = 10, FONT_MAX = 24;
+const FONT_DEFAULT_PHONE = 13, FONT_DEFAULT_TABLET = 16;
+
+function defaultFontSize() { return isWideLayout() ? FONT_DEFAULT_TABLET : FONT_DEFAULT_PHONE; }
+
+function getFontSize() {
+  const v = parseInt(localStorage.getItem(FONT_SIZE_KEY), 10);
+  if (Number.isFinite(v) && v >= FONT_MIN && v <= FONT_MAX) return v;
+  return defaultFontSize();
+}
+
+function setFontSize(px) {
+  const v = Math.max(FONT_MIN, Math.min(FONT_MAX, Math.round(Number(px) || 0)));
+  localStorage.setItem(FONT_SIZE_KEY, String(v));
+  applyFontSize();
+}
+
+function applyFontSize() {
+  const px = getFontSize();
+  document.documentElement.style.setProperty('--term-font-size', px + 'px');
+  // xterm fallback path: its renderer owns its own font metrics.
+  Object.keys(terms).forEach(id => {
+    try { terms[id].options.fontSize = px; } catch (e) { clientLog('font xterm: ' + e.message); }
+  });
+  // Grid path: both cached metrics are now stale.
+  Object.keys(gridTerms).forEach(id => {
+    gridTerms[id].charWidth = 0;
+    gridTerms[id].rowHeight = 0;
+  });
+  const val = $('set-font-val'); if (val) val.textContent = px;
+  const slider = $('set-font'); if (slider) slider.value = px;
+  // Re-window on the next frame (row height changed), then tell the server.
+  scheduleOnce(() => {
+    Object.keys(gridTerms).forEach(id => renderGridWindow(gridTerms[id]));
+    doResize();
+    refreshSettingsPanel();
+  });
+}
+
 // ── Settings panel ──
 function settingsOpen() { return $('settings-panel').classList.contains('open'); }
 
@@ -2015,10 +2096,19 @@ function toggleSettings() { settingsOpen() ? closeSettings() : openSettings(); }
 function refreshSettingsPanel() {
   const box = $('set-hwkb');
   if (box) box.checked = hwKeyboardEnabled();
+  const px = getFontSize();
+  const val = $('set-font-val'); if (val) val.textContent = px;
+  const slider = $('set-font'); if (slider) slider.value = px;
+  const cols = $('set-cols');
+  if (cols) {
+    const d = activeSession !== null ? computeGridDims(gridTerms[activeSession]) : null;
+    cols.textContent = d ? `Terminal is ${d.cols} x ${d.rows} cells.` : '';
+  }
 }
 
 $('settings-btn').addEventListener('click', e => { e.preventDefault(); toggleSettings(); });
 $('set-hwkb').addEventListener('change', e => setHwKeyboard(e.target.checked));
+$('set-font').addEventListener('input', e => setFontSize(e.target.value));
 document.addEventListener('click', e => {
   if (!settingsOpen()) return;
   if (e.target.closest('#settings-panel') || e.target.closest('#settings-btn')) return;
@@ -2173,23 +2263,29 @@ document.addEventListener('paste', e => {
 });
 
 applyHwKeyboard();
+applyFontSize();
+
+// T19 of W5: grid mode has no fit addon -- dims come from a probe span.
+// Extracted from doResize by T14 so the font-size setting, newSession and
+// the settings readout all compute columns the same way.
+function computeGridDims(grid) {
+  if (!grid || grid.wrap.clientWidth === 0) return null;
+  const cell = probeCell(grid.wrap);
+  if (cell.w <= 0 || cell.h <= 0) return null;
+  return {
+    cols: Math.max(10, Math.floor(grid.wrap.clientWidth / cell.w)),
+    rows: Math.max(5, Math.floor(grid.wrap.clientHeight / cell.h)),
+  };
+}
 
 let lastCols = 0, lastRows = 0;
 function doResize() {
   if (activeSession === null) return;
-  // T19 of W5: grid mode has no fit addon. Compute dims from a probe span.
   if (RENDERER_MODE === 'grid') {
     const grid = gridTerms[activeSession];
-    if (!grid || grid.wrap.clientWidth === 0) return;
-    const probe = document.createElement('span');
-    probe.style.cssText = 'position:absolute;visibility:hidden;font:inherit;line-height:inherit;white-space:pre';
-    probe.textContent = 'X';
-    grid.wrap.appendChild(probe);
-    const r = probe.getBoundingClientRect();
-    grid.wrap.removeChild(probe);
-    if (r.width <= 0 || r.height <= 0) return;
-    const cols = Math.max(10, Math.floor(grid.wrap.clientWidth / r.width));
-    const rows = Math.max(5, Math.floor(grid.wrap.clientHeight / r.height));
+    const dims = computeGridDims(grid);
+    if (!dims) return;
+    const { cols, rows } = dims;
     // Skip iff the SERVER already has these dims (per the latest snapshot).
     // Don't compare against lastCols -- another client connected to the same
     // session can resize the PTY out from under us, and a stale local cache
@@ -2281,10 +2377,14 @@ document.addEventListener('touchmove', e => {
 // Prevent ALL double-tap zoom (comprehensive)
 document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
 
-// Prevent pinch zoom
-document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
-document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
-document.addEventListener('gestureend', e => e.preventDefault(), { passive: false });
+// Prevent pinch zoom -- narrow widths only (T14). The zoom lock exists
+// because pinch-zoom competed with a cramped 390px layout; at tablet width
+// the terminal is full-screen with a settable font, so zoom is an
+// accessibility affordance rather than a source of accidental scale. The
+// viewport meta no longer sets user-scalable=no either.
+document.addEventListener('gesturestart', e => { if (!isWideLayout()) e.preventDefault(); }, { passive: false });
+document.addEventListener('gesturechange', e => { if (!isWideLayout()) e.preventDefault(); }, { passive: false });
+document.addEventListener('gestureend', e => { if (!isWideLayout()) e.preventDefault(); }, { passive: false });
 
 
 // ── Send Button Fix (touch-based, not onclick) ──
