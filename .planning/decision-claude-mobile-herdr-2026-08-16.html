@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Mobile (OTG) -- Improvement Review + herdr Decision Sheet</title>
+<style>
+  :root {
+    --ink: #1a1f2b; --muted: #5a6474; --line: #dfe3ea; --bg: #f7f8fa;
+    --card: #ffffff; --accent: #0f4c81; --good: #1a7f4b; --warn: #a05a00; --bad: #b3261e;
+    --chip: #eef2f7;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.55 "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 32px 24px 80px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 18px; margin: 36px 0 10px; color: var(--accent);
+    border-bottom: 2px solid var(--line); padding-bottom: 6px; }
+  h3 { font-size: 15px; margin: 18px 0 6px; }
+  .sub { color: var(--muted); margin-bottom: 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 16px 18px; margin: 12px 0; }
+  .status { border-left: 4px solid var(--bad); }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--line);
+    vertical-align: top; }
+  th { background: var(--chip); font-weight: 600; }
+  code { background: var(--chip); padding: 1px 5px; border-radius: 4px;
+    font: 12.5px/1.4 Consolas, monospace; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .4px;
+    padding: 2px 8px; border-radius: 10px; margin-right: 6px; }
+  .rec { background: #e3f2e9; color: var(--good); }
+  .risk { background: #fdeeee; color: var(--bad); }
+  .hold { background: #fdf3e3; color: var(--warn); }
+  .decision { border-left: 4px solid var(--accent); }
+  textarea { width: 100%; min-height: 56px; border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px; font: 13px Consolas, monospace; background: #fcfcfd; color: var(--ink); }
+  ul { margin: 6px 0 6px 18px; padding: 0; }
+  li { margin: 3px 0; }
+  .kv { color: var(--muted); font-size: 13px; }
+  .num { text-align: right; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Claude Mobile (OTG) -- Improvement Review</h1>
+<div class="sub">2026-08-16 -- codebase audit (v3.2.18, HEAD d000058) + herdr research (v0.8.0) + iPad retarget.
+Five decisions, reliability-first sequencing, comment box per item. Security assessment appended separately.</div>
+
+<div class="card status">
+  <strong>Live status: the service is DOWN.</strong> No process in Windows or WSL PM2, nothing
+  listening on :3456, zero <code>/tmp/cm-*.dtach</code> sockets. A reboot at some point since
+  May took the whole stack down and nothing resurrects it; all sessions were lost with it.
+  This is the exact failure class this review addresses: dtach gives no restore, PM2 was never
+  wired to boot, and WSL shutdown erases the sockets. See D3 (do it regardless of direction).
+</div>
+
+<h2>1. The core finding</h2>
+<div class="card">
+  <p>Roughly <strong>520 of server.js's 2,033 LOC -- and its most fragile 520 --</strong> exist
+  only because dtach provides no structured API and no agent-state signal:</p>
+  <ul>
+    <li><strong>dtach/WSL layer, 308 LOC</strong> (~200 pure workaround): every query is a
+      synchronous <code>execSync wsl.exe bash -c</code> shell-out; session discovery is
+      <code>ls /tmp/cm-*.dtach</code> + regex; liveness is <code>test -S</code>; launch is a
+      blind <code>cmd.exe /c claude\r</code> write after a hardcoded 500ms sleep; recovery
+      attaches at hardcoded 80x24; reattach-by-respawn needs a generation counter to fence
+      stale closures (server.js:42-157, 1225-1404).</li>
+    <li><strong>Attention detection, ~107 LOC</strong>: 12 heuristic regexes over de-ANSI'd
+      output -- including Claude Code's randomized spinner verbs ("Crunched/Cogitated for"),
+      release-volatile by construction. Miss rate is high enough that ATTN-MISS logging is
+      permanent instrumentation (server.js:912-983).</li>
+    <li><strong>Out-of-band state, ~85 LOC</strong>: <code>.session-meta.json</code> for names/dirs
+      dtach cannot store, plus the 400KB ring-buffer replay path that is dead in default grid
+      mode.</li>
+  </ul>
+  <p><strong>herdr ships all of this as its core product</strong>, maintained upstream at weekly
+  cadence: a daemon that owns PTYs, a JSON Socket API
+  (<code>pane.read/send_text</code>, <code>events.subscribe</code>, <code>session.snapshot</code>),
+  agent states <code>idle / working / blocked / done</code> with a maintained Claude Code
+  manifest, and -- the step-change dtach can never offer -- <strong>restart restore including
+  native Claude Code conversation resume by session identity</strong>. A reboot today loses
+  everything; under herdr it restores workspaces, panes, cwd and re-attaches the Claude
+  conversations.</p>
+</div>
+
+<h3>Overlap map</h3>
+<table>
+  <tr><th>We hand-built</th><th class="num">LOC</th><th>herdr equivalent</th></tr>
+  <tr><td>dtach spawn/attach/recover via execSync screen-scraping</td><td class="num">308</td>
+      <td>Daemon owns PTYs; workspace/tab/pane API; snapshot restore on restart</td></tr>
+  <tr><td>Attention heuristics (12 regexes, 5s debounce, ATTN-MISS)</td><td class="num">~107</td>
+      <td>Agent states via maintained manifests; <code>events.subscribe</code> push stream; <code>agent.wait</code></td></tr>
+  <tr><td>.session-meta.json name/dir persistence + 80x24 recovery</td><td class="num">~85</td>
+      <td><code>session.json</code> persists names, cwd, layout, focus, dims</td></tr>
+  <tr><td>Nothing -- total loss on reboot</td><td class="num">--</td>
+      <td>Shape restore + native Claude session resume (<code>resume_agents_on_restore</code>)</td></tr>
+  <tr><td>Nothing -- Claude-only</td><td class="num">--</td>
+      <td>Codex, Copilot CLI, Devin, etc. behind the same API</td></tr>
+</table>
+
+<div class="card">
+  <strong>What stays ours in every option:</strong> the Tailscale-serve topology, the auth stack
+  (TOTP + WebAuthn + IP-bound tokens + rate limiting, ~479 LOC), E2E crypto (~342 LOC), the grid
+  render pipeline (206 server + 309 client LOC), and the seven waves of iOS Safari polish --
+  keyboard, font metrics, swipe nav, viewport culling -- that no third-party frontend replicates.
+</div>
+
+<h2>2. herdr facts that gate the decision</h2>
+<div class="card">
+  <ul>
+    <li><code>github.com/herdrdev/herdr</code>, v0.8.0 (2026-08-03), <strong>Apache-2.0</strong>
+      (relicensed from AGPL), ~30k stars, weekly stable releases, very active.</li>
+    <li>Socket API = newline-delimited JSON-RPC over a unix socket. <strong>No auth on the
+      socket</strong> -- filesystem perms only. Acceptable here: our Node server is the only
+      consumer and the phone-facing auth/E2E layer stays ours.</li>
+    <li>Claude Code state detection is <em>also heuristic</em> upstream (screen manifests, known
+      lag, issue #1630) -- but it is maintained by 30k stars' worth of users instead of us, and a
+      lifecycle-hook path exists for agents that integrate deeper.</li>
+    <li><strong>Windows native = preview-only beta</strong> (no stable channel, no --remote,
+      ConPTY quirks). The right home is <strong>WSL</strong>, where it is a well-trodden path
+      with no exe-interop issues on the tracker.</li>
+    <li>Pre-1.0: protocol bumps can strand clients -- pin the binary version, upgrade deliberately.</li>
+    <li>Pane history is <strong>off by default</strong> (secret-safety); enable
+      <code>pane_history = true</code> for scrollback replay.</li>
+    <li>Ecosystem proof the socket drives browser terminals: herdr-webui, herdr-gui,
+      benkraus/herdr-mobile, and <strong>Collie</strong> (PWA + push notifications over Tailnet).</li>
+  </ul>
+</div>
+
+<h2>3. Decisions</h2>
+
+<div class="card decision">
+  <h3>D1 -- Direction</h3>
+  <table>
+    <tr><th></th><th>Option</th><th>What happens</th><th>Cost / risk</th></tr>
+    <tr><td><span class="tag hold">A</span></td>
+      <td><strong>Ops-only fix</strong></td>
+      <td>PM2 resurrect at boot + WSL keepalive + watchdog. No architecture change.</td>
+      <td>~0.5 day. Keeps all 520 LOC of scaffolding + heuristics; reboots still lose every
+        session and conversation.</td></tr>
+    <tr><td><span class="tag rec">B -- RECOMMENDED</span></td>
+      <td><strong>herdr as the session backbone, keep our client</strong></td>
+      <td>herdr daemon in WSL owns the Claude PTYs. server.js drops the dtach layer, attention
+        heuristics, meta persistence and recovery (-400 to -520 LOC) and instead consumes the
+        Socket API (~+150 LOC): pane list/read/send_text for the terminal stream,
+        events.subscribe for state -&gt; push notifications on <code>blocked</code>/<code>done</code>.
+        Phone-facing app -- Tailscale, auth, E2E, grid renderer, swipe UX -- unchanged.</td>
+      <td>~3-5 days after a 1-day spike (S1 below). Risks: pre-1.0 protocol churn (pin version);
+        herdr daemon is a new single point of failure (systemd restart + reconnect logic);
+        stream-fidelity question to settle in S1.</td></tr>
+    <tr><td><span class="tag hold">C</span></td>
+      <td><strong>Retire our client too; adopt Collie / herdr-webui</strong></td>
+      <td>claude-mobile becomes configuration. Zero owned code.</td>
+      <td>Loses the iOS-tuned grid renderer, swipe nav, and our auth/E2E; third-party maturity
+        unknown. Worth a 1-hour trial for calibration, not as the plan.</td></tr>
+  </table>
+  <div class="kv">Recommendation: <strong>B</strong>, gated on spike S1. Optionally trial Collie
+    for an hour first purely to calibrate whether C is closer than expected.</div>
+  <textarea placeholder="D1 comments / verdict..."></textarea>
+</div>
+
+<div class="card decision">
+  <h3>D2 -- How Claude runs inside herdr panes (only if D1 = B)</h3>
+  <ul>
+    <li><span class="tag rec">RECOMMENDED</span> <strong>Native WSL claude</strong>: clean process
+      tree, reliable herdr state detection, native session-resume identity. One-time
+      <code>claude login</code> in WSL. Honest caveat: Windows-resident repos are reached via
+      /mnt/c, which is slower for file-heavy work than today's Windows-native claude process --
+      mitigate by keeping active working copies (or worktrees) on the WSL ext4 side.</li>
+    <li><span class="tag hold">ALTERNATIVE</span> <strong>Keep <code>cmd.exe /c claude</code>
+      interop inside herdr panes</strong>: preserves Windows auth + NTFS speed, but the interop
+      process tree likely defeats herdr's foreground-process agent detection and breaks resume
+      identity. Test both in S1 before committing.</li>
+  </ul>
+  <textarea placeholder="D2 comments / verdict..."></textarea>
+</div>
+
+<div class="card decision">
+  <h3>D3 -- Boot resilience (do regardless of D1)</h3>
+  <ul>
+    <li>Enable systemd in WSL; run the session backbone (herdr, or PM2 under option A) as a
+      systemd unit.</li>
+    <li>Windows Scheduled Task at logon: start the WSL distro, re-assert
+      <code>tailscale serve</code>, start the Node server.</li>
+    <li>Watchdog: the Node server already has a canary/audit layer; add a trivial self-check that
+      the backbone socket answers <code>ping</code>.</li>
+  </ul>
+  <div class="kv">~0.5 day. This alone would have prevented the outage found today.
+    Recommendation: YES, first move.</div>
+  <textarea placeholder="D3 comments / verdict..."></textarea>
+</div>
+
+<div class="card decision">
+  <h3>D4 -- Cleanup batch (independent of herdr)</h3>
+  <ul>
+    <li><strong>478 KB xterm vendor on every page load</strong> (index.html:10,109-112 load it
+      unconditionally; the default grid renderer never touches it). Proposal that respects the
+      earlier keep-the-fallback call: <em>lazy-load</em> the four bundles only when
+      <code>?renderer=xterm</code> is present -- fallback survives, payload drops to ~0. (T27
+      variant; T26 legacy server path is subsumed by option B if chosen.)</li>
+    <li><strong>Delete SESSION.md</strong> -- dated 2026-04-12, still points at a v4-thin-viewer
+      kickoff that was renamed and completed; actively misleading next to HANDOVER.md.</li>
+    <li><strong>Dead code</strong>: <code>wslPathToWin</code> (server.js:93), <code>dumpHeadlessGrid</code>
+      (:1180), <code>client-log</code> no-op round-trips (:1709 + 15 client emit sites), grid-mode-dead
+      scroll zones + keyboard fit remnants (index.html:1864-1946, 2092-2096).</li>
+    <li><strong>Doc/code contradiction</strong>: CLAUDE.md:71 forbids JS touching
+      <code>appEl.style.height</code>; index.html:2086 does it in the visualViewport handler.
+      Decide which is right, fix the other.</li>
+    <li><strong>Post-mortem lesson never implemented</strong>: shared connect-message builder (3 call
+      sites each hand-roll the <code>renderer</code> field; one hardcodes 'grid'). The W6 revert
+      was caused by exactly this omission class.</li>
+    <li>Delete 5-6 merged <code>render-pipeline/*</code> branches + .planning spike artifacts;
+      make <code>audit()</code> async (sync appendFileSync sits on the hot path).</li>
+  </ul>
+  <div class="kv">~0.5-1 day. Recommendation: approve as one batch; sequence with/after B to avoid
+    double-touching the legacy path.</div>
+  <textarea placeholder="D4 comments / verdict..."></textarea>
+</div>
+
+<div class="card decision">
+  <h3>D5 -- Retarget the client to iPad (operator request, 2026-08-16)</h3>
+  <p>Not a skin change. The client is phone-shaped by construction, and three things are simply
+  absent rather than merely tuned wrong:</p>
+  <table>
+    <tr><th>Gap</th><th>Evidence</th><th>Work</th></tr>
+    <tr><td><strong>No hardware-keyboard path at all</strong> -- the headline gap. All four
+      <code>keydown</code> listeners are form-field scoped (index.html:47 rename, :446 TOTP,
+      :450 activity tracker, :1987 message box). Every keystroke reaches the PTY only as a batched
+      <code>qsend(t + '\r')</code> from a text box.</td>
+      <td>index.html:1747-1862</td>
+      <td>Global key handler -&gt; PTY: Esc, Ctrl-C/D/Z, arrows, Tab-completion, Cmd shortcuts.
+        With a Magic Keyboard this is the difference between "usable terminal" and "SMS to a robot".
+        <strong>Biggest single reliability/UX win on iPad.</strong></td></tr>
+    <tr><td><strong>No responsive layout</strong> -- style.css has zero width breakpoints; the only
+      media query is <code>prefers-reduced-motion</code> (style.css:552).</td>
+      <td>style.css</td>
+      <td>Breakpoints at ~820/1180px. At iPad width the terminal is ~120-180 cols instead of ~50 --
+        Claude's TUI (diffs, tool output, tables) stops wrapping into mush.</td></tr>
+    <tr><td><strong>Phone viewport</strong> -- <code>maximum-scale=1.0, user-scalable=no</code>.</td>
+      <td>index.html:5</td>
+      <td>Reconsider zoom lock; keep <code>interactive-widget=resizes-content</code> for the
+        on-screen-keyboard case, but hardware keyboard means it is often inert.</td></tr>
+    <tr><td><strong>Swipe nav earns less</strong> -- 250 LOC of finger-following session switching
+      that exists because a 390px screen shows one session at a time. iPadOS edge gestures also
+      compete with it.</td>
+      <td>index.html:1496-1745</td>
+      <td>On iPad: persistent tab bar, or (with herdr) a real multi-pane view. Keep swipe as a
+        narrow-width behavior, do not make it the primary model.</td></tr>
+    <tr><td><strong>T22 mouse tracking was skipped</strong> as "low value on touch-only mobile"
+      (STATE-render-pipeline.yaml:86). iPad trackpad reverses that calculus.</td>
+      <td>server.js:1149 (<code>mouseTracking:false</code> stub already in the Snapshot)</td>
+      <td>Re-open T22 as a candidate -- the protocol field already exists.</td></tr>
+    <tr><td><strong>Multi-client resize race gets worse</strong> -- last-writer-wins across clients
+      (HANDOVER.md:24). iPad + iPhone both attached to one session will fight over PTY dims.</td>
+      <td>server.js:1681-1707</td>
+      <td>Server-side arbitration (min-of-attached-viewers, or a designated primary) instead of
+        purely client-side defensive re-assertion.</td></tr>
+  </table>
+  <p><strong>The hardware keyboard is what unlocks the screen -- operator's point, and it is the
+  strongest argument for iPad.</strong> On iPhone the software keyboard eats roughly 40% of the
+  viewport, which is <em>why</em> the font is tiny: it is the only way to see useful context in the
+  remaining strip. An external keyboard means the on-screen keyboard never appears, so the terminal
+  takes the <strong>full screen</strong> and can afford a <strong>substantially larger font</strong>.
+  Two knock-on effects:</p>
+  <ul>
+    <li>The bottom message box becomes optional rather than the primary input path -- freeing more
+      vertical space still. Keep it as a compose box for long/multi-line prompts; direct keystrokes
+      handle everything else.</li>
+    <li>All the <code>interactive-widget=resizes-content</code> machinery and the visualViewport
+      keyboard handler (index.html:2086) go quiet on a hardware keyboard -- the single most
+      bug-prone area of the client (7 waves of iOS keyboard fixes) simply stops being exercised.
+      <strong>That is a reliability win, not just an ergonomics one.</strong></li>
+  </ul>
+  <p>Trade-off worth stating: a larger font means fewer columns -- perhaps ~100 rather than the
+  ~180 a small font would give at 1366px. Still roughly double the iPhone's ~50, and readable beats
+  dense. Make font size a setting so it can be tuned against column count in practice.</p>
+  <p><strong>iPad strengthens the herdr case.</strong> herdr's workspace -&gt; tab -&gt; pane
+  hierarchy is wasted on a 390px phone that can only render one pane. On an iPad it maps directly
+  onto a real multi-pane layout -- watch two Claude sessions side by side, each with its own live
+  agent state. The two changes compound; doing them together avoids building a phone-shaped
+  session model twice.</p>
+
+  <h4>Artifact handling -- nice-to-have (operator, 2026-08-16)</h4>
+  <p>Explicitly a nice-to-have, not a reliability item -- but it is cheap on iPad and expensive on
+  iPhone, so it belongs in the iPad track rather than as its own initiative. The house workflow
+  produces HTML decision sheets, diffs, images, and PDFs constantly; today none of them are viewable
+  from the phone. Sketch:</p>
+  <ul>
+    <li>Detect files Claude writes in the session's project dir (or subscribe to a herdr plugin
+      <code>[[events]]</code> hook) and surface a small "artifacts" tray per session.</li>
+    <li>Render inline: HTML in a sandboxed iframe (<strong>note: the R1 CSP tightening constrains
+      this -- design it as a separate origin or a strict sandbox, not an inline injection</strong>),
+      images natively, diffs in a simple viewer, PDFs via the native iPad viewer.</li>
+    <li>Prior art exists on the herdr socket: <code>powerfooI/herdr-gui</code> ships diff viewers,
+      so this is a solved shape rather than a novel build.</li>
+  </ul>
+  <div class="kv">Sequence: after the D5 keyboard + layout work and after D6 Tier 1 (the CSP change
+    directly shapes how HTML artifacts can be rendered safely).</div>
+  <textarea placeholder="D5 comments / verdict..."></textarea>
+</div>
+
+<h2>4. Sequencing -- reliability first</h2>
+<div class="card">
+  <p>Operator priority is stated: <em>start using it again, with higher reliability.</em> That
+  orders the work independently of the herdr decision:</p>
+  <ol>
+    <li><strong>D6 Tier 1 security (~0.5 day)</strong> -- the OSC-8 XSS is live in the shipped
+      default renderer and hands a remote attacker your shell. Five lines. Nothing else goes first.</li>
+    <li><strong>D3 boot resilience (~0.5 day)</strong> -- systemd unit + logon task + watchdog.
+      Nothing else matters if a reboot silently kills it. This week, whatever else is decided.</li>
+    <li><strong>S1 spike (~1 day)</strong> -- gates the herdr direction before any build.</li>
+    <li><strong>D5 hardware keyboard + full-screen larger-font layout</strong> -- what makes the iPad
+      genuinely usable, and quiets the most bug-prone code in the client. Independent of herdr; can
+      run in parallel with S1.</li>
+    <li><strong>D6 Tier 2 + Tier 3</strong> -- Origin checks, XFF, execFileSync, and the E2E decision.</li>
+    <li><strong>D1=B herdr migration (~3-5 days)</strong> -- retires the fragile ~500 LOC and gives
+      real reboot-survival + agent state.</li>
+    <li><strong>D4 cleanup batch</strong> -- sequence after B to avoid double-touching the legacy path.</li>
+    <li><strong>Artifact handling</strong> -- nice-to-have; after the CSP change that shapes it.</li>
+  </ol>
+  <div class="kv">Operator has a further list of specific reliability improvements to fold in --
+    capture them against this sequence.</div>
+</div>
+
+<h2>5. Spike S1 -- gates option B (~1 day)</h2>
+<div class="card">
+  <ul>
+    <li>Install herdr in WSL, pinned at v0.8.0; enable <code>pane_history</code>.</li>
+    <li>Verify over the socket: (a) a per-pane live output stream (or pane.read polling) with
+      enough fidelity to feed our @xterm/headless mirror -- or, better, whether herdr's own
+      pane grid can replace the mirror entirely (would retire another ~250 LOC and the private
+      <code>_extendedAttrs</code> internals reach at server.js:1099);</li>
+    <li>(b) Claude agent-state events under BOTH native-WSL and cmd.exe-interop launch (decides D2);</li>
+    <li>(c) kill + restart the daemon: shape restore + Claude conversation resume actually work;</li>
+    <li>(d) <code>send_text</code> atomicity for text+CR (our known single-write race).</li>
+  </ul>
+  <div class="kv">Output: go/no-go + the confirmed integration shape for B.</div>
+</div>
+
+<h2>6. Security assessment (Opus 5 adversarial pass, verified first-hand)</h2>
+
+<div class="card status">
+  <strong>Honest verdict: over-engineered on one axis, under-engineered on another, and the two
+  barely intersect.</strong> The four layers are a well-built fortress facing the threat model of
+  March 2026 -- when this was exposed via <strong>ngrok to the public internet</strong>
+  (<code>ngrokDomain</code> in config.json at commit a28d6a6; audit log shows real public-internet
+  IPs until 2026-03-19). You retired that exposure when you moved to <code>tailscale serve</code>.
+  The code is a fossil of the old model. Two layers remain genuinely load-bearing; two defend a
+  scenario so narrow they are a net negative -- and the surfaces a realistic 2026 attacker uses
+  have <em>none</em> of the four pointed at them.
+</div>
+
+<h3>What each layer actually buys you now</h3>
+<table>
+  <tr><th>Layer</th><th>Attacker it excludes that the layer beneath does not</th><th>Verdict</th></tr>
+  <tr><td>TOTP / passkey</td><td>Any other tailnet device, and anyone holding your unlocked phone.
+    WireGuard authenticates the <em>device</em>, not the <em>human</em>.</td>
+    <td><span class="tag rec">LOAD-BEARING</span> the only layer stopping your #1 realistic adversary</td></tr>
+  <tr><td>Rate limiting + inactivity lock</td><td>The online TOTP brute-forcer: 20 failures/5min
+    -&gt; 10min lockout = ~40 guesses/hour against 3-in-10^6. ~8,300 hours expected.</td>
+    <td><span class="tag rec">LOAD-BEARING</span> the #2 control</td></tr>
+  <tr><td>E2E ECDH + AES-GCM (342 LOC)</td><td>Only someone reading the loopback hop between
+    tailscale serve and :3456 (a local process -- which could just read <code>.totp-secret</code>),
+    or a rogue Tailscale control plane.</td>
+    <td><span class="tag risk">NET NEGATIVE</span> and cryptographically broken (C1)</td></tr>
+  <tr><td>TOFU identity pinning</td><td>Genuinely: the rogue-control-plane / node-key-substitution
+    case. This is the one honest justification for E2E existing.</td>
+    <td><span class="tag hold">DEFENSIBLE</span> but gated behind a single <code>confirm()</code> tap</td></tr>
+  <tr><td>IP-bound session tokens</td><td>Essentially nobody -- to use a stolen token you must
+    already be inside an authenticated encrypted session.</td>
+    <td><span class="tag hold">DECORATIVE</span> keep for the audit trail, not as a security layer</td></tr>
+</table>
+
+<h3>Real and exploitable today</h3>
+<table>
+  <tr><th>#</th><th>Sev</th><th>Finding</th><th>Neutralized by Tailscale?</th></tr>
+  <tr><td>R1</td><td><span class="tag risk">HIGH</span></td>
+    <td><strong>OSC-8 hyperlink XSS -- index.html:1008-1010.</strong> <code>el.href =
+      run.sgr.hyperlink</code> with no scheme allowlist. Any OSC-8 escape in anything Claude prints
+      (a README, fetched page, package name) becomes <code>&lt;a href="javascript:..."&gt;</code>.
+      CSP <code>script-src 'unsafe-inline'</code> permits it; <code>rel=noopener</code> does not stop
+      it. One tap -&gt; arbitrary JS in the authenticated origin -&gt; reads the session token -&gt;
+      sends <code>{type:'input'}</code> = arbitrary shell. <strong>Grid renderer became the default
+      in HEAD (3.2.18), so this is live.</strong> Verified first-hand.</td>
+    <td><strong>NO</strong> -- runs inside the authenticated, encrypted, pinned session. Walks
+      through all four layers.</td></tr>
+  <tr><td>R2</td><td><span class="tag hold">MED</span></td>
+    <td>No Origin check on the WSS upgrade (server.js:1421). <code>*.ts.net</code> resolves in public
+      DNS with a real cert, so any web page open on a tailnet device can connect and burn the global
+      limiter -- 20 failed auths = 10-minute lockout, repeatable. Drive-by DoS of your own access.
+      <em>Session riding fails only because auth uses a JS variable, not a cookie -- that was a good
+      design choice; never move the token to a cookie.</em></td>
+    <td>Partially -- the attacking browser must be on the tailnet. That is your phone.</td></tr>
+  <tr><td>R3</td><td><span class="tag hold">MED</span></td>
+    <td><code>POST /api/totp/reset</code> (server.js:817-829) has no CSRF token and no Origin check.
+      A malicious site in the <em>laptop's</em> browser can overwrite <code>.totp-secret</code> via a
+      no-preflight simple request. Partial lockout (passkeys survive).</td>
+    <td>N/A -- localhost/browser attack, orthogonal to the tailnet.</td></tr>
+  <tr><td>R4</td><td><span class="tag hold">MED</span></td>
+    <td>Secret files are group-writable: <code>CodexSandboxUsers</code> holds Modify on
+      <code>.server-identity-key</code> (the identity PRIVATE key), <code>.totp-secret</code>, and the
+      audit log. No chmod/icacls anywhere in install.sh or update.sh. Same class as the
+      loomi-api <code>.loomi-config</code> finding.</td>
+    <td>N/A -- local.</td></tr>
+  <tr><td>R-LOG</td><td><span class="tag hold">MED</span></td>
+    <td><strong>Terminal content in cleartext in the audit log.</strong> server.js:980-981 logs up to
+      ~300 chars of raw output per ATTN-MISS. <strong>7,225 such entries, ~2 MB of session content</strong>
+      in a 4.6 MB unrotated file with the ACL above. Contradicts the "length + hash only" design intent
+      (the INPUT path at :1671 does it correctly). No TOTP codes, tokens, or keys are ever logged --
+      that part is clean.</td>
+    <td>N/A -- local.</td></tr>
+  <tr><td>R5-R8</td><td><span class="tag hold">LOW</span></td>
+    <td>Unsanitized <code>msg.name</code> at create (audit-log line forgery; rename at :1713 does it
+      right); <code>req.query?.st</code> accepts tokens in URLs (:648, unused -- delete);
+      uploads never cleaned up, no magic-byte check; <code>/setup.html</code> served statically to any
+      tailnet peer (UI disclosure only -- every API it calls is gated).</td>
+    <td>Mostly yes (auth required).</td></tr>
+</table>
+
+<h3>Broken crypto that no realistic adversary can currently reach</h3>
+<table>
+  <tr><th>#</th><th>Crypto sev / in-model</th><th>Finding</th></tr>
+  <tr><td>C1</td><td><span class="tag risk">CRITICAL</span> / Informational</td>
+    <td><strong>AES-GCM nonce reuse across directions.</strong> Both sides derive the SAME key
+      (identical HKDF salt + info) and build the IV identically -- 4 zero bytes + BE64(counter),
+      both starting at 1 -- with no direction bit in the IV, key, or AAD. Server message #1 is a
+      34-byte fixed known plaintext (<code>{type:'encrypted',status:'ok'}</code>); client message #1
+      is your TOTP. XOR the two ciphertexts and the TOTP code falls out in cleartext; seq 2 leaks the
+      session token the same way; two tags under one nonce leak the GHASH subkey enabling forgery.
+      <strong>Verified first-hand at server.js:336-337 and index.html:280-282.</strong> Textbook total
+      break -- against precisely the attacker this layer exists to stop. Fix is one line:
+      <code>iv[0] = isServer ? 1 : 0</code>.</td></tr>
+  <tr><td>C2</td><td><span class="tag risk">HIGH</span> / Informational</td>
+    <td>Client downgrade: index.html:303 returns <code>type:'encrypted'</code> BEFORE the
+      anti-downgrade guard at :341, and secureSend (:270-277) sends cleartext while
+      <code>e2eSendSeq === 0</code>. An injected plaintext ack makes the client transmit its TOTP in
+      the clear. Server-side anti-downgrade is correct by contrast.</td></tr>
+  <tr><td>C3-C6</td><td>MED-INFO</td>
+    <td>Client permits post-handshake rekey (server correctly refuses); signature covers only the
+      ephemeral pubkey (no salt/transcript/freshness); TOFU first-contact and key-change warnings are
+      both one <code>confirm()</code> tap. <code>derToP1363</code> only ever parses the server's own
+      signature -- unreachable, leave it.</td></tr>
+  <tr><td>A2</td><td>MED (latent)</td>
+    <td><code>getClientIP</code> (server.js:1416) takes the <strong>leftmost</strong> XFF hop -- the
+      most attacker-controllable position, and the opposite of what <code>proxy-addr</code> does two
+      functions away. Currently rescued by Tailscale stripping inbound XFF. Worst case is rate-limit
+      evasion and audit-log forgery, not a setup bypass.</td></tr>
+  <tr><td>N1</td><td>LOW today / CRITICAL after any config edit</td>
+    <td><code>wslExec</code> (server.js:82) interpolates into <code>bash -c "..."</code> escaping only
+      double-quotes, through cmd.exe which does not honour <code>\"</code>. No client-reachable path
+      today (dirs are allowlisted by exact match; session ids are numeric Map keys). The day a project
+      dir contains a backtick, <code>$</code>, or <code>&amp;</code>, it is root RCE in WSL. Convert to
+      <code>execFileSync</code> with an argv array.</td></tr>
+</table>
+
+<h3>Explicit non-issues (checked, they are fine)</h3>
+<div class="card">
+  <ul>
+    <li><strong>The localhost gate is NOT spoofable.</strong> The bypass you would most worry about --
+      <code>X-Forwarded-For: 127.0.0.1</code> through tailscale serve to reach <code>/setup</code> or
+      TOTP reset -- does not work. Express <code>trust proxy: 'loopback'</code> delegates to
+      <code>proxy-addr</code>, which walks from the socket end and returns the first UNTRUSTED hop, so
+      the appended real tailnet IP always wins. Empirically confirmed: every upload since 2026-03-19
+      logs <code>ip=100.101.101.111</code>.</li>
+    <li>Command injection via <code>msg.session</code> -- unreachable (numeric Map keys; a crafted
+      string cannot both satisfy <code>sessions.get()</code> and reach the shell).</li>
+    <li>Upload path traversal -- none; the filename is server-generated.</li>
+    <li>Secrets in git history -- none. <code>.totp-secret</code>, <code>.server-identity-key</code>,
+      <code>.credentials.json</code> were never committed.</li>
+    <li>Timing-safe comparison -- not applicable (Map lookup) / handled by otpauth.</li>
+    <li>Known-CVE dependencies -- none. express 4.22.1, ws 8.19.0, node-pty 1.1.0 all post-fix.
+      <code>@simplewebauthn/server</code> v10 is 3 majors behind but has no known CVE.</li>
+  </ul>
+</div>
+
+<div class="card">
+  <strong>The most likely way this box actually gets owned:</strong> not any attack above -- a poisoned
+  npm patch release. 121 transitive packages, <code>npm install --production</code> (not
+  <code>npm ci</code>, so the lockfile is advisory), no audit gate in CI (which only runs
+  <code>node --check</code>), on a process that shells into WSL as root and holds
+  <code>ANTHROPIC_API_KEY</code>. <code>npm ci</code> + <code>npm audit --audit-level=high</code> in CI
+  is worth more than the entire E2E layer.
+</div>
+
+<div class="card decision">
+  <h3>D6 -- Security fix batch</h3>
+  <p><strong>Tier 1 -- do now (~half a day, mostly one-liners):</strong></p>
+  <ul>
+    <li>R1: allowlist <code>https:/http:/mailto:</code> on the OSC-8 href; everything else renders as a
+      plain span. Then tighten CSP -- drop <code>'unsafe-inline'</code> from script-src (move inline JS
+      to a file; CI already parses it separately) and narrow <code>connect-src</code> to
+      <code>'self'</code>. <strong>Five lines; this is the only finding that hands a remote attacker
+      your shell.</strong></li>
+    <li>R4 + R-LOG: <code>icacls</code> the three secret files to owner-only; truncate ATTN-MISS
+      previews to a hash (or drop the content). Add log rotation.</li>
+    <li>Supply chain: <code>npm ci</code> in install.sh/update.sh; add
+      <code>npm audit --audit-level=high</code> to CI.</li>
+  </ul>
+  <p><strong>Tier 2 -- same week:</strong> Origin check on the WSS upgrade (R2) and on
+    <code>/api/totp/reset</code> (R3); delete the <code>req.query?.st</code> token source; sanitize
+    <code>msg.name</code> at create; <code>getClientIP</code> -&gt; rightmost hop;
+    <code>wslExec</code> -&gt; <code>execFileSync</code> argv.</p>
+  <p><strong>Tier 3 -- the E2E decision (your call):</strong></p>
+  <ul>
+    <li><span class="tag rec">RECOMMENDED</span> <strong>Fix it (~10 lines) and stop calling it a
+      security boundary.</strong> Direction byte in the IV; move the <code>encrypted</code> /
+      <code>key-exchange</code> checks below the anti-downgrade guard; client refuses plaintext once a
+      handshake begins. Keeps the rogue-control-plane defence honest.</li>
+    <li><strong>Or delete it</strong> -- recover 342 LOC and a class of decrypt-failure reconnect bugs,
+      lose only the rogue-Tailscale-control-plane case. Assessor's note: would fix rather than delete,
+      but would not build it again from scratch today.</li>
+    <li>Either way: <strong>do not leave it as-is.</strong> As-is it is the one thing making these two
+      layers a net negative.</li>
+  </ul>
+  <textarea placeholder="D6 comments / verdict..."></textarea>
+</div>
+
+<h2>7. Reference</h2>
+<div class="card kv">
+  Full audit + herdr research briefs live in this session (2026-08-16, "CLAUDE-OTG").
+  Repo state: v3.2.18, HEAD d000058, render-pipeline initiative closed 7/7 waves, no open tracks.
+  server.js 2,033 LOC / client inline JS ~2,100 LOC / zero tests, CI = syntax check only.
+  herdr sources: github.com/herdrdev/herdr, herdr.dev/docs (socket-api, agents, session-state,
+  persistence-remote), shareuhack guide (partially outdated: AGPL-era).
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,100 @@
+---
+project: claude-mobile
+initiative: otg-revival
+type: state
+status: active
+created: 2026-08-16
+updated: 2026-08-16
+plan: .planning/plan-otg-revival.md
+decision_sheet: .planning/decision-claude-mobile-herdr-2026-08-16.html
+---
+
+baseline:
+  version: 3.2.18
+  head: d000058
+  head_date: 2026-05-05
+  origin_sync: true
+  runtime_state: DOWN
+  runtime_evidence: >
+    Port 3456 empty, no PM2 process (Windows or WSL), zero /tmp/cm-*.dtach
+    sockets as of 2026-08-16. A host reboot since May took the stack down;
+    nothing resurrects it. No sessions survived.
+
+waves:
+  W0:
+    title: Security hotfix + revival
+    version: 3.2.19
+    status: not_started
+    tasks: 11
+    acceptance: Reboot the laptop; service returns unaided and the phone reaches a live session.
+    blocking: false
+  W1:
+    title: herdr spike
+    version: none
+    status: not_started
+    tasks: 1
+    gates: W5
+    parallel_with: W2
+  W2:
+    title: iPad client
+    version: 3.3.0
+    status: not_started
+    tasks: 6
+    parallel_with: W1
+    independent_of_herdr: true
+  W3:
+    title: Security tier 2
+    version: 3.3.1
+    status: not_started
+    tasks: 6
+  W4:
+    title: E2E decision
+    version: 3.3.2
+    status: blocked
+    blocked_on: operator decision -- fix (~10 LOC) or delete (~342 LOC)
+    tasks: 1
+  W5:
+    title: herdr backbone
+    version: 4.0.0
+    status: blocked
+    blocked_on: S1 spike result + tech-design-herdr-backbone.md
+    tasks: 9
+  W6:
+    title: Cleanup + artifacts
+    version: 4.0.1
+    status: not_started
+    tasks: 4
+
+immediate_next_action: >
+  W0-T01 -- OSC-8 scheme allowlist at public/index.html:1008-1010. Ships as
+  its own PR and release, not batched. It is a live remote-code path in the
+  default renderer (grid became default in 3.2.18, the shipped HEAD).
+
+open_operator_decisions:
+  - id: W4
+    question: Fix the E2E layer or delete it?
+    recommendation: Fix -- roughly ten lines, keeps the pinning story honest.
+  - id: D2
+    question: Native-WSL Claude vs cmd.exe interop inside herdr panes?
+    note: S1 Q2 should decide this on evidence; /mnt/c performance is the trade.
+  - id: T06
+    question: Archive or delete the ~2 MB of terminal content in the audit log?
+  - id: T23
+    question: Fold wslExec hardening into W5, or ship standalone in W3?
+
+key_findings_carried:
+  security:
+    - R1 HIGH LIVE -- OSC-8 XSS, public/index.html:1008-1010, no scheme allowlist.
+    - C1 CRITICAL(crypto) -- AES-GCM nonce reuse across directions; server.js:336-337 + client mirror.
+    - NOT vulnerable -- isLocalhost XFF spoofing (proxy-addr returns first untrusted hop). Do not re-investigate.
+    - NOT vulnerable -- msg.session command injection (numeric Map keys).
+    - Biggest real risk is supply chain, not any single finding.
+  architecture:
+    - ~520 LOC of server.js exists only because dtach has no API or agent-state.
+    - herdr v0.8.0, Apache-2.0, herdrdev/herdr -- pin the version, pre-1.0 protocol churn.
+    - herdr socket has NO auth; our auth layer remains the phone-facing boundary.
+  client:
+    - No hardware-keyboard path exists at all; all 4 keydown listeners are form-scoped.
+    - style.css has zero width breakpoints.
+    - Hardware keyboard means the software keyboard never appears -> full screen, larger font,
+      and the most bug-prone iOS keyboard code stops being exercised.
