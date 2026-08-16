@@ -1308,6 +1308,26 @@ function commitRename() {
   }
 }
 
+// ── T13: layout mode ─────────────────────────────────────────────
+// One source of truth for "is this a tablet-or-wider viewport", shared by
+// the CSS breakpoints (820px), the persistent tab strip below, the swipe
+// gating (T15) and the keyboard/font defaults (T12/T14). Kept as a
+// matchMedia object rather than an innerWidth read so the transition fires
+// an event -- an iPad rotating portrait->landscape crosses the boundary
+// without a reload.
+const WIDE_LAYOUT_QUERY = '(min-width: 820px)';
+const wideMQ = window.matchMedia(WIDE_LAYOUT_QUERY);
+
+function isWideLayout() { return wideMQ.matches; }
+
+function onLayoutChange() {
+  document.body.classList.toggle('wide', isWideLayout());
+  renderTabs();
+}
+
+wideMQ.addEventListener('change', onLayoutChange);
+document.body.classList.toggle('wide', isWideLayout());
+
 function renderTabs() {
   const pill = $('tab-pill');
   const pillName = pill.querySelector('.pill-name');
@@ -1343,7 +1363,11 @@ function closeSwitcher() {
 
 function renderSwitcher() {
   const sw = $('tab-switcher');
-  if (!sw.classList.contains('open')) return;
+  // T13: at tablet width the strip is always on screen (CSS pins it inline
+  // inside #tabs), so it must stay populated even without the .open class
+  // the phone overlay uses.
+  const persistent = isWideLayout();
+  if (!persistent && !sw.classList.contains('open')) return;
   sw.innerHTML = '';
   sessionList.forEach(s => {
     const item = document.createElement('div');
@@ -1376,6 +1400,18 @@ function renderSwitcher() {
     empty.style.justifyContent = 'center';
     empty.textContent = 'No sessions';
     sw.appendChild(empty);
+  }
+  if (persistent) {
+    // The phone reaches "new session" by pulling up on the count button or
+    // swiping past the last tab; neither exists in the tablet layout, so the
+    // strip carries the affordance itself.
+    const add = document.createElement('div');
+    add.className = 'switcher-item switcher-new';
+    add.textContent = '+';
+    add.setAttribute('role', 'button');
+    add.setAttribute('aria-label', 'New session');
+    add.onclick = () => newSession();
+    sw.appendChild(add);
   }
 }
 
