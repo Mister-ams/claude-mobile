@@ -692,6 +692,8 @@ app.use((_req, res, next) => {
     "base-uri 'self'",
     "form-action 'self'",
   ].join('; '));
+  // T20 (R6): never leak this origin (or anything in a URL) to a third party.
+  res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
@@ -738,9 +740,12 @@ app.post('/api/setup/verify', requireSameSite, (req, res) => {
   }
 });
 
-// Auth middleware for HTTP routes
+// Auth middleware for HTTP routes.
+// T20 (R6): the ?st=<token> query source is gone. No client ever used it, and
+// a token in a URL lands in browser history, and in the Referer of any
+// subresource the page loads.
 function requireSession(req, res, next) {
-  const token = req.headers['x-session-token'] || req.body?.sessionToken || req.query?.st;
+  const token = req.headers['x-session-token'] || req.body?.sessionToken;
   if (!validateSessionToken(token, req.ip)) return res.status(401).json({ error: 'Unauthorized' });
   next();
 }
