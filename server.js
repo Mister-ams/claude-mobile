@@ -721,11 +721,18 @@ function requireSameSite(req, res, next) {
     audit('SECURITY', `Cross-site ${req.method} ${req.path} rejected (sec-fetch-site=${site || 'n/a'}, origin=${String(origin || 'n/a').slice(0, 120)})`, req.ip);
     return res.status(403).json({ error: 'Cross-site request rejected' });
   }
-  if (hasBody && contentType !== 'application/json') {
+  // application/json is required UNCONDITIONALLY, not merely when a body is
+  // present. That requirement IS the CSRF defence: a cross-origin page cannot
+  // set this content type without triggering a preflight, so these endpoints
+  // stop being "simple" requests and a drive-by POST can never reach them.
+  // Exempting bodyless requests reopened exactly that hole. It was exempted
+  // only because setup.js POSTed bodyless; setup.js now sends `{}` with the
+  // header (T04b), so the guard can be absolute.
+  if (contentType !== 'application/json') {
     audit('SECURITY', `${req.method} ${req.path} rejected: content-type ${contentType || 'none'}`, req.ip);
     return res.status(415).json({ error: 'application/json required' });
   }
-  if (!hasBody && sameSite === null) {
+  if (sameSite === null) {
     audit('SECURITY', `${req.method} ${req.path} rejected: no same-origin evidence`, req.ip);
     return res.status(403).json({ error: 'Same-origin request required' });
   }
@@ -743,9 +750,22 @@ app.use((req, res, next) => {
 app.use((_req, res, next) => {
   res.setHeader('Content-Security-Policy', [
     "default-src 'none'",
-    "script-src 'self' 'unsafe-inline'",
+    // T04: no 'unsafe-inline'. It is what made the OSC-8 javascript: XSS
+    // executable in the authenticated origin (fixed in 3.2.19). Dropping it
+    // required three things first: the client block moved to app.js (T03),
+    // the 21 inline handler attributes converted to addEventListener (T04a),
+    // and setup.html's block moved to setup.js (T04b). gen-icon.html was
+    // moved out of public/ rather than fixed -- an unreferenced dev utility
+    // that was being served to every tailnet peer.
+    "script-src 'self'",
+    // style-src keeps 'unsafe-inline': the grid renderer sets per-cell inline
+    // styles via applySgr, so removing it needs a CSS-custom-property rewrite.
+    // Tracked separately -- style injection is not the XSS path that mattered.
     "style-src 'self' 'unsafe-inline'",
-    "connect-src 'self' ws: wss:",
+    // T04: narrowed from `'self' ws: wss:`. The wildcard schemes allowed an
+    // injected script to open a socket to ANY host -- an open exfiltration
+    // channel. The client only ever connects to its own origin.
+    "connect-src 'self'",
     "img-src 'self' data: blob:",
     "font-src 'self'",
     "frame-ancestors 'none'",
