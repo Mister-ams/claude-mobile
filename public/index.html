@@ -101,7 +101,9 @@
     <button class="qb" data-qb="down" aria-label="Arrow down">Down</button>
   </div>
 
-  <div style="position:relative">
+  <!-- id so the landscape grid can place it; it is a positioning context for
+       #autocomplete and #img-preview, which is why the wrapper exists at all. -->
+  <div id="input-wrap" style="position:relative">
     <div id="autocomplete"></div>
     <div id="img-preview">
       <span id="img-name"></span>
@@ -138,6 +140,6 @@
 <script src="/vendor/addon-fit.min.js"></script>
 <script src="/vendor/addon-webgl.min.js"></script>
 <script src="/vendor/addon-canvas.min.js"></script>
-<script src="/app.js?v=3.3.0"></script>
+<script src="/app.js?v=3.4.0"></script>
 </body>
 </html>
