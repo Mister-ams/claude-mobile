@@ -663,7 +663,10 @@ function handle(m) {
         if (m.sessionToken) sessionToken = m.sessionToken;
         if (m.inactivityMs) inactivityMs = m.inactivityMs;
         $('totp-input').value = '';
-        authScreen.style.display = 'none'; appEl.style.display = 'flex';
+        // classList, not style.display: an inline display outranks every
+        // stylesheet rule and would silently pin #app to flex, so the
+        // landscape rail could never apply.
+        authScreen.style.display = 'none'; appEl.classList.add('shown');
         loadProjects();
         scheduleTokenRefresh(m.ttl);
         resetInactivityTimer();
@@ -675,7 +678,7 @@ function handle(m) {
           localStorage.setItem('passkey-dismissed', '1');
         }
       } else {
-        setAuthMode('login'); authScreen.style.display = 'flex'; appEl.style.display = 'none';
+        setAuthMode('login'); authScreen.style.display = 'flex'; appEl.classList.remove('shown');
         $('totp-input').value = '';
         authError.style.display = 'block'; sessionToken = null;
         if (m.locked) showStatus('Too many attempts. Locked out.', 'var(--intent-danger)');
@@ -684,7 +687,7 @@ function handle(m) {
       }
       break;
     case 'expired':
-      setAuthMode('login'); authScreen.style.display = 'flex'; appEl.style.display = 'none';
+      setAuthMode('login'); authScreen.style.display = 'flex'; appEl.classList.remove('shown');
       sessionToken = null;
       $('totp-input').value = '';
       authError.style.display = 'none';
@@ -1137,7 +1140,45 @@ function updateGridCursor(grid) {
     `display:block;top:${rowEl.offsetTop}px;left:${c.col * charW}px;height:${rowEl.offsetHeight}px;`;
 }
 
+// The useful part of a working directory is its tail, but CSS left-truncation
+// (`direction: rtl` + ellipsis) reorders the leading slash to the end on a
+// path, rendering "…sers/MRAL-/Projects/loomi-os/". Trim in JS instead; the
+// full path stays available as a title attribute.
+function shortDir(dir) {
+  if (!dir) return '';
+  const parts = dir.split('/').filter(Boolean);
+  if (parts.length <= 2) return dir;
+  return '.../' + parts.slice(-2).join('/');
+}
+
+// Within this many px of the bottom counts as "following the output", which is
+// the state a terminal should keep scrolling in. Anything above it means the
+// reader is looking at something and must not be moved.
+const GRID_STICK_PX = 8;
+
+function gridAtBottom(grid) {
+  const w = grid.wrap;
+  if (!w || !w.scrollHeight) return true;
+  return (w.scrollHeight - w.scrollTop - w.clientHeight) <= GRID_STICK_PX;
+}
+
 function applyGridSnapshot(grid, snap) {
+  // A snapshot must not move the reader. Snapshots arrive on every tab return
+  // and every session switch, so unconditionally scrolling to the bottom threw
+  // the scroll position away several times an hour -- measured at +7,230px on
+  // an 11" iPad. Capture the anchor BEFORE anything is reset (rowHeight is
+  // zeroed below), and restore it by server row ID: row indices shift when
+  // scrollback rolls, IDs do not.
+  const wasAtBottom = gridAtBottom(grid);
+  const oldRowH = grid.rowHeight || 0;
+  let anchorRow = null, anchorOffset = 0;
+  if (!wasAtBottom && oldRowH > 0 && grid.allRows.length) {
+    const topIdx = Math.min(grid.allRows.length - 1,
+      Math.max(0, Math.floor(grid.wrap.scrollTop / oldRowH)));
+    anchorRow = grid.allRows[topIdx].row;
+    anchorOffset = grid.wrap.scrollTop - topIdx * oldRowH;
+  }
+
   grid.cols = snap.cols;
   grid.rows = snap.rows;
   grid.cursor = snap.cursor;
@@ -1165,7 +1206,16 @@ function applyGridSnapshot(grid, snap) {
   grid.bottomSpacer.style.height = '0px';
   grid.mountedStart = 0;
   grid.mountedCount = 0;
-  grid.wrap.scrollTop = grid.wrap.scrollHeight;
+  if (anchorRow === null) {
+    grid.wrap.scrollTop = grid.wrap.scrollHeight;
+  } else {
+    const idx = grid.rowIndexByServerRow.get(anchorRow);
+    // undefined means the anchored row has aged out of scrollback entirely --
+    // there is no position left to hold, so following the output is correct.
+    grid.wrap.scrollTop = idx === undefined
+      ? grid.wrap.scrollHeight
+      : (idx * grid.rowHeight) + anchorOffset;
+  }
   renderGridWindow(grid);
 }
 
@@ -1344,7 +1394,8 @@ function updateHdr() {
   if (!document.activeElement || document.activeElement !== sname) {
     sname.value = s ? s.name.toUpperCase() : 'NO SESSION';
   }
-  sdir.textContent = s ? s.dir : '';
+  sdir.textContent = s ? shortDir(s.dir) : '';
+  sdir.title = s ? s.dir : '';
   sname.disabled = !s;
 }
 
