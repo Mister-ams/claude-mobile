@@ -24,6 +24,7 @@ claude-mobile/                    v3.2.18
 │   ├── vendor/                   Bundled xterm.js + addons (no CDN)
 │   └── apple-touch-icon.png      PWA icon
 ├── test/live-session-verify.py   E2E against a RUNNING server: real auth, real session, 4 viewports
+├── test/herdr-pane-geometry.py   herdr-only: does a resize reach the PANE, not just our mirror
 ├── package.json                  Deps: express, ws, node-pty, @simplewebauthn/server, otpauth, qrcode
 └── .gitignore                    node_modules/, config.json, .totp-secret, .credentials.json, .server-identity-key
 ```
@@ -105,10 +106,23 @@ python.exe test/live-session-verify.py --port <port> --totp-secret <base32> \
 ```
 
 That asserts which backend is actually running -- without it a green run proves only that
-SOME backend works -- then authenticates for real, creates a session, waits for Claude to paint, restarts the
-process, and requires the SAME session back -- id, name and directory, not just a count.
-`test/ipad-emulator.py` cannot do this: it drives a static server with synthetic frames and
-never reaches a backend. Use it for pure-client regressions, this for anything below them.
+SOME backend works -- then authenticates for real, creates a session, waits for Claude to
+paint, restarts the process, and requires the SAME session back: id, name and directory,
+not a count. It also rotates each iPad viewport and requires the server's dimensions to
+catch up with the client's (`--no-rotate` skips it).
+
+`test/ipad-emulator.py` cannot do any of that: it drives a static server with synthetic
+frames and never reaches a backend. Use it for pure-client regressions, this for anything
+below them.
+
+Rotation converging proves the client and the server agree. It does NOT prove the backend's
+pane followed -- the server resizes its own mirror when asked, either way, so a backend that
+ignored resize entirely would still converge. For herdr, confirm the far end separately,
+through herdr's own API:
+
+```bash
+python.exe test/herdr-pane-geometry.py --port PORT --totp-secret BASE32
+```
 
 ## Gotchas
 
