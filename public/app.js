@@ -2371,7 +2371,7 @@ function srvRender(s) {
     upd.disabled = true;
     upd.classList.remove('busy');
   } else if (s.updateAvailable) {
-    note.textContent = 'Update available: ' + s.commit + ' → ' + s.remote.commit;
+    note.textContent = 'Update available: ' + s.commit + ' -> ' + s.remote.commit;
     note.className = 'set-note avail';
     upd.disabled = false;
     upd.classList.remove('busy');
@@ -2388,7 +2388,7 @@ function srvRender(s) {
     // The new client only arrives on a reload: index.html cache-busts app.js
     // with ?v=<version>, and iOS Safari serves the old one until the document
     // is fetched again.
-    srvSetResult('Updated ' + last.from + ' → ' + last.to + '. Tap to reload the client.', 'ok');
+    srvSetResult('Updated ' + last.from + ' -> ' + last.to + '. Tap to reload the client.', 'ok');
     if (resultEl) resultEl.onclick = () => location.reload();
   } else if (last && (last.error || last.exitCode !== 0)) {
     // update.sh exits non-zero when it finished DEGRADED, so this is the
@@ -2444,7 +2444,11 @@ function srvPollUntilBack(label) {
 $('srv-restart')?.addEventListener('click', async () => {
   const btn = $('srv-restart');
   if (!srvArm(btn)) return;
-  srvSetResult('Restarting -- your sessions survive this.', null);
+  // Both halves matter. The Claude sessions survive -- that is the whole
+  // point of the backend -- but session TOKENS live in an in-memory map, so
+  // the restart signs this client out. Saying so before the tap beats
+  // discovering it while hunting for an authenticator app.
+  srvSetResult('Restarting -- Claude sessions survive; you will need to sign in again.', null);
   try {
     await fetch('/api/server/restart', {
       method: 'POST',
