@@ -1420,7 +1420,7 @@ async function createSession(name, dir, cols, rows) {
   const proc = await backend.create(id, { dir, cols: cols || 50, rows: rows || 30 });
   if (!proc) return null;
 
-  backend.launchClaude(proc, id, { cols: cols || 50, rows: rows || 30 });
+  backend.launchClaude(proc, id);
 
   const session = {
     id, name, dir, proc, scrollback: '', generation: 0,
