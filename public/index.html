@@ -75,6 +75,18 @@
       </div>
       <input type="range" id="set-font" min="10" max="24" step="1" aria-label="Terminal font size">
       <p class="set-note" id="set-cols"></p>
+
+      <div class="set-sep" role="separator"></div>
+      <div class="set-row">
+        <label>Server</label>
+        <span class="set-val" id="srv-version">&mdash;</span>
+      </div>
+      <p class="set-note" id="srv-note">Checking...</p>
+      <div class="srv-actions">
+        <button type="button" id="srv-restart" class="srv-btn">Restart</button>
+        <button type="button" id="srv-update" class="srv-btn" disabled>Update</button>
+      </div>
+      <p class="set-note" id="srv-result"></p>
     </div>
   </div>
 
@@ -140,6 +152,6 @@
 <script src="/vendor/addon-fit.min.js"></script>
 <script src="/vendor/addon-webgl.min.js"></script>
 <script src="/vendor/addon-canvas.min.js"></script>
-<script src="/app.js?v=3.4.0"></script>
+<script src="/app.js?v=3.5.0"></script>
 </body>
 </html>

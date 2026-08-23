@@ -97,6 +97,7 @@ function audit(category, message, ip) {
 // "sessionBackend": "herdr" in config.json. See lib/session-backend/index.js
 // for the contract, including why state() has four values and not two.
 const { createSessionBackend } = require('./lib/session-backend');
+const createServerControl = require('./lib/server-control');
 
 let lastError = null; // { message, timestamp }
 
@@ -108,6 +109,9 @@ function setLastError(message) {
 // to capture here; AUDIT_PATH is already initialised above, which is the trap
 // the audit-log comment warns about.
 const backend = createSessionBackend({ config, audit, getSafeEnv, pty, setLastError });
+
+// Lifecycle control for this process: restart, and update-then-restart.
+const serverControl = createServerControl({ config, audit, installDir: __dirname });
 
 
 // ─── Auth: No tokens. Setup via localhost only. ──────────────────
@@ -824,11 +828,31 @@ app.post('/api/passkey/auth-verify', async (req, res) => {
 });
 
 
-// Kill switch
-app.post('/api/kill', requireSameSite, requireSession, (req, res) => {
-  audit('SYSTEM', 'Remote kill switch activated', req.ip);
-  res.json({ status: 'shutting down' });
-  setTimeout(() => process.exit(0), 500);
+// ─── Server control ──────────────────────────────────────────────
+// Replaces /api/kill, which had no caller anywhere in the client and, under
+// PM2 autorestart, did not kill: it exited and PM2 brought the server back.
+// An undocumented restart wearing a panic button's label.
+//
+// There is no stop and no start, deliberately. The UI is served BY this
+// process, so a stop is a one-way door and a start could never work at all.
+app.get('/api/server/status', requireSession, (req, res) => {
+  res.json(serverControl.status());
+});
+
+// Re-checks origin on demand, so opening the panel does not show an answer
+// from up to half an hour ago.
+app.post('/api/server/check', requireSameSite, requireSession, (req, res) => {
+  serverControl.refresh();
+  res.json(serverControl.status());
+});
+
+app.post('/api/server/restart', requireSameSite, requireSession, (req, res) => {
+  res.json(serverControl.restart(req.ip));
+});
+
+app.post('/api/server/update', requireSameSite, requireSession, (req, res) => {
+  const result = serverControl.startUpdate(req.ip);
+  res.status(result.ok ? 200 : 409).json(result);
 });
 
 // Auth status
@@ -2151,6 +2175,7 @@ server.listen(PORT, 'localhost', () => {
   console.log(`  Sessions: ${backend.describe()}`);
   console.log('  ────────────────────────────────');
   backend.init();
+  serverControl.startRemoteChecks();
   recoverSessions();
   if (sessions.size === 0) autoStartSessions();
   audit('SYSTEM', `Server started on port ${PORT}`);

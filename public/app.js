@@ -2287,6 +2287,7 @@ function openSettings() {
 }
 
 function closeSettings() {
+  srvDisarm();
   $('settings-panel').classList.remove('open');
   $('settings-btn').setAttribute('aria-expanded', 'false');
 }
@@ -2304,7 +2305,176 @@ function refreshSettingsPanel() {
     const d = activeSession !== null ? computeGridDims(gridTerms[activeSession]) : null;
     cols.textContent = d ? `Terminal is ${d.cols} x ${d.rows} cells.` : '';
   }
+  // Re-ask origin on open rather than showing an answer up to half an hour old.
+  srvLoad(true);
 }
+
+// ── Server control ──
+// Restart, and update-then-restart, so neither needs the laptop.
+//
+// Confirmation is a two-step tap on the button itself, NOT confirm(). The
+// native dialog blocks JS, and on iOS a blocked page loses the WebSocket --
+// the same reason the passkey prompt is deferred until a user gesture. A
+// dialog that kills the connection is a poor way to confirm restarting the
+// thing on the other end of it.
+let srvArmTimer = null;
+let srvPollTimer = null;
+
+function srvSetResult(text, kind) {
+  const el = $('srv-result');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'set-note' + (kind ? ' ' + kind : '');
+}
+
+function srvDisarm() {
+  clearTimeout(srvArmTimer);
+  for (const id of ['srv-restart', 'srv-update']) {
+    const b = $(id);
+    if (!b) continue;
+    b.classList.remove('armed');
+    if (b.dataset.label) b.textContent = b.dataset.label;
+  }
+}
+
+// Returns true when this tap was the confirming one.
+function srvArm(btn) {
+  if (btn.classList.contains('armed')) { srvDisarm(); return true; }
+  srvDisarm();
+  btn.dataset.label = btn.dataset.label || btn.textContent;
+  btn.textContent = 'Confirm?';
+  btn.classList.add('armed');
+  // Disarms itself, so a button left armed cannot fire later when the panel
+  // is reopened for something else.
+  srvArmTimer = setTimeout(srvDisarm, 5000);
+  return false;
+}
+
+function srvRender(s) {
+  const ver = $('srv-version');
+  const note = $('srv-note');
+  const upd = $('srv-update');
+  if (!ver || !note || !upd) return;
+
+  ver.textContent = (s.version ? 'v' + s.version : '?') + (s.commit ? ' · ' + s.commit : '');
+
+  if (s.updateRunning) {
+    note.textContent = 'Updating...';
+    note.className = 'set-note';
+    upd.disabled = true;
+    upd.classList.add('busy');
+  } else if (s.remote && s.remote.error) {
+    // Could not ask origin. That is not "up to date", and showing it as such
+    // would be the kind of confidently wrong answer that stops anyone looking.
+    note.textContent = 'Update check failed -- ' + s.remote.error;
+    note.className = 'set-note';
+    upd.disabled = true;
+    upd.classList.remove('busy');
+  } else if (s.updateAvailable) {
+    note.textContent = 'Update available: ' + s.commit + ' → ' + s.remote.commit;
+    note.className = 'set-note avail';
+    upd.disabled = false;
+    upd.classList.remove('busy');
+  } else {
+    note.textContent = 'Up to date' + (s.branch ? ' on ' + s.branch : '') + '.';
+    note.className = 'set-note';
+    upd.disabled = true;
+    upd.classList.remove('busy');
+  }
+
+  const last = s.lastUpdate;
+  const resultEl = $('srv-result');
+  if (last && !last.error && last.exitCode === 0 && last.changed) {
+    // The new client only arrives on a reload: index.html cache-busts app.js
+    // with ?v=<version>, and iOS Safari serves the old one until the document
+    // is fetched again.
+    srvSetResult('Updated ' + last.from + ' → ' + last.to + '. Tap to reload the client.', 'ok');
+    if (resultEl) resultEl.onclick = () => location.reload();
+  } else if (last && (last.error || last.exitCode !== 0)) {
+    // update.sh exits non-zero when it finished DEGRADED, so this is the
+    // script's own verdict rather than merely "did it crash".
+    srvSetResult('Last update failed (' + (last.error || 'exit ' + last.exitCode) + ').', 'bad');
+    if (resultEl) resultEl.onclick = null;
+  }
+}
+
+async function srvStatus(fresh) {
+  if (!sessionToken) return null;
+  const res = await fetch('/api/server/' + (fresh ? 'check' : 'status'), {
+    method: fresh ? 'POST' : 'GET',
+    headers: fresh
+      ? { 'Content-Type': 'application/json', 'X-Session-Token': sessionToken }
+      : { 'X-Session-Token': sessionToken },
+    body: fresh ? '{}' : undefined,
+  });
+  if (!res.ok) throw new Error('status ' + res.status);
+  return res.json();
+}
+
+async function srvLoad(fresh) {
+  try {
+    const s = await srvStatus(fresh);
+    if (s) srvRender(s);
+    return s;
+  } catch (e) {
+    const note = $('srv-note');
+    if (note) { note.textContent = 'Server status unavailable.'; note.className = 'set-note'; }
+    return null;
+  }
+}
+
+// The server goes away mid-flight in both flows, so this tolerates failures
+// rather than treating the first one as the answer.
+function srvPollUntilBack(label) {
+  clearInterval(srvPollTimer);
+  let ticks = 0;
+  srvPollTimer = setInterval(async () => {
+    ticks++;
+    const s = await srvLoad(false);
+    if (s && !s.updateRunning) {
+      clearInterval(srvPollTimer);
+      srvLoad(true);
+    } else if (ticks > 100) {
+      clearInterval(srvPollTimer);
+      srvSetResult(label + ' is taking longer than expected -- check the laptop.', 'bad');
+    }
+  }, 3000);
+}
+
+$('srv-restart')?.addEventListener('click', async () => {
+  const btn = $('srv-restart');
+  if (!srvArm(btn)) return;
+  srvSetResult('Restarting -- your sessions survive this.', null);
+  try {
+    await fetch('/api/server/restart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Session-Token': sessionToken },
+      body: '{}',
+    });
+  } catch (e) { /* the socket dropping IS the success signal here */ }
+  srvPollUntilBack('Restart');
+});
+
+$('srv-update')?.addEventListener('click', async () => {
+  const btn = $('srv-update');
+  if (!srvArm(btn)) return;
+  try {
+    const res = await fetch('/api/server/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Session-Token': sessionToken },
+      body: '{}',
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.ok) {
+      srvSetResult(body.reason || 'Update could not start.', 'bad');
+      return;
+    }
+    srvSetResult('Updating -- the server restarts when it finishes.', null);
+    srvPollUntilBack('Update');
+  } catch (e) {
+    srvSetResult('Update could not start: ' + e.message, 'bad');
+  }
+});
 
 $('settings-btn').addEventListener('click', e => { e.preventDefault(); toggleSettings(); });
 $('set-hwkb').addEventListener('change', e => setHwKeyboard(e.target.checked));

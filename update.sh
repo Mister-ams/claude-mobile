@@ -148,13 +148,21 @@ if $IS_WINDOWS && wsl --list --quiet 2>/dev/null | grep -qi "Ubuntu-24.04"; then
   " 2>/dev/null && ok "WSL Claude Code updated" || warn "WSL update skipped"
 fi
 
-# Restart via PM2
-if command -v pm2 &>/dev/null && pm2 list 2>/dev/null | grep -q "claude-mobile"; then
-  say "Restarting via PM2..."
-  pm2 restart claude-mobile
+# Restart via PM2.
+#
+# CM_PM2_NAME is which process to restart, and it matters: the name was
+# hardcoded to "claude-mobile", while the guard grepped for that as a
+# SUBSTRING. So an update run from a second instance (claude-mobile-herdr,
+# say) matched the guard and then restarted the LIVE server instead of itself.
+# The server passes its own PM2 name; the default preserves old behaviour for
+# a hand-run update.
+PM2_NAME="${CM_PM2_NAME:-claude-mobile}"
+if command -v pm2 &>/dev/null && pm2 list 2>/dev/null | grep -q "$PM2_NAME"; then
+  say "Restarting via PM2 ($PM2_NAME)..."
+  pm2 restart "$PM2_NAME"
   ok "Restarted"
   sleep 2
-  pm2 logs claude-mobile --lines 8 --nostream
+  pm2 logs "$PM2_NAME" --lines 8 --nostream
 else
   ok "Update complete. Restart manually: node server.js"
 fi
