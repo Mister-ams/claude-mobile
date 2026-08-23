@@ -14,6 +14,7 @@ claude-mobile/                    v3.2.18
 ├── herdr-config.toml             herdr config for OUR sessions only (never the operator's)
 ├── config.json                   Projects, autoStart, tailscaleHostname, port (gitignored)
 ├── config.example.json           Template for config.json
+├── config.herdr.example.json     Template for a SECOND instance on the herdr backend
 ├── install.sh                    Full setup script (WSL, dtach, PM2, Tailscale serve)
 ├── update.sh                     Pull + deps + PM2 restart
 ├── public/
@@ -81,6 +82,32 @@ bash update.sh                               # pull + restart
 ```
 
 Setup: open `http://localhost:3456/setup` on laptop to configure TOTP.
+
+### A second instance (backend experiments)
+
+Never in the live checkout -- PM2 is running `server.js` from there, so a checkout swaps the
+live server's code under it. Use a worktree, and give it `config.herdr.example.json`:
+
+```bash
+git worktree add -b <branch> ../cm-wt-x origin/master
+cp -r node_modules ../cm-wt-x/           # NOT npm ci -- see the node-pty gotcha
+cp config.herdr.example.json ../cm-wt-x/config.json   # then edit port/prefix/paths
+cd ../cm-wt-x && pm2 start server.js --name claude-mobile-<x>
+```
+
+It mints its own TOTP secret at `http://localhost:<port>/setup` -- never copy the live one.
+
+Verify it end to end before anyone looks at it:
+
+```bash
+python.exe test/live-session-verify.py --port <port> --totp-secret <base32> \
+           --restart-pm2 claude-mobile-<x>
+```
+
+That authenticates for real, creates a session, waits for Claude to paint, restarts the
+process, and requires the SAME session back -- id, name and directory, not just a count.
+`test/ipad-emulator.py` cannot do this: it drives a static server with synthetic frames and
+never reaches a backend. Use it for pure-client regressions, this for anything below them.
 
 ## Gotchas
 

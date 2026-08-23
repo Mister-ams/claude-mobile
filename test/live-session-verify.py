@@ -13,9 +13,11 @@ cannot tell the difference.
 
 Run:
   python.exe test/live-session-verify.py --port 3457 --totp-secret <base32>
-  ... --out <dir>        where PNGs land
-  ... --recover-only     skip creation, just verify existing sessions recover
-  ... --keep             leave the session running (default: leave it running)
+  ... --out <dir>              where PNGs land
+  ... --restart-pm2 <name>     restart that PM2 process mid-run and require the
+                               SAME session to come back -- this is the whole
+                               point of having a session backend
+  ... --recover-only           skip creation, measure what is already there
 
 The TOTP secret is the one the target instance minted for itself. Never pass
 the operator's.
@@ -27,8 +29,10 @@ import hmac
 import json
 import os
 import struct
+import subprocess
 import sys
 import time
+import urllib.request
 
 from playwright.sync_api import sync_playwright
 
@@ -126,12 +130,39 @@ def wait_for_claude(page, timeout_s):
     return marker
 
 
+def health(port, timeout=30):
+    """Wait for the server to answer, and report which backend it is running."""
+    end = time.time() + timeout
+    last = None
+    while time.time() < end:
+        try:
+            with urllib.request.urlopen("http://localhost:%d/health" % port, timeout=3) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except Exception as e:  # not up yet
+            last = e
+            time.sleep(0.5)
+    raise RuntimeError("server on %d never answered /health: %s" % (port, last))
+
+
+def session_fingerprint(page):
+    """Identity as the CLIENT sees it: which sessions, named what, where.
+
+    Deliberately not just a count. A restart that silently replaced the session
+    with a fresh one of the same shape would pass a count check, and that is
+    exactly the failure this is meant to catch.
+    """
+    return page.evaluate("""() => (sessionList || [])
+        .map(s => [s.id, s.name, s.dir].join('|')).sort()""")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--port", type=int, default=3457)
     ap.add_argument("--totp-secret", required=True)
     ap.add_argument("--out", default=os.path.join(os.environ.get("TEMP", "/tmp"), "cm-live"))
     ap.add_argument("--recover-only", action="store_true")
+    ap.add_argument("--restart-pm2", default=None,
+                    help="PM2 process name to restart mid-run; the same session must survive")
     ap.add_argument("--claude-timeout", type=int, default=90)
     args = ap.parse_args()
 
@@ -184,7 +215,54 @@ def main():
                                         .map(e => e.innerText).join('\\n').slice(-1200)""")
             print("--- last grid content ---\n%s\n-------------------------" % snap)
         report["claudeMarker"] = marker
+        before = session_fingerprint(page)
         ctx.close()
+
+        # ── the restart, if asked for ───────────────────────────────
+        # A backend that cannot do this is not a backend. dtach earned its
+        # place over 236 restarts; anything replacing it has to match that,
+        # and "the session list is not empty" is not the same claim as "it is
+        # the same session".
+        if args.restart_pm2:
+            print("restarting PM2 process %r..." % args.restart_pm2)
+            # encoding is explicit: Python defaults to cp1252 on this box and
+            # pm2 prints a box-drawing table, so the default decode raises in
+            # the reader thread -- which leaves r.stderr None and would hide a
+            # real pm2 failure behind a clean-looking returncode.
+            r = subprocess.run(["pm2", "restart", args.restart_pm2],
+                               capture_output=True, text=True, shell=True,
+                               encoding="utf-8", errors="replace")
+            if r.returncode != 0:
+                failures.append("pm2 restart failed: %s" % (r.stderr or r.stdout)[:200])
+            else:
+                h = health(args.port)
+                print("   back up: backend=%s sessions=%s" % (h.get("backend"), h.get("sessions")))
+                report["healthAfterRestart"] = h
+
+                ctx = b.new_context(viewport={"width": 1194, "height": 834}, device_scale_factor=2)
+                page = ctx.new_page()
+                errs = []
+                page.on("pageerror", lambda e: errs.append(str(e)))
+                page.on("dialog", lambda d: d.accept())
+                if not login(page, base, args.totp_secret, errs):
+                    failures.append("could not authenticate after restart")
+                else:
+                    after = session_fingerprint(page)
+                    report["sessionsBeforeRestart"] = before
+                    report["sessionsAfterRestart"] = after
+                    if after == before:
+                        print("   SAME sessions recovered: %s" % after)
+                    else:
+                        failures.append("sessions changed across the restart: %s -> %s"
+                                        % (before, after))
+                        print("   before %s\n   after  %s" % (before, after))
+                    m2 = wait_for_claude(page, min(args.claude_timeout, 60))
+                    if m2:
+                        print("   Claude still painting after restart: %s" % m2)
+                    else:
+                        failures.append("Claude did not paint after the restart")
+                    report["claudeMarkerAfterRestart"] = m2
+                ctx.close()
 
         # ── pass 2: measure every viewport against the live session ──
         for name, w, h in VIEWPORTS:
