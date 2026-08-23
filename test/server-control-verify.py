@@ -201,9 +201,21 @@ def main():
             page.wait_for_timeout(300)
             page.click("#srv-update")
             print("   confirmed; waiting for update.sh to finish and restart...")
+            # Same trap as the restart poll, and it caught me twice: the update
+            # ends by restarting the server, which invalidates this client's
+            # token. Wait for liveness UNAUTHENTICATED, then sign in again
+            # before asking an authenticated route anything.
             done = None
-            for _ in range(60):
+            for _ in range(80):
                 page.wait_for_timeout(3000)
+                h = page.evaluate(HEALTH_JS)
+                if not (h and h.get("status")):
+                    continue          # mid-restart
+                try:
+                    login(page, base, args.totp_secret)
+                    open_settings(page)
+                except Exception:
+                    continue          # came back between the two calls
                 s = page.evaluate(STATUS_JS)
                 if s and not s.get("error") and not s.get("updateRunning") and s.get("lastUpdate"):
                     done = s["lastUpdate"]
