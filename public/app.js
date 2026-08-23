@@ -2445,21 +2445,55 @@ async function srvAlive() {
   } catch (e) { return false; }
 }
 
-function srvPollUntilBack(label) {
+// One probe, three distinguishable answers -- and the distinctions are the
+// whole mechanism:
+//   'down'        the server is not answering; it is mid-restart
+//   'signed-out'  it IS answering but our token is dead, which only happens
+//                 because it restarted. A positive signal, not an error.
+//   <status>      answering and still ours, so the update is still running
+async function srvProbe() {
+  if (!(await srvAlive())) return 'down';
+  try {
+    const res = await fetch('/api/server/status', { headers: { 'X-Session-Token': sessionToken } });
+    if (res.status === 401 || res.status === 403) return 'signed-out';
+    if (!res.ok) return 'down';
+    return await res.json();
+  } catch (e) { return 'down'; }
+}
+
+// The two flows end differently and cannot share one condition.
+//
+// 'signed-out' is the completion signal for BOTH, because it is proof the
+// server restarted: only a restart empties the token map. Waiting to observe
+// the server DOWN instead does not work -- it comes back inside two seconds
+// and the poll runs every three, so the gap is routinely missed entirely.
+//
+// The difference is what a VALID status means. For a restart it means the
+// restart has not happened yet, so keep waiting. For an update it means
+// update.sh failed early and never restarted, and its recorded verdict is the
+// answer -- so that finishes the poll.
+function srvPollUntilBack(label, opts) {
+  opts = opts || {};
+  const onlySignOut = !!opts.onlySignOut;
+  const maxTicks = opts.maxTicks || 60;
   clearInterval(srvPollTimer);
   let ticks = 0;
   srvPollTimer = setInterval(async () => {
     ticks++;
-    if (await srvAlive()) {
+    const p = await srvProbe();
+
+    if (p === 'signed-out') {
       clearInterval(srvPollTimer);
-      // If the token happened to survive (it will not, across a restart) the
-      // authenticated view refreshes; otherwise the result waits for the next
-      // sign-in, when opening this panel loads it.
-      const s = await srvLoad(true);
-      if (!s) srvSetResult(label + ' done -- sign in again to see the result.', 'ok');
+      srvSetResult(label + ' done -- sign in again to see the result.', 'ok');
       return;
     }
-    if (ticks > 60) {
+    if (!onlySignOut && p !== 'down' && !p.updateRunning) {
+      clearInterval(srvPollTimer);
+      srvRender(p);
+      return;
+    }
+
+    if (ticks > maxTicks) {
       clearInterval(srvPollTimer);
       srvSetResult(label + ' is taking longer than expected -- check the laptop.', 'bad');
     }
@@ -2481,7 +2515,8 @@ $('srv-restart')?.addEventListener('click', async () => {
       body: '{}',
     });
   } catch (e) { /* the socket dropping IS the success signal here */ }
-  srvPollUntilBack('Restart');
+  // Only a restart empties the token map, so being signed out is the proof.
+  srvPollUntilBack('Restart', { onlySignOut: true, maxTicks: 60 });
 });
 
 $('srv-update')?.addEventListener('click', async () => {
@@ -2499,7 +2534,9 @@ $('srv-update')?.addEventListener('click', async () => {
       return;
     }
     srvSetResult('Updating -- the server restarts when it finishes.', null);
-    srvPollUntilBack('Update');
+    // update.sh stays up for its whole run and restarts last, so this must
+    // not stop at the first liveness check. npm ci can make it slow.
+    srvPollUntilBack('Update', { onlySignOut: false, maxTicks: 160 });
   } catch (e) {
     srvSetResult('Update could not start: ' + e.message, 'bad');
   }

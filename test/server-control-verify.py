@@ -181,14 +181,25 @@ def main():
             authed = page.evaluate(AUTHED_JS)
             print("   client still signed in: %s" % (not authed["authVisible"]))
 
-            # The client's own liveness poll must notice. It used to ask an
-            # AUTHENTICATED route, which 401s forever once the token dies with
-            # the restart -- so it timed out into a false alarm about a server
-            # that had already come back.
-            result = page.evaluate("() => document.getElementById('srv-result').textContent")
+            # The client's own poll must RESOLVE, not merely avoid crashing.
+            # Two ways this went wrong before: it asked an authenticated route
+            # (401s forever once the token dies with the restart), and then it
+            # waited to observe the server DOWN, which it never does -- the
+            # server is back in about two seconds and the poll runs every
+            # three. Both ended in a false alarm about a healthy server, so
+            # the assertion is on the resolved text and nothing weaker.
+            result = ""
+            for _ in range(30):
+                result = page.evaluate(
+                    "() => document.getElementById('srv-result').textContent")
+                if "done" in result or "taking longer" in result:
+                    break
+                page.wait_for_timeout(3000)
             print("   panel says: %r" % result)
-            if "taking longer than expected" in result:
+            if "taking longer" in result:
                 failures.append("client reported a false timeout after a successful restart")
+            elif "done" not in result:
+                failures.append("client's restart poll never resolved (said %r)" % result)
 
             # Re-authenticate to confirm the session is really still there,
             # rather than trusting the /health count alone.
@@ -209,26 +220,41 @@ def main():
             page.click("#srv-update")
             page.wait_for_timeout(300)
             page.click("#srv-update")
-            print("   confirmed; waiting for update.sh to finish and restart...")
-            # Same trap as the restart poll, and it caught me twice: the update
-            # ends by restarting the server, which invalidates this client's
-            # token. Wait for liveness UNAUTHENTICATED, then sign in again
-            # before asking an authenticated route anything.
-            done = None
-            for _ in range(80):
+            print("   confirmed; watching the CLIENT's own poll...")
+            # Watched WITHOUT navigating, deliberately. Reloading or signing in
+            # destroys the JS context and with it the poll under test -- which
+            # is how a version of this harness missed the client stopping its
+            # update poll at the first liveness check, long before update.sh
+            # had restarted anything.
+            client_said = ""
+            for _ in range(120):
                 page.wait_for_timeout(3000)
-                h = page.evaluate(HEALTH_JS)
-                if not (h and h.get("status")):
-                    continue          # mid-restart
-                try:
-                    login(page, base, args.totp_secret)
-                    open_settings(page)
-                except Exception:
-                    continue          # came back between the two calls
-                s = page.evaluate(STATUS_JS)
-                if s and not s.get("error") and not s.get("updateRunning") and s.get("lastUpdate"):
-                    done = s["lastUpdate"]
+                client_said = page.evaluate(
+                    "() => document.getElementById('srv-result').textContent")
+                if "done" in client_said or "taking longer" in client_said:
                     break
+            print("   panel says: %r" % client_said)
+            if "taking longer" in client_said:
+                failures.append("client reported a false timeout on update")
+            elif "done" not in client_said:
+                failures.append("client never reported the update finishing (said %r)" % client_said)
+
+            # Only now sign in again, for the authoritative result.
+            done = None
+            for _ in range(20):
+                h = page.evaluate(HEALTH_JS)
+                if h and h.get("status"):
+                    try:
+                        login(page, base, args.totp_secret)
+                        open_settings(page)
+                    except Exception:
+                        page.wait_for_timeout(3000)
+                        continue
+                    s = page.evaluate(STATUS_JS)
+                    if s and not s.get("error") and not s.get("updateRunning") and s.get("lastUpdate"):
+                        done = s["lastUpdate"]
+                        break
+                page.wait_for_timeout(3000)
             if not done:
                 failures.append("update never reported a result")
             else:
