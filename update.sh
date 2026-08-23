@@ -156,8 +156,13 @@ fi
 # say) matched the guard and then restarted the LIVE server instead of itself.
 # The server passes its own PM2 name; the default preserves old behaviour for
 # a hand-run update.
+# The existence check is `pm2 describe`, an EXACT lookup, not a grep over
+# `pm2 list`. A substring match is what made this restart the wrong process in
+# the first place: "claude-mobile" matches the line for "claude-mobile-herdr".
+# Passing the name explicitly fixes which process is restarted; it does not fix
+# a guard that answers "yes" for a name that is not there.
 PM2_NAME="${CM_PM2_NAME:-claude-mobile}"
-if command -v pm2 &>/dev/null && pm2 list 2>/dev/null | grep -q "$PM2_NAME"; then
+if command -v pm2 &>/dev/null && pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
   say "Restarting via PM2 ($PM2_NAME)..."
   pm2 restart "$PM2_NAME"
   ok "Restarted"

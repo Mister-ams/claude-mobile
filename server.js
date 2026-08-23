@@ -847,7 +847,8 @@ app.post('/api/server/check', requireSameSite, requireSession, (req, res) => {
 });
 
 app.post('/api/server/restart', requireSameSite, requireSession, (req, res) => {
-  res.json(serverControl.restart(req.ip));
+  const result = serverControl.restart(req.ip);
+  res.status(result.ok ? 200 : 409).json(result);
 });
 
 app.post('/api/server/update', requireSameSite, requireSession, (req, res) => {

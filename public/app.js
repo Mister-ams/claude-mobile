@@ -2358,6 +2358,20 @@ function srvRender(s) {
 
   ver.textContent = (s.version ? 'v' + s.version : '?') + (s.commit ? ' · ' + s.commit : '');
 
+  // Nothing supervises this process, so an exit would be the end of it -- and
+  // the operator is on a phone with no way to start it again. Offering the
+  // buttons anyway would be offering a trap.
+  const rst = $('srv-restart');
+  if (s.supervised === false) {
+    note.textContent = 'Not running under PM2 -- restart and update are unavailable.';
+    note.className = 'set-note';
+    upd.disabled = true;
+    if (rst) rst.disabled = true;
+    upd.classList.remove('busy');
+    return;
+  }
+  if (rst) rst.disabled = false;
+
   if (s.updateRunning) {
     note.textContent = 'Updating...';
     note.className = 'set-note';
