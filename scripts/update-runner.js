@@ -51,16 +51,28 @@ writeState({ running: true, startedAt, from, pm2Name: cfg.pm2Name });
 try { fs.writeFileSync(cfg.logPath, `[runner] ${startedAt} updating ${cfg.installDir}\n`); }
 catch (e) { /* the update is still worth attempting without a log */ }
 
-const out = fs.openSync(cfg.logPath, 'a');
+// The output is PIPED and written here rather than handed to bash as an
+// inherited file descriptor, and that is not a style choice.
+//
+// MSYS bash (Git for Windows) cannot use a raw fd inherited from a native
+// Windows process for stdout/stderr. Given `stdio: ['ignore', fd, fd]` it
+// exits 1 after ~1.7s having written nothing at all -- no error, no
+// diagnostics, an empty log and a bare failure code. Measured side by side:
+// same binary, same cwd, same env, fd -> exit 1 / 0 bytes, pipe -> exit 0 /
+// 2597 bytes. It reads exactly like "the update failed", which is how it
+// would have shipped.
+const log = fs.createWriteStream(cfg.logPath, { flags: 'a' });
 const child = spawn(cfg.bashPath, ['update.sh'], {
   cwd: cfg.installDir,
   // CM_PM2_NAME tells update.sh which PM2 process to restart. Without it the
   // script restarts the one called "claude-mobile" -- so an update triggered
   // from a second instance would restart the LIVE server instead of itself.
   env: { ...process.env, CM_PM2_NAME: cfg.pm2Name || 'claude-mobile' },
-  stdio: ['ignore', out, out],
+  stdio: ['ignore', 'pipe', 'pipe'],
   windowsHide: true,
 });
+child.stdout.on('data', d => log.write(d));
+child.stderr.on('data', d => log.write(d));
 
 child.on('error', (e) => {
   writeState({
@@ -73,8 +85,12 @@ child.on('close', (code) => {
   const to = gitHead(cfg.installDir);
   let tail = '';
   try {
-    const log = fs.readFileSync(cfg.logPath, 'utf8').split('\n');
-    tail = log.slice(-12).join('\n');
+    // update.sh colours its output; the tail is rendered as text in a phone
+    // settings panel, so the escapes come out here rather than as mojibake
+    // there.
+    const text = fs.readFileSync(cfg.logPath, 'utf8')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    tail = text.split('\n').slice(-12).join('\n');
   } catch (e) { /* the exit code still carries the verdict */ }
   writeState({
     running: false,
@@ -89,6 +105,6 @@ child.on('close', (code) => {
     tail,
     pm2Name: cfg.pm2Name,
   });
-  try { fs.closeSync(out); } catch (e) { /* already gone */ }
+  try { log.end(); } catch (e) { /* already gone */ }
   process.exit(0);
 });
