@@ -101,10 +101,11 @@ Verify it end to end before anyone looks at it:
 
 ```bash
 python.exe test/live-session-verify.py --port <port> --totp-secret <base32> \
-           --restart-pm2 claude-mobile-<x>
+           --expect-backend herdr --restart-pm2 claude-mobile-<x>
 ```
 
-That authenticates for real, creates a session, waits for Claude to paint, restarts the
+That asserts which backend is actually running -- without it a green run proves only that
+SOME backend works -- then authenticates for real, creates a session, waits for Claude to paint, restarts the
 process, and requires the SAME session back -- id, name and directory, not just a count.
 `test/ipad-emulator.py` cannot do this: it drives a static server with synthetic frames and
 never reaches a backend. Use it for pure-client regressions, this for anything below them.

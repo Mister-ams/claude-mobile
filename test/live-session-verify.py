@@ -163,6 +163,9 @@ def main():
     ap.add_argument("--recover-only", action="store_true")
     ap.add_argument("--restart-pm2", default=None,
                     help="PM2 process name to restart mid-run; the same session must survive")
+    ap.add_argument("--expect-backend", default=None, choices=["dtach", "herdr"],
+                    help="require the server to be running THIS backend; without it a run "
+                         "proves only that some backend works, not which one")
     ap.add_argument("--claude-timeout", type=int, default=90)
     args = ap.parse_args()
 
@@ -171,6 +174,21 @@ def main():
 
     report = {"port": args.port, "viewports": {}}
     failures = []
+
+    # Establish WHICH backend is under test before testing anything. Without
+    # this the whole run is ambiguous: it would pass identically against a
+    # dtach instance while the report claimed herdr, which is worse than not
+    # checking at all because it stops anyone looking.
+    h0 = health(args.port)
+    report["healthAtStart"] = h0
+    print("target: port %d, backend=%s, sessions=%s"
+          % (args.port, h0.get("backend"), h0.get("sessions")))
+    if args.expect_backend and h0.get("backend") != args.expect_backend:
+        print("FAIL: expected backend %r, server reports %r"
+              % (args.expect_backend, h0.get("backend")))
+        return 1
+    if not h0.get("backendAvailable", True):
+        failures.append("backend reports itself unavailable: %s" % h0.get("lastError"))
 
     with sync_playwright() as p:
         b = p.chromium.launch()
@@ -238,6 +256,9 @@ def main():
                 h = health(args.port)
                 print("   back up: backend=%s sessions=%s" % (h.get("backend"), h.get("sessions")))
                 report["healthAfterRestart"] = h
+                if h.get("backend") != h0.get("backend"):
+                    failures.append("backend changed across the restart: %s -> %s"
+                                    % (h0.get("backend"), h.get("backend")))
 
                 ctx = b.new_context(viewport={"width": 1194, "height": 834}, device_scale_factor=2)
                 page = ctx.new_page()
@@ -312,7 +333,9 @@ def main():
         for f_ in failures:
             print("  - %s" % f_)
         return 1
-    print("\nPASS: all %d viewports rendered a live session" % len(VIEWPORTS))
+    print("\nPASS: %s backend, %d viewports rendered a live session%s"
+          % (h0.get("backend"), len(VIEWPORTS),
+             ", session survived a restart" if args.restart_pm2 else ""))
     return 0
 
 
