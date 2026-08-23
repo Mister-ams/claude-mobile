@@ -14,6 +14,7 @@ cannot tell the difference.
 Run:
   python.exe test/live-session-verify.py --port 3457 --totp-secret <base32>
   ... --out <dir>              where PNGs land
+  ... --no-rotate             skip the iPad rotation check (on by default)
   ... --restart-pm2 <name>     restart that PM2 process mid-run and require the
                                SAME session to come back -- this is the whole
                                point of having a session backend
@@ -45,7 +46,7 @@ VIEWPORTS = [
     ("phone", 390, 844),
 ]
 
-# Rotation pairs, for --rotate. The iPad is the target device, and rotating it
+# Rotation pairs. The iPad is the target device, and rotating it
 # is the one interaction that forces a resize all the way down the chain:
 # client -> WS -> pty -> backend -> Claude. Gotcha 4 ("column negotiation")
 # lives exactly here, and it is invisible until something is measured against
@@ -206,9 +207,12 @@ def main():
     ap.add_argument("--expect-backend", default=None, choices=["dtach", "herdr"],
                     help="require the server to be running THIS backend; without it a run "
                          "proves only that some backend works, not which one")
-    ap.add_argument("--rotate", action="store_true",
-                    help="rotate each iPad viewport on a live session and require the "
-                         "server's columns to catch up with the client's (gotcha 4)")
+    # Rotation is ON by default. iPad is the target device and rotating it is
+    # the interaction that exercises the whole resize chain, so a run that
+    # skips it is not a verification of the thing that matters. Opting out is
+    # for the rare case with no live session to rotate.
+    ap.add_argument("--no-rotate", action="store_true",
+                    help="skip the iPad rotation check (it is on by default)")
     ap.add_argument("--claude-timeout", type=int, default=90)
     args = ap.parse_args()
 
@@ -332,7 +336,7 @@ def main():
         # One browser context per pair, rotated in place, because a fresh
         # context would re-attach at the new size and never exercise the
         # resize path at all -- which is how this stays untested.
-        if args.rotate:
+        if not args.no_rotate:
             report["rotation"] = {}
             for label, land, port_ in ROTATIONS:
                 ctx = b.new_context(viewport={"width": land[0], "height": land[1]},
