@@ -45,6 +45,16 @@ VIEWPORTS = [
     ("phone", 390, 844),
 ]
 
+# Rotation pairs, for --rotate. The iPad is the target device, and rotating it
+# is the one interaction that forces a resize all the way down the chain:
+# client -> WS -> pty -> backend -> Claude. Gotcha 4 ("column negotiation")
+# lives exactly here, and it is invisible until something is measured against
+# the server's own view rather than the client's intent.
+ROTATIONS = [
+    ("ipad11", (1194, 834), (834, 1194)),
+    ("ipad13", (1366, 1024), (1024, 1366)),
+]
+
 
 def totp(secret_b32, when=None, period=30, digits=6):
     """RFC 6238, so the harness needs no TOTP dependency of its own."""
@@ -144,6 +154,36 @@ def health(port, timeout=30):
     raise RuntimeError("server on %d never answered /health: %s" % (port, last))
 
 
+# The server's own view of the terminal, next to what the client is asking for.
+# `grid.cols` is set from the snapshot (app.js: `grid.cols = snap.cols`), so it
+# is the SERVER's number, not a local cache -- the client deliberately compares
+# against it rather than a `lastCols`. Convergence of the two is the only
+# honest proof that a resize travelled the whole chain and Claude reflowed.
+GRID_DIMS = """() => {
+  const g = gridTerms[activeSession];
+  if (!g) return null;
+  const want = computeGridDims(g);
+  return {
+    serverCols: g.cols, serverRows: g.rows,
+    wantCols: want ? want.cols : null, wantRows: want ? want.rows : null,
+    converged: !!want && want.cols === g.cols && want.rows === g.rows,
+    viewport: { w: innerWidth, h: innerHeight }
+  };
+}"""
+
+
+def wait_converged(page, timeout_s=20):
+    """Poll until the server's dims match what the client asked for."""
+    end = time.time() + timeout_s
+    last = None
+    while time.time() < end:
+        last = page.evaluate(GRID_DIMS)
+        if last and last["converged"]:
+            return True, last, round(timeout_s - (end - time.time()), 1)
+        page.wait_for_timeout(400)
+    return False, last, timeout_s
+
+
 def session_fingerprint(page):
     """Identity as the CLIENT sees it: which sessions, named what, where.
 
@@ -166,6 +206,9 @@ def main():
     ap.add_argument("--expect-backend", default=None, choices=["dtach", "herdr"],
                     help="require the server to be running THIS backend; without it a run "
                          "proves only that some backend works, not which one")
+    ap.add_argument("--rotate", action="store_true",
+                    help="rotate each iPad viewport on a live session and require the "
+                         "server's columns to catch up with the client's (gotcha 4)")
     ap.add_argument("--claude-timeout", type=int, default=90)
     args = ap.parse_args()
 
@@ -283,6 +326,64 @@ def main():
                     else:
                         failures.append("Claude did not paint after the restart")
                     report["claudeMarkerAfterRestart"] = m2
+                ctx.close()
+
+        # ── rotation: does a resize reach the far end? ───────────────
+        # One browser context per pair, rotated in place, because a fresh
+        # context would re-attach at the new size and never exercise the
+        # resize path at all -- which is how this stays untested.
+        if args.rotate:
+            report["rotation"] = {}
+            for label, land, port_ in ROTATIONS:
+                ctx = b.new_context(viewport={"width": land[0], "height": land[1]},
+                                    device_scale_factor=2)
+                page = ctx.new_page()
+                errs = []
+                page.on("pageerror", lambda e: errs.append(str(e)))
+                page.on("dialog", lambda d: d.accept())
+                if not login(page, base, args.totp_secret, errs):
+                    failures.append("%s rotation: login failed" % label)
+                    ctx.close()
+                    continue
+                page.wait_for_timeout(3000)
+
+                steps = []
+                ok0, d0, _ = wait_converged(page)
+                steps.append(("landscape", land, ok0, d0))
+                for name, size in (("-> portrait", port_), ("-> landscape", land)):
+                    page.set_viewport_size({"width": size[0], "height": size[1]})
+                    page.wait_for_timeout(600)
+                    ok, d, secs = wait_converged(page)
+                    steps.append((name, size, ok, d))
+
+                print("%s rotation" % label)
+                for name, size, ok, d in steps:
+                    if not d:
+                        print("   %-13s %dx%d  NO GRID" % (name, size[0], size[1]))
+                        failures.append("%s %s: no grid" % (label, name))
+                        continue
+                    verdict = "converged" if ok else "STUCK"
+                    print("   %-13s %dx%d  server %sx%s  client wants %sx%s  %s"
+                          % (name, size[0], size[1], d["serverCols"], d["serverRows"],
+                             d["wantCols"], d["wantRows"], verdict))
+                    if not ok:
+                        failures.append(
+                            "%s %s: server stuck at %sx%s while client wants %sx%s"
+                            % (label, name, d["serverCols"], d["serverRows"],
+                               d["wantCols"], d["wantRows"]))
+                # Rotating must not cost the session or its content.
+                m = page.evaluate(MEASURE)
+                if m["nonEmptyRows"] == 0:
+                    failures.append("%s: terminal empty after rotation" % label)
+                if errs:
+                    failures.append("%s rotation: %d page errors" % (label, len(errs)))
+                    print("   pageerrors %s" % errs[:2])
+                report["rotation"][label] = {
+                    "steps": [{"step": s[0], "size": s[1], "converged": s[2], "dims": s[3]}
+                              for s in steps],
+                    "afterRotation": m,
+                }
+                print()
                 ctx.close()
 
         # ── pass 2: measure every viewport against the live session ──
