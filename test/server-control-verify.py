@@ -177,9 +177,18 @@ def main():
             # A restart wipes the in-memory token map, so the client is signed
             # out. Recorded rather than asserted: it is the product's current
             # behaviour, and the UI is expected to say so BEFORE the tap.
-            page.wait_for_timeout(4000)
+            page.wait_for_timeout(9000)
             authed = page.evaluate(AUTHED_JS)
             print("   client still signed in: %s" % (not authed["authVisible"]))
+
+            # The client's own liveness poll must notice. It used to ask an
+            # AUTHENTICATED route, which 401s forever once the token dies with
+            # the restart -- so it timed out into a false alarm about a server
+            # that had already come back.
+            result = page.evaluate("() => document.getElementById('srv-result').textContent")
+            print("   panel says: %r" % result)
+            if "taking longer than expected" in result:
+                failures.append("client reported a false timeout after a successful restart")
 
             # Re-authenticate to confirm the session is really still there,
             # rather than trusting the /health count alone.

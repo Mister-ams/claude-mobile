@@ -2368,7 +2368,7 @@ function srvRender(s) {
     // would be the kind of confidently wrong answer that stops anyone looking.
     note.textContent = 'Update check failed -- ' + s.remote.error;
     note.className = 'set-note';
-    upd.disabled = true;
+    upd.disabled = false;
     upd.classList.remove('busy');
   } else if (s.updateAvailable) {
     note.textContent = 'Update available: ' + s.commit + ' -> ' + s.remote.commit;
@@ -2378,7 +2378,12 @@ function srvRender(s) {
   } else {
     note.textContent = 'Up to date' + (s.branch ? ' on ' + s.branch : '') + '.';
     note.className = 'set-note';
-    upd.disabled = true;
+    // Enabled even with nothing to pull. update.sh is idempotent and does more
+    // than pull -- it re-asserts the secret file permissions and restarts --
+    // so "run update.sh from my iPad" stays possible. The note above already
+    // says whether there is anything to fetch; disabling the button would
+    // decide that for the operator.
+    upd.disabled = false;
     upd.classList.remove('busy');
   }
 
@@ -2423,18 +2428,38 @@ async function srvLoad(fresh) {
   }
 }
 
-// The server goes away mid-flight in both flows, so this tolerates failures
-// rather than treating the first one as the answer.
+// Liveness is asked UNAUTHENTICATED, and that is the point of this function
+// rather than an incidental detail.
+//
+// A restart wipes the in-memory token map, so this client's token is dead the
+// moment the server comes back. Polling /api/server/status -- which is
+// requireSession-guarded -- can therefore NEVER succeed after a restart: it
+// 401s until the timeout and then reports "taking longer than expected" about
+// a server that came back fine, recovered its sessions and is serving
+// requests. /api/auth/status is already public and already exists, so it is
+// what gets asked.
+async function srvAlive() {
+  try {
+    const r = await fetch('/api/auth/status');
+    return r.ok;
+  } catch (e) { return false; }
+}
+
 function srvPollUntilBack(label) {
   clearInterval(srvPollTimer);
   let ticks = 0;
   srvPollTimer = setInterval(async () => {
     ticks++;
-    const s = await srvLoad(false);
-    if (s && !s.updateRunning) {
+    if (await srvAlive()) {
       clearInterval(srvPollTimer);
-      srvLoad(true);
-    } else if (ticks > 100) {
+      // If the token happened to survive (it will not, across a restart) the
+      // authenticated view refreshes; otherwise the result waits for the next
+      // sign-in, when opening this panel loads it.
+      const s = await srvLoad(true);
+      if (!s) srvSetResult(label + ' done -- sign in again to see the result.', 'ok');
+      return;
+    }
+    if (ticks > 60) {
       clearInterval(srvPollTimer);
       srvSetResult(label + ' is taking longer than expected -- check the laptop.', 'bad');
     }
