@@ -11,11 +11,11 @@ So this asks the far end, through herdr's own socket API, which knows nothing
 about our mirror. It is herdr-specific by nature and therefore NOT part of the
 backend-agnostic harness.
 
-  herdr exposes `viewport_rows` on a pane and no column count, so rows are
-  read directly and columns are inferred from the widest painted row. Claude
-  draws full-width rules and boxes, so that tracks the pane width closely --
-  and the two orientations differ by tens of columns, far more than the proxy's
-  error.
+  Both dimensions are read EXACTLY, from `api snapshot`, whose layout carries
+  a `rect` per pane. `pane get` reports only viewport_rows, and that gap is
+  what made an earlier version of this infer width from the widest painted
+  row -- an estimate that depended on Claude drawing a full-width rule. There
+  was no need to estimate; the number was one call away.
 
 Read-only against the pane. It deliberately does NOT `pane run` anything:
 Claude is the foreground process there, so asking the shell its window size
@@ -68,30 +68,28 @@ def make_cli(herdr, session):
 
 
 def pane_geometry(cli):
-    """(pane_id, viewport_rows, widest painted row) straight from herdr."""
-    out = cli(["pane", "list"])
-    i = out.find('"pane_id":"')
-    if i < 0:
-        return None, None, None
-    pid = out[i + 11:out.find('"', i + 11)]
+    """(pane_id, exact cols, exact rows) straight from herdr's own snapshot.
 
-    rows = None
-    j = out.find('"viewport_rows":')
-    if j >= 0:
-        k = j + len('"viewport_rows":')
-        digits = ""
-        while k < len(out) and out[k].isdigit():
-            digits += out[k]
-            k += 1
-        rows = int(digits) if digits else None
-
-    read = cli(["pane", "read", pid, "--source", "visible", "--lines", "60"])
+    `pane get` reports viewport_rows and no column count, which is why an
+    earlier version of this inferred width from the widest painted row -- a
+    proxy that depended on Claude happening to draw a full-width rule. It does
+    not need to: `api snapshot` carries the layout, and every pane's `rect`
+    has an exact width and height. Ask for the number instead of estimating it.
+    """
+    raw = cli(["api", "snapshot"])
     try:
-        text = json.loads(read).get("result", {}).get("text", read)
+        snap = json.loads(raw)["result"]["snapshot"]
     except Exception:
-        text = read
-    widths = [len(l.rstrip()) for l in text.splitlines()]
-    return pid, rows, (max(widths) if widths else None)
+        return None, None, None
+
+    pid = snap.get("focused_pane_id")
+    for layout in snap.get("layouts", []):
+        for pane in layout.get("panes", []):
+            if pid is None or pane.get("pane_id") == pid:
+                rect = pane.get("rect") or {}
+                if "width" in rect and "height" in rect:
+                    return pane.get("pane_id"), rect["width"], rect["height"]
+    return pid, None, None
 
 
 def main():
@@ -130,7 +128,7 @@ def main():
             return 1
         page.wait_for_timeout(4000)
 
-        print("  %-11s %-13s %-14s %s" % ("step", "mirror", "herdr rows", "painted cols"))
+        print("  %-11s %-13s %-13s %s" % ("step", "mirror", "herdr pane", "delta"))
         for label, w, h in STEPS:
             page.set_viewport_size({"width": w, "height": h})
             page.wait_for_timeout(5000)
@@ -138,27 +136,30 @@ def main():
               const g = gridTerms[activeSession];
               return g ? { cols: g.cols, rows: g.rows } : null;
             }""")
-            _, rows, width = pane_geometry(cli)
-            rows_out.append((label, g, rows, width))
-            print("  %-11s %-13s %-14s %s"
-                  % (label, "%sx%s" % (g["cols"], g["rows"]) if g else "?", rows, width))
+            _, cols, rows = pane_geometry(cli)
+            rows_out.append((label, g, cols, rows))
+            delta = ("%+d cols, %+d rows" % (cols - g["cols"], rows - g["rows"])
+                     if g and cols is not None and rows is not None else "?")
+            print("  %-11s %-13s %-13s %s"
+                  % (label, "%sx%s" % (g["cols"], g["rows"]) if g else "?",
+                     "%sx%s" % (cols, rows), delta))
         b.close()
 
     print()
     failures = []
-    for label, g, rows, width in rows_out:
-        if g is None or rows is None or width is None:
+    for label, g, cols, rows in rows_out:
+        if g is None or cols is None or rows is None:
             failures.append("%s: could not read the pane" % label)
             continue
-        # herdr spends a row or two on chrome, and the painted-width proxy is
-        # only as wide as Claude's widest rule -- so a few columns of slack.
-        # A pane stuck in the other orientation is 16 columns out, not 3.
-        if abs(rows - g["rows"]) > 4:
+        # Exact numbers on both sides now, so the tolerance is small and only
+        # covers herdr spending a row or two on chrome at some widths. A pane
+        # left in the other orientation is 16 columns out, not 2.
+        if abs(cols - g["cols"]) > 2:
+            failures.append("%s: herdr pane is %d cols, mirror is %d -- the resize did not land"
+                            % (label, cols, g["cols"]))
+        if abs(rows - g["rows"]) > 2:
             failures.append("%s: herdr pane is %d rows, mirror is %d -- the resize did not land"
                             % (label, rows, g["rows"]))
-        if abs(width - g["cols"]) > 4:
-            failures.append("%s: widest painted row is %d cols, mirror is %d -- Claude did not reflow"
-                            % (label, width, g["cols"]))
 
     if failures:
         print("FAILURES (%d):" % len(failures))
