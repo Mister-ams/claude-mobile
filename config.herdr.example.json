@@ -1,0 +1,14 @@
+{
+  "_comment": "Second instance, herdr backend. Copy to config.json in a SEPARATE worktree -- never into the live checkout, whose server.js PM2 is running. Why each field differs: CLAUDE.md, Gotchas.",
+  "port": 3457,
+  "inactivityTimeout": 15,
+  "sessionBackend": "herdr",
+  "sessionPrefix": "cmh",
+  "herdrBin": "C:\\Users\\YOU\\tools\\herdr\\herdr.exe",
+  "auditPath": "~/.claude-mobile-herdr-audit.log",
+  "autoStart": [],
+  "defaultDir": "C:\\Users\\YOU\\Projects\\my-project",
+  "projects": [
+    { "name": "My Project", "dir": "C:\\Users\\YOU\\Projects\\my-project" }
+  ]
+}

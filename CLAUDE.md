@@ -6,9 +6,15 @@ Claude Mobile Bridge -- mobile web interface for Claude Code terminal sessions o
 
 ```
 claude-mobile/                    v3.2.18
-├── server.js                     Node.js: Express + WebSocket + node-pty + dtach (WSL) + E2E crypto
+├── server.js                     Node.js: Express + WebSocket + node-pty + session backend + E2E crypto
+├── lib/session-backend/          Session persistence, one module per backend
+│   ├── index.js                  The contract + `sessionBackend` selection (default dtach)
+│   ├── dtach.js                  dtach daemons inside WSL (shipped default)
+│   └── herdr.js                  herdr named sessions, native Windows ConPTY
+├── herdr-config.toml             herdr config for OUR sessions only (never the operator's)
 ├── config.json                   Projects, autoStart, tailscaleHostname, port (gitignored)
 ├── config.example.json           Template for config.json
+├── config.herdr.example.json     Template for a SECOND instance on the herdr backend
 ├── install.sh                    Full setup script (WSL, dtach, PM2, Tailscale serve)
 ├── update.sh                     Pull + deps + PM2 restart
 ├── public/
@@ -17,13 +23,18 @@ claude-mobile/                    v3.2.18
 │   ├── style.css                 Extracted CSS (503 lines) -- layout, themes, animations
 │   ├── vendor/                   Bundled xterm.js + addons (no CDN)
 │   └── apple-touch-icon.png      PWA icon
+├── test/live-session-verify.py   E2E against a RUNNING server: real auth, real session, 4 viewports
 ├── package.json                  Deps: express, ws, node-pty, @simplewebauthn/server, otpauth, qrcode
 └── .gitignore                    node_modules/, config.json, .totp-secret, .credentials.json, .server-identity-key
 ```
 
 ## How it works
 
-- Claude Code runs inside dtach (WSL Ubuntu-24.04) for session persistence across server restarts
+- Claude Code runs inside a **session backend** chosen by `sessionBackend` in config.json.
+  `dtach` (default) runs it in a dtach daemon inside WSL Ubuntu-24.04; `herdr` runs it in a
+  herdr named session natively on Windows, no WSL at all. Both survive server restarts.
+  Everything above the backend -- WebSocket, scrollback ring, headless mirror, attention
+  detection, auth -- is identical either way
 - dtach detaches/reattaches pty sessions without terminal emulation -- xterm.js gets raw pty output
 - node-pty spawns `wsl.exe` to attach to dtach sessions; raw ANSI streams over WebSocket to xterm.js
 - Server-side 400KB ring buffer (`session.scrollback`) captures all pty output for history replay
@@ -49,6 +60,12 @@ claude-mobile/                    v3.2.18
 - `interactive-widget=resizes-content` in viewport meta -- iOS manages keyboard natively, no JS height management
 - Terminal refits on WIDTH change only (orientation). Height changes: zero JS interaction with xterm.js
 - dtach for process persistence -- no terminal emulation layer, no alternate screen issues
+- Session backends are a config flag, not a fork: `sessionBackend` selects, dtach stays the
+  default, and backing out of an experiment is an edit rather than a revert. Same shape as
+  `RENDERER_MODE` selecting grid vs xterm
+- `state()` on a backend is four-valued (`alive`/`stale`/`gone`/`unknown`), never a boolean.
+  "the backend could not be asked" is not "the session is dead", and collapsing them drops
+  live sessions on a transient WSL or herdr hiccup
 - `session.scrollback` (400KB ring buffer) replaces tmux capture-pane for history replay
 - Chunked scrollback writes (50-line batches via term.write callback) prevent xterm.js parser corruption
 - Claude launched via `cmd.exe /c claude` (Windows interop from WSL) -- uses existing Windows auth
@@ -66,11 +83,50 @@ bash update.sh                               # pull + restart
 
 Setup: open `http://localhost:3456/setup` on laptop to configure TOTP.
 
+### A second instance (backend experiments)
+
+Never in the live checkout -- PM2 is running `server.js` from there, so a checkout swaps the
+live server's code under it. Use a worktree, and give it `config.herdr.example.json`:
+
+```bash
+git worktree add -b <branch> ../cm-wt-x origin/master
+cp -r node_modules ../cm-wt-x/           # NOT npm ci -- see the node-pty gotcha
+cp config.herdr.example.json ../cm-wt-x/config.json   # then edit port/prefix/paths
+cd ../cm-wt-x && pm2 start server.js --name claude-mobile-<x>
+```
+
+It mints its own TOTP secret at `http://localhost:<port>/setup` -- never copy the live one.
+
+Verify it end to end before anyone looks at it:
+
+```bash
+python.exe test/live-session-verify.py --port <port> --totp-secret <base32> \
+           --expect-backend herdr --restart-pm2 claude-mobile-<x>
+```
+
+That asserts which backend is actually running -- without it a green run proves only that
+SOME backend works -- then authenticates for real, creates a session, waits for Claude to paint, restarts the
+process, and requires the SAME session back -- id, name and directory, not just a count.
+`test/ipad-emulator.py` cannot do this: it drives a static server with synthetic frames and
+never reaches a backend. Use it for pure-client regressions, this for anything below them.
+
 ## Gotchas
 
 - No JS should change `appEl.style.height` or call `scrollToBottom` on resize events
 - `doResize()` must check `proposeDimensions()` before `fit()` -- skip if cols/rows unchanged
 - WSL Ubuntu-24.04 must be running for dtach sessions to work
+- `sessionPrefix` is what keeps two instances apart. Recovery scans the PREFIX, not the port,
+  so a second server sharing a prefix ADOPTS the first one's sessions -- this has happened.
+  Any instance that is not the live service gets its own prefix (and its own `auditPath`)
+- herdr: `detached: true` does NOT survive `pm2 restart` on Windows. It stops the child dying
+  WITH the parent but leaves the parent-PID record, and PM2 tree-kills (`taskkill /T`). The
+  herdr server is therefore launched through a throwaway node process that exits immediately,
+  so it is an orphan before PM2 ever enumerates our descendants. Measured both ways
+- herdr panes are alternate-screen, so there is no host scrollback to recover -- snapshots are
+  viewport-only. `pane read --lines N` cannot reach rows that left the alternate screen
+- node-pty's ConPTY kill path spawns a console-list helper that dies with `AttachConsole
+  failed`. Stop a herdr session via its CLI and let the client fall out; killing the pty first
+  is the noisy path
 - dtach sessions use socket files at `/tmp/cm-{id}.dtach` -- do not manually create with that prefix
 - After PM2 restart, scrollback buffer starts empty and rebuilds from live output
 - `.session-meta.json` persists session names across restarts
@@ -94,7 +150,8 @@ Per-WS `gridRenderer` flag set from the `connect` message's `renderer` field (`s
 
 ## Current State
 
-v3.3.0. Grid renderer is default; xterm fallback retained via `?renderer=xterm`.
+v3.4.0. Grid renderer is default; xterm fallback retained via `?renderer=xterm`.
+Session backend is dtach by default; herdr ships behind the flag, unproven in daily use.
 
 Current state, open items, the herdr evaluation and the security assessment live in the
 auto-memory project file `project_otg.md` -- that is the single pointer, kept outside this repo.

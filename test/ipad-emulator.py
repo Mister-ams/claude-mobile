@@ -12,6 +12,13 @@ two complaints that motivated it:
 Nothing here reasons about the source; every number is observed from the
 running client.
 
+SCOPE: this drives a STATIC server (test/static-server.js) and injects
+synthetic snapshots. There is no auth, no WebSocket and no session backend
+behind it, so it cannot tell you whether dtach or herdr works, and pointing it
+at a live server's port would only serve that port's static files. For
+anything below the client, use test/live-session-verify.py -- it authenticates
+for real against a running server and drives a real session.
+
 Run:
   C:\\Users\\MRAL-\\AppData\\Local\\Python\\bin\\python.exe test/ipad-emulator.py
   ... --shots-only     screenshots, skip the shift probes

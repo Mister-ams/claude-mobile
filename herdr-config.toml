@@ -1,0 +1,38 @@
+# herdr configuration for claude-mobile's OWN sessions.
+#
+# Reached via HERDR_CONFIG_PATH, which the herdr backend sets on every session
+# it spawns. The operator's own ~/AppData/Roaming/herdr/config.toml is never
+# read or written by claude-mobile.
+#
+# Every setting here exists to give the pane back to Claude. Measured at
+# herdr 0.8.2 on 2026-08-23, pty 120x40:
+#
+#   herdr defaults   pane 93x39    27 columns of sidebar
+#   this file        pane 119x40    1 column
+#
+# On a 50-column phone the sidebar already auto-collapses, so the win is on
+# tablet -- but a phone that rotates to landscape hits the same cliff.
+
+# The pane is remote and headless. A first-run notification walkthrough would
+# paint over the session before anyone could see it.
+onboarding = false
+
+[theme]
+# Light, always -- the client is a light theme and the two are seen together.
+name = "catppuccin-latte"
+
+[update]
+# No background version or manifest checks: a toast on a phone screen costs
+# rows, and updates are the operator's call, not a session's.
+version_check = false
+manifest_check = false
+
+[ui]
+# One claude-mobile session is one pane. Everything that exists to navigate
+# BETWEEN panes is dead weight, and the client already has its own session
+# switcher.
+sidebar_start_collapsed = true
+sidebar_collapsed_mode = "hidden"
+hide_tab_bar_when_single_tab = true
+pane_borders = false
+pane_outer_borders = false
