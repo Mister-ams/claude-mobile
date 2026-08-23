@@ -45,7 +45,11 @@ const COALESCE_MAX_AGE_MS = 64;
 // dropped with only a stderr note ("Cannot access 'AUDIT_PATH' before
 // initialization"). An audit log that silently loses its first entries is not
 // an audit log.
-const AUDIT_PATH = path.join(os.homedir(), '.claude-mobile-audit.log');
+// Per-instance by config: a second server on another port must not interleave
+// writes into the live server's audit log, nor rotate it out from under it.
+const AUDIT_PATH = config.auditPath
+  ? path.resolve(String(config.auditPath).replace(/^~(?=[\\/])/, os.homedir()))
+  : path.join(os.homedir(), '.claude-mobile-audit.log');
 // T06: size-based rotation. Rotate at 5 MB and keep 2 rotated files
 // (.log.1 = previous, .log.2 = the one before that); older ones are dropped.
 const AUDIT_MAX_BYTES = 5 * 1024 * 1024;
@@ -87,182 +91,24 @@ function audit(category, message, ip) {
   console.log(`  [audit] ${category}: ${message}`);
 }
 
-// ─── dtach session persistence (via WSL) ─────────────────────────
-const WSL_DISTRO = config.wslDistro || 'Ubuntu-24.04';
-const DTACH_DIR = '/tmp';
-const DTACH_PREFIX = 'cm'; // socket files: /tmp/cm-0.dtach, cm-1.dtach, ...
+// ─── Session backend ─────────────────────────────────────────────
+// Everything about how a session SURVIVES a restart lives behind this. dtach
+// (WSL) is the default; herdr (native Windows ConPTY) is selected with
+// "sessionBackend": "herdr" in config.json. See lib/session-backend/index.js
+// for the contract, including why state() has four values and not two.
+const { createSessionBackend } = require('./lib/session-backend');
 
-let wslAvailable = false;
 let lastError = null; // { message, timestamp }
 
 function setLastError(message) {
   lastError = { message, timestamp: Date.now() };
 }
 
-function probeWSL() {
-  try {
-    wslRun(['--exec', 'echo', '1'], { timeout: 5000 });
-    wslAvailable = true;
-    return true;
-  } catch (e) {
-    wslAvailable = false;
-    setLastError(`WSL probe failed: ${e.message}`);
-    return false;
-  }
-}
+// getSafeEnv and audit are function declarations, so they are hoisted and safe
+// to capture here; AUDIT_PATH is already initialised above, which is the trap
+// the audit-log comment warns about.
+const backend = createSessionBackend({ config, audit, getSafeEnv, pty, setLastError });
 
-function initWSL() {
-  if (probeWSL()) {
-    console.log(`[init] WSL (${WSL_DISTRO}) available`);
-    return;
-  }
-  console.warn(`[init] WSL not available, retrying in 5s...`);
-  const retryInterval = setInterval(() => {
-    if (probeWSL()) {
-      console.log(`[init] WSL (${WSL_DISTRO}) now available`);
-      clearInterval(retryInterval);
-    }
-  }, 5000);
-  // Stop retrying after 2 minutes
-  setTimeout(() => clearInterval(retryInterval), 120000);
-}
-
-// T23 (N1): every WSL call goes through execFileSync with an argv array. The
-// old wslExec built one command string --
-//   execSync(`wsl -d ${D} -u root -- bash -c "${cmd.replace(/"/g,'\\"')}"`)
-// -- escaping double quotes only, and routed it through cmd.exe, which does not
-// honour \" as an escape; backticks and $() also expanded inside the
-// double-quoted bash string. Nothing client-reachable fed it (project dirs are
-// allowlist-checked by exact match and session ids are numeric Map keys), but a
-// project directory containing a backtick, $ or & made it root RCE inside WSL.
-// execFileSync launches the binary directly: no cmd.exe, no shell parsing of
-// our arguments on the Windows side.
-//
-// It also has to be `--exec`, not `--`. `wsl.exe -- <cmd>` does NOT exec the
-// command: it joins everything after `--` into one string and hands that to the
-// default login shell, which re-parses it. Measured on Ubuntu-24.04:
-//   --      bash -c 'printf "%s|" "$0" "$@"' A B  ->  "/bin/bash||"
-//   --exec  bash -c 'printf "%s|" "$0" "$@"' A B  ->  "A|B|"
-// Under `--` the positional parameters never arrive because the outer shell
-// consumed them, which also means the old code had TWO shell layers -- cmd.exe's
-// and that one -- and a single round of quote escaping could not survive either.
-// `--exec` is the documented no-shell form: $(), backticks, &, | and spaces all
-// arrive literally.
-function wslRun(argv, opts = {}) {
-  return execFileSync('wsl.exe', ['-d', WSL_DISTRO, ...argv], {
-    encoding: 'utf8', timeout: 10000, windowsHide: true, ...opts,
-  }).trim();
-}
-
-// Where bash is genuinely needed (globs, ||, redirection) the script text is a
-// FIXED literal and every value arrives as a positional parameter: data to
-// bash, never syntax. $0 is a label, so the first param is $1.
-function wslBash(script, params = []) {
-  return wslRun(['-u', 'root', '--exec', 'bash', '-c', script, 'claude-mobile', ...params.map(String)]);
-}
-
-function winPathToWsl(winPath) {
-  return winPath
-    .replace(/^([A-Za-z]):\\/, (_, d) => `/mnt/${d.toLowerCase()}/`)
-    .replace(/\\/g, '/');
-}
-
-function wslPathToWin(wslPath) {
-  return wslPath
-    .replace(/^\/mnt\/([a-z])\//, (_, d) => `${d.toUpperCase()}:\\`)
-    .replace(/\//g, '\\');
-}
-
-function dtachSocket(id) { return `${DTACH_DIR}/${DTACH_PREFIX}-${id}.dtach`; }
-
-function listDtachSessions() {
-  try {
-    const out = wslBash('ls "$1"/"$2"-*.dtach 2>/dev/null || true', [DTACH_DIR, DTACH_PREFIX]);
-    if (!out) return [];
-    return out.split('\n').filter(Boolean).map(p => {
-      const match = p.match(/cm-(\d+)\.dtach$/);
-      return match ? parseInt(match[1]) : null;
-    }).filter(id => id !== null);
-  } catch (e) {
-    audit('ERROR', 'listDtachSessions failed (WSL may be down): ' + e.message);
-    return [];
-  }
-}
-
-// Create dtach session as daemon (dtach -n), then attach via node-pty.
-// dtach -n runs bash as a daemon -- survives PM2/node restarts.
-// cmd.exe can't run under dtach -n directly (Windows interop needs a
-// real terminal), so we create a bash shell first, attach, then send
-// the claude command via the pty.
-function createDtachDaemon(id, wslDir) {
-  // $1 = project dir, $2 = socket. Both are parameters, so a directory
-  // containing a backtick, $ or & is a literal path, not shell syntax.
-  wslBash('cd "$1" && exec env TERM=xterm-256color dtach -n "$2" -z bash',
-    [wslDir, dtachSocket(id)]);
-}
-
-// Attach to an existing dtach session via node-pty
-function attachToDtach(id, cols, rows) {
-  const socket = dtachSocket(id);
-  // --exec for the same reason as wslRun: `--` would route the socket path
-  // through the distro's login shell before dtach ever sees it.
-  return pty.spawn('wsl.exe', [
-    '-d', WSL_DISTRO, '-u', 'root', '--exec',
-    'dtach', '-a', socket
-  ], {
-    name: 'xterm-256color', cols: cols || 80, rows: rows || 24,
-    env: getSafeEnv()
-  });
-}
-
-// Liveness means a process is HOLDING the socket, not merely that the file
-// exists. /tmp is on the ext4 rootfs in this distro rather than tmpfs, so socket
-// FILES survive a WSL shutdown while the daemons behind them do not: the old
-// `test -S` reported those phantoms as alive and recovery attached to nothing --
-// exactly the case the new boot-resilience work makes routine. lsof is already
-// how killDtachSession finds the holder, so reuse it rather than invent a
-// second mechanism. Returns 'alive' | 'stale' (exists, unheld) | 'gone'.
-function dtachSocketState(socket) {
-  return wslBash(
-    'if [ ! -S "$1" ]; then echo gone; ' +
-    'elif [ -n "$(lsof -t "$1" 2>/dev/null)" ]; then echo alive; ' +
-    'else echo stale; fi',
-    [socket]);
-}
-
-function dtachSessionAlive(id) {
-  const socket = dtachSocket(id);
-  try {
-    const state = dtachSocketState(socket);
-    if (state === 'alive') return true;
-    // Re-probe before unlinking: the second WSL round-trip also supplies the
-    // spacing, so a socket that was created microseconds ago is not mistaken
-    // for a phantom during createSession's attach retry loop.
-    if (state === 'stale' && dtachSocketState(socket) === 'stale') {
-      // Nothing holds it, so unlinking cannot orphan a live session -- and a
-      // socket that still HAS a holder is never touched here.
-      audit('SESSION', `Stale dtach socket with no holder removed: cm-${id}`);
-      try { wslBash('rm -f "$1"', [socket]); }
-      catch (e) { audit('WARN', `stale socket unlink failed for cm-${id}: ${e.message}`); }
-    }
-    return false;
-  } catch (e) { audit('WARN', 'dtachSessionAlive: ' + e.message); return false; }
-}
-
-function killDtachSession(id) {
-  const socket = dtachSocket(id);
-  try {
-    // Find and kill the process attached to this socket. lsof can return
-    // several pids; the old code relied on shell word-splitting to kill them
-    // all, so keep that behaviour explicitly (and only for numeric pids).
-    const found = wslBash('lsof -t "$1" 2>/dev/null || true', [socket]);
-    const pids = found.split('\n').map(p => p.trim()).filter(p => /^\d+$/.test(p));
-    for (const pid of pids) wslBash('kill "$1" 2>/dev/null || true', [pid]);
-    wslBash('rm -f "$1"', [socket]);
-  } catch (e) {
-    audit('WARN', 'killDtachSession failed for ' + id + ': ' + e.message);
-  }
-}
 
 // ─── Auth: No tokens. Setup via localhost only. ──────────────────
 const QRCode = require('qrcode');
@@ -1076,10 +922,11 @@ app.get('/health', (req, res) => {
   }
   const mem = process.memoryUsage();
   res.json({
-    status: wslAvailable ? 'ok' : 'degraded',
+    status: backend.isAvailable() ? 'ok' : 'degraded',
     uptime: Math.floor(process.uptime()),
     sessions: sessions.size,
-    wsl: wslAvailable,
+    backend: backend.kind,
+    backendAvailable: backend.isAvailable(),
     memory: {
       rss: Math.round(mem.rss / 1048576),
       heap: Math.round(mem.heapUsed / 1048576)
@@ -1125,7 +972,10 @@ const SESSION_META_PATH = path.join(__dirname, '.session-meta.json');
 function saveSessionMeta() {
   const meta = {};
   for (const [id, s] of sessions) {
-    meta[`cm-${id}`] = { name: s.name, dir: s.dir };
+    // backend.label() on BOTH sides. These were `cm-${id}` here and the
+    // backend label in recovery, so any non-default sessionPrefix silently lost
+    // every name and dir on restart -- and then persisted the loss.
+    meta[backend.label(id)] = { name: s.name, dir: s.dir };
   }
   try { fs.writeFileSync(SESSION_META_PATH, JSON.stringify(meta, null, 2)); } catch (e) { audit('ERROR', 'saveSessionMeta: ' + e.message); }
 }
@@ -1513,16 +1363,21 @@ function wireSessionProc(session) {
   session.proc.onExit(() => {
     if (session.generation !== gen) return; // stale handler from previous proc
     if (!session.proc) return; // session already closed via 'close' message
-    // PTY (wsl.exe) exited -- check if dtach session is still alive
-    if (dtachSessionAlive(id)) {
-      // dtach survived (e.g., server restart) -- reattach after short delay
-      audit('SESSION', `PTY detached, dtach alive: cm-${id}`);
+    // The pty exited. Whether the SESSION died with it is the backend's
+    // question, and 'unknown' -- backend unreachable -- is not 'gone': a
+    // transient failure to ask must never be why a live session is dropped.
+    // So unknown reattaches too, and a failed reattach is what cleans up.
+    const backendState = backend.state(id);
+    if (backendState === 'alive' || backendState === 'unknown') {
+      audit('SESSION', `PTY detached, session ${backendState}: ${backend.label(id)}`);
       setTimeout(() => {
         if (!sessions.has(id)) return; // cleaned up already
         try {
-          session.proc = attachToDtach(id, session.lastCols || 80, session.lastRows || 24);
+          session.proc = backend.attach(id, {
+            cols: session.lastCols || 80, rows: session.lastRows || 24,
+          });
           wireSessionProc(session);
-          audit('SESSION', `Reattached to dtach: cm-${id}`);
+          audit('SESSION', `Reattached: ${backend.label(id)}`);
         } catch (e) {
           audit('ERROR', `Reattach failed: ${e.message}`);
           sessions.delete(id);
@@ -1531,7 +1386,7 @@ function wireSessionProc(session) {
         }
       }, 1000);
     } else {
-      // dtach session is gone -- clean up
+      // The session itself is gone -- clean up
       if (session.attentionTimer) clearTimeout(session.attentionTimer);
       if (session.outIdleTimer) clearTimeout(session.outIdleTimer);
       if (session.outMaxAgeTimer) clearTimeout(session.outMaxAgeTimer);
@@ -1558,38 +1413,14 @@ function sanitizeSessionName(name) {
 async function createSession(name, dir, cols, rows) {
   if (sessions.size >= MAX_SESSIONS) return null;
   const id = nextId++;
-  const wslDir = winPathToWsl(dir);
 
-  try {
-    createDtachDaemon(id, wslDir);
-  } catch (e) {
-    audit('ERROR', `dtach create failed: ${e.message}`);
-    return null;
-  }
+  // The backend owns creation end to end -- daemon-then-attach for dtach,
+  // spawn-then-wait-for-running for herdr -- because the retry shape differs
+  // and splitting it across this function is what made it backend-specific.
+  const proc = await backend.create(id, { dir, cols: cols || 50, rows: rows || 30 });
+  if (!proc) return null;
 
-  // Wait for dtach socket to appear (retry with async delay)
-  let proc = null;
-  let lastErr;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      if (dtachSessionAlive(id)) {
-        proc = attachToDtach(id, cols || 50, rows || 30);
-        break;
-      }
-    } catch (e) { lastErr = e; }
-    await new Promise(r => setTimeout(r, 300));
-  }
-  if (!proc) {
-    audit('ERROR', `dtach attach failed after 5 retries: ${lastErr?.message || 'unknown'}`);
-    return null;
-  }
-
-  // Send claude command via pty (bash is running inside dtach)
-  setTimeout(() => {
-    try { proc.write('cmd.exe /c claude\r'); } catch (e) {
-      audit('ERROR', 'Claude launch write failed for session ' + id + ': ' + e.message);
-    }
-  }, 500);
+  backend.launchClaude(proc, id);
 
   const session = {
     id, name, dir, proc, scrollback: '', generation: 0,
@@ -1598,44 +1429,37 @@ async function createSession(name, dir, cols, rows) {
 
   wireSessionProc(session);
   sessions.set(id, session);
-  audit('SESSION', `Created: "${name}" in ${dir} (dtach: cm-${id})`);
+  audit('SESSION', `Created: "${name}" in ${dir} (${backend.kind}: ${backend.label(id)})`);
   saveSessionMeta();
   return session;
 }
 
-// Recover existing dtach sessions after server restart
-function recoverDtachSessions() {
-  let existing;
-  try {
-    existing = listDtachSessions();
-    console.log(`  dtach scan: found ${existing.length} socket(s): ${JSON.stringify(existing)}`);
-  } catch (e) {
-    console.log(`  dtach scan failed: ${e.message}`);
-    return;
-  }
-  if (existing.length === 0) return;
 
-  console.log(`  Recovering ${existing.length} dtach session(s)...`);
+// Recover persisted sessions after a server restart. This is the whole point
+// of having a backend at all: 236 PM2 restarts over five months, none of which
+// cost a running Claude session.
+function recoverSessions() {
+  const { live, phantom } = backend.list();
+  console.log(`  ${backend.kind} scan: ${live.length} live, ${phantom.length} phantom`);
+  for (const id of phantom) {
+    // A record with nothing behind it heals on read -- backend.list() already
+    // cleared it. Say so rather than attaching to nothing.
+    console.log(`  Skipped phantom: ${backend.label(id)}`);
+    audit('SESSION', `Recovery skipped phantom: ${backend.label(id)}`);
+  }
+  if (live.length === 0) return;
+
+  console.log(`  Recovering ${live.length} session(s)...`);
   const meta = loadSessionMeta();
-  for (const idNum of existing) {
-    const metaKey = `cm-${idNum}`;
+  for (const idNum of live) {
+    const metaKey = backend.label(idNum);
     const saved = meta[metaKey];
     const name = saved?.name || `Recovered-${idNum}`;
     const dir = saved?.dir || 'unknown';
 
-    // A socket file with no process behind it is a phantom -- routine after a
-    // WSL restart, since /tmp is on the rootfs here. dtachSessionAlive reports
-    // it and clears it, so the leftover heals on read instead of being attached
-    // to an empty socket.
-    if (!dtachSessionAlive(idNum)) {
-      console.log(`  Skipped phantom socket: ${metaKey} (no process holds it)`);
-      audit('SESSION', `Recovery skipped phantom socket: ${metaKey}`);
-      continue;
-    }
-
     try {
-      const proc = attachToDtach(idNum, 80, 24);
-      console.log(`  dtach attach: pid=${proc.pid} for ${metaKey}`);
+      const proc = backend.attach(idNum, { cols: 80, rows: 24 });
+      console.log(`  attach: pid=${proc.pid} for ${metaKey}`);
 
       const session = {
         id: idNum, name, dir, proc, generation: 0,
@@ -1654,6 +1478,7 @@ function recoverDtachSessions() {
   }
   if (sessions.size > 0) saveSessionMeta();
 }
+
 
 // ─── WebSocket ───────────────────────────────────────────────────
 const allClients = new Set();
@@ -1987,17 +1812,20 @@ wss.on('connection', (ws, req) => {
 
       case 'close': {
         if (!targetSession) break;
-        // Kill dtach session first (destroys the running process)
-        killDtachSession(msg.session);
+        // Destroy the persisted session first, then drop the pty. Order
+        // matters for herdr: stopping the session is what makes its client
+        // exit cleanly, and killing the pty first is the path that trips
+        // node-pty's ConPTY console-list helper.
+        backend.kill(msg.session);
         const proc = targetSession.proc;
         targetSession.proc = null; // prevent onExit from double-broadcasting
-        try { proc.kill(); } catch (e) { audit('WARN', 'proc.kill: ' + e.message); }
+        backend.closeProc(proc);
         if (targetSession.attentionTimer) clearTimeout(targetSession.attentionTimer);
         recentOutput.delete(msg.session);
         sessions.delete(msg.session);
         if (ws.currentSession === msg.session) ws.currentSession = null;
         broadcastSessions();
-        audit('SESSION', `Closed: "${targetSession.name}" (dtach: cm-${msg.session})`, ws._ip);
+        audit('SESSION', `Closed: "${targetSession.name}" (${backend.kind}: ${backend.label(msg.session)})`, ws._ip);
         saveSessionMeta();
         break;
       }
@@ -2019,50 +1847,15 @@ wss.on('connection', (ws, req) => {
 });
 
 // ─── Backbone watchdog (T10) ─────────────────────────────────────
-// The session backbone in W0 is dtach inside WSL. W5 replaces it with the herdr
-// daemon: swap probeBackbone() for a socket `ping` and everything around it --
-// the state machine, the audit line, the client push -- stays as is.
-//
-// Detect and report only. No auto-restart in this wave.
+// The session backbone is whatever the configured backend persists sessions
+// with. Detect and report only -- no auto-restart.
 let backboneDown = false;
 
-// One WSL round trip: is dtach reachable, and which sockets are actually held
-// by a process? Returns { ok, wslDown, detail }.
-function probeBackbone() {
-  try {
-    const out = wslBash(
-      'command -v dtach >/dev/null 2>&1 || { echo NODTACH; exit 0; }; ' +
-      'for s in "$1"/"$2"-*.dtach; do [ -S "$s" ] || continue; ' +
-      'if [ -n "$(lsof -t "$s" 2>/dev/null)" ]; then echo "$s"; fi; done',
-      [DTACH_DIR, DTACH_PREFIX]);
-    if (out.includes('NODTACH')) {
-      return { ok: false, wslDown: false, detail: `dtach is missing in ${WSL_DISTRO}` };
-    }
-    const held = new Set(out.split('\n').map(s => s.trim()).filter(Boolean));
-    const orphaned = [...sessions.keys()].filter(id => !held.has(dtachSocket(id)));
-    if (orphaned.length) {
-      return {
-        ok: false, wslDown: false,
-        detail: `no live dtach process for ${orphaned.map(id => `cm-${id}`).join(', ')}`,
-      };
-    }
-    return { ok: true, wslDown: false, detail: `dtach reachable, ${held.size} live socket(s)` };
-  } catch (e) {
-    // wsl.exe writes its own errors as UTF-16, so strip the NULs and take the
-    // first line; otherwise the whole probe script gets echoed into the log.
-    const stderr = String(e.stderr || '').replace(/\0/g, '').trim().split('\n')[0];
-    const why = stderr || `exit ${e.status === undefined ? '?' : e.status}`;
-    return { ok: false, wslDown: true, detail: `WSL (${WSL_DISTRO}) unreachable: ${why.slice(0, 120)}` };
-  }
-}
 
 function checkBackbone() {
-  const probe = probeBackbone();
-  if (probe.wslDown) {
-    wslAvailable = false;
+  const probe = backend.probe([...sessions.keys()]);
+  if (probe.transportDown) {
     setLastError(probe.detail);
-  } else if (probe.ok) {
-    wslAvailable = true;
   }
   if (!probe.ok && !backboneDown) {
     backboneDown = true;
@@ -2112,8 +1905,8 @@ setInterval(() => {
       audit('AUTH', `Inactivity lock (periodic)`, ws._ip);
     }
   }
-  // T10: backbone liveness -- one WSL probe per minute, isolated from the
-  // housekeeping above so a WSL hiccup cannot skip token expiry.
+  // T10: backbone liveness -- one backend probe per minute, isolated from the
+  // housekeeping above so a backend hiccup cannot skip token expiry.
   try { checkBackbone(); } catch (e) { audit('WARN', 'backbone check failed: ' + e.message); }
 }, 60 * 1000);
 
@@ -2355,10 +2148,10 @@ server.listen(PORT, 'localhost', () => {
   console.log(`  Identity: ${identityKeys.fingerprint.slice(0, 16)}...`);
   console.log(`  Audit:    ${AUDIT_PATH}`);
   console.log(`  Shutdown: auto after 8h idle`);
-  console.log(`  Sessions: dtach via WSL (${WSL_DISTRO})`);
+  console.log(`  Sessions: ${backend.describe()}`);
   console.log('  ────────────────────────────────');
-  initWSL();
-  recoverDtachSessions();
+  backend.init();
+  recoverSessions();
   if (sessions.size === 0) autoStartSessions();
   audit('SYSTEM', `Server started on port ${PORT}`);
 });
