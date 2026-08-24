@@ -124,6 +124,22 @@ if command -v pm2 &>/dev/null && pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
   PM2_PRESENT=true
 fi
 
+# If this script stops the server, SOMETHING has to start it again on every
+# exit path -- not just the happy one. `set -e` is on, `fail` calls exit, and
+# the operator may be holding a phone with no other way in. A trap is the only
+# construct that covers all of those at once.
+STOPPED_FOR_NPM=false
+RESTARTED=false
+on_exit() {
+  if $STOPPED_FOR_NPM && ! $RESTARTED; then
+    warn "Update exited before restarting -- bringing $PM2_NAME back up"
+    pm2 restart "$PM2_NAME" >/dev/null 2>&1 \
+      || pm2 start server.js --name "$PM2_NAME" >/dev/null 2>&1 \
+      || warn "Could not bring $PM2_NAME back -- start it manually on the host"
+  fi
+}
+trap on_exit EXIT
+
 if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/null | grep -qE '^(package\.json|package-lock\.json)$'; then
   say "Dependency manifest changed -- updating dependencies..."
   # npm ci, not npm install: installs exactly the tree in package-lock.json.
@@ -142,13 +158,30 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
     # (@peculiar, @simplewebauthn, node-pty), require('node-pty') threw, and
     # /health still answered 200 with a live session. The next restart would
     # have been a dead server.
+    SAFE_TO_INSTALL=true
     if $PM2_PRESENT; then
       say "Stopping $PM2_NAME so npm can replace node_modules..."
-      pm2 stop "$PM2_NAME" >/dev/null 2>&1 || warn "Could not stop $PM2_NAME -- npm may fail to replace node_modules"
+      if pm2 stop "$PM2_NAME" >/dev/null 2>&1; then
+        STOPPED_FOR_NPM=true
+      else
+        # Installing anyway is what causes the damage. A dependency tree one
+        # version behind still runs; a half-deleted one does not, and it fails
+        # silently until the next restart. Skipping leaves node_modules
+        # untouched and the server serving.
+        warn "Could not stop $PM2_NAME -- SKIPPING npm ci rather than corrupting node_modules"
+        SAFE_TO_INSTALL=false
+        UPDATE_DEGRADED=1
+      fi
     fi
-    # Not `fail`: the server is stopped now, so exiting here would leave it
-    # down. Record it and press on to the restart.
-    npm ci --omit=dev || { warn "npm ci FAILED -- the installed tree may be incomplete"; NPM_FAILED=1; }
+    if $SAFE_TO_INSTALL; then
+      # Not `fail`: the server is stopped now, so exiting here would leave it
+      # down. Record it and press on to the restart. One retry, because the
+      # common cause of a first failure is a file still being released.
+      npm ci --omit=dev || {
+        warn "npm ci failed -- retrying once"
+        npm ci --omit=dev || { warn "npm ci FAILED twice -- the installed tree is probably incomplete"; NPM_FAILED=1; }
+      }
+    fi
   else
     # No silent fallback to `npm install`. package-lock.json is committed, so
     # a missing one means a broken checkout -- and installing anyway would
@@ -191,12 +224,25 @@ fi
 
 # Restart via PM2. `pm2 restart` also STARTS a stopped app, which matters here:
 # the dependency step above stops it, and this is what brings it back.
+#
+# The failure is handled rather than allowed to abort under `set -e`: aborting
+# here is the one outcome nobody can recover from remotely, because the server
+# that serves the UI is the server that is down.
 if $PM2_PRESENT; then
   say "Restarting via PM2 ($PM2_NAME)..."
-  pm2 restart "$PM2_NAME"
-  ok "Restarted"
-  sleep 2
-  pm2 logs "$PM2_NAME" --lines 8 --nostream
+  if pm2 restart "$PM2_NAME"; then
+    RESTARTED=true
+    ok "Restarted"
+    sleep 2
+    pm2 logs "$PM2_NAME" --lines 8 --nostream
+  elif pm2 start server.js --name "$PM2_NAME"; then
+    RESTARTED=true
+    warn "pm2 restart failed; started $PM2_NAME fresh instead"
+    UPDATE_DEGRADED=1
+  else
+    warn "Could not restart $PM2_NAME -- start it manually on the host"
+    UPDATE_DEGRADED=1
+  fi
 else
   ok "Update complete. Restart manually: node server.js"
 fi
