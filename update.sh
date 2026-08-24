@@ -104,12 +104,6 @@ if [ "${STASHED:-0}" = "1" ]; then
   git stash pop || warn "Stash pop failed -- check manually"
 fi
 
-# Update npm deps if EITHER manifest moved.
-# package-lock.json matters on its own: a security fix is very often
-# lockfile-only (the fixed version already satisfies the existing caret range,
-# so package.json never changes). Triggering on package.json alone would skip
-# exactly those -- including the ws HIGH advisory this repo just patched --
-# and leave the installed tree behind the audited one indefinitely.
 # Which PM2 process this install IS, resolved BEFORE the dependency step
 # because that step now has to stop it. CM_PM2_NAME is set by the server when
 # an update is triggered from the client; the default preserves the behaviour
@@ -140,12 +134,21 @@ on_exit() {
 }
 trap on_exit EXIT
 
+# Update npm deps if EITHER manifest moved.
+# package-lock.json matters on its own: a security fix is very often
+# lockfile-only (the fixed version already satisfies the existing caret range,
+# so package.json never changes). Triggering on package.json alone would skip
+# exactly those -- including the ws HIGH advisory this repo just patched --
+# and leave the installed tree behind the audited one indefinitely.
 if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/null | grep -qE '^(package\.json|package-lock\.json)$'; then
   say "Dependency manifest changed -- updating dependencies..."
   # npm ci, not npm install: installs exactly the tree in package-lock.json.
   # With `npm install` the lockfile is advisory and every caret range
   # re-resolves on each update, so a compromised upstream patch release
   # lands silently.
+  # Default true so the verification block below can test it on every path,
+  # including the one where the lockfile is missing.
+  SAFE_TO_INSTALL=true
   if [ -f package-lock.json ]; then
     # STOP THE SERVER FIRST. npm deletes node_modules alphabetically, and a
     # running server holds node-pty's native .node open -- so the wipe dies
@@ -158,7 +161,6 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
     # (@peculiar, @simplewebauthn, node-pty), require('node-pty') threw, and
     # /health still answered 200 with a live session. The next restart would
     # have been a dead server.
-    SAFE_TO_INSTALL=true
     if $PM2_PRESENT; then
       say "Stopping $PM2_NAME so npm can replace node_modules..."
       if pm2 stop "$PM2_NAME" >/dev/null 2>&1; then
@@ -190,18 +192,30 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
     # tree IS the audited tree.
     fail "package-lock.json is missing -- refusing to install an unpinned tree. Restore it (git checkout -- package-lock.json) and re-run."
   fi
-  # The check IS the point. A half-deleted node_modules exits 0 and looks like
-  # a clean install -- that is exactly what happened -- so the only honest test
-  # is loading the native module that gets clobbered first.
-  if [ "${NPM_FAILED:-0}" = "1" ]; then
+  # The check IS the point, and it runs on EVERY path including a failed
+  # install. A half-deleted node_modules exits 0 and looks like a clean install
+  # -- that is exactly what happened -- so the only honest test is loading the
+  # native module that gets clobbered first. Skipping the check when npm ci
+  # already failed would restart into an unverified tree and report nothing
+  # about it.
+  if node -e "require('node-pty')" >/dev/null 2>&1; then
+    if [ "${NPM_FAILED:-0}" = "1" ]; then
+      warn "npm ci failed, but node-pty still loads -- the previous tree is intact"
+      UPDATE_DEGRADED=1
+    else
+      ok "Dependencies updated"
+    fi
+  elif ! $SAFE_TO_INSTALL; then
+    # We could not stop the server, so running npm ci now is the destructive
+    # operation this whole change exists to prevent. Refuse, and do not claim
+    # to be "repairing with the server stopped" when it is not.
+    warn "node-pty does not load and $PM2_NAME could not be stopped -- NOT installing. Run 'pm2 stop $PM2_NAME && npm ci --omit=dev && pm2 restart $PM2_NAME' on the host."
     UPDATE_DEGRADED=1
-  elif node -e "require('node-pty')" >/dev/null 2>&1; then
-    ok "Dependencies updated"
   else
     # Detecting a broken tree and restarting into it anyway just converts a
-    # visible problem into a crash loop. The server is already stopped at this
-    # point, which is precisely the condition under which the install works --
-    # so repair it here rather than reporting it and moving on.
+    # visible problem into a crash loop. The server IS stopped at this point,
+    # which is precisely the condition under which the install works -- so
+    # repair it here rather than reporting it and moving on.
     warn "node-pty does not load -- node_modules is incomplete. Repairing with the server stopped..."
     if npm ci --omit=dev && node -e "require('node-pty')" >/dev/null 2>&1; then
       ok "Dependencies repaired"
