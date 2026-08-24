@@ -110,6 +110,20 @@ fi
 # so package.json never changes). Triggering on package.json alone would skip
 # exactly those -- including the ws HIGH advisory this repo just patched --
 # and leave the installed tree behind the audited one indefinitely.
+# Which PM2 process this install IS, resolved BEFORE the dependency step
+# because that step now has to stop it. CM_PM2_NAME is set by the server when
+# an update is triggered from the client; the default preserves the behaviour
+# of a hand-run update.
+#
+# The existence check is `pm2 describe`, an EXACT lookup, not a grep over
+# `pm2 list`. A substring match is what made this restart the wrong process:
+# "claude-mobile" matches the line for "claude-mobile-herdr".
+PM2_NAME="${CM_PM2_NAME:-claude-mobile}"
+PM2_PRESENT=false
+if command -v pm2 &>/dev/null && pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
+  PM2_PRESENT=true
+fi
+
 if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/null | grep -qE '^(package\.json|package-lock\.json)$'; then
   say "Dependency manifest changed -- updating dependencies..."
   # npm ci, not npm install: installs exactly the tree in package-lock.json.
@@ -117,7 +131,24 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
   # re-resolves on each update, so a compromised upstream patch release
   # lands silently.
   if [ -f package-lock.json ]; then
-    npm ci --omit=dev
+    # STOP THE SERVER FIRST. npm deletes node_modules alphabetically, and a
+    # running server holds node-pty's native .node open -- so the wipe dies
+    # partway and everything before it is simply gone. It stays invisible
+    # until the next restart, because the live process keeps running on the
+    # modules it already loaded.
+    #
+    # Not hypothetical. This fired on the first real update through the new
+    # client button, 24 Aug 2026: node_modules went from 115 entries to 3
+    # (@peculiar, @simplewebauthn, node-pty), require('node-pty') threw, and
+    # /health still answered 200 with a live session. The next restart would
+    # have been a dead server.
+    if $PM2_PRESENT; then
+      say "Stopping $PM2_NAME so npm can replace node_modules..."
+      pm2 stop "$PM2_NAME" >/dev/null 2>&1 || warn "Could not stop $PM2_NAME -- npm may fail to replace node_modules"
+    fi
+    # Not `fail`: the server is stopped now, so exiting here would leave it
+    # down. Record it and press on to the restart.
+    npm ci --omit=dev || { warn "npm ci FAILED -- the installed tree may be incomplete"; NPM_FAILED=1; }
   else
     # No silent fallback to `npm install`. package-lock.json is committed, so
     # a missing one means a broken checkout -- and installing anyway would
@@ -126,7 +157,17 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
     # tree IS the audited tree.
     fail "package-lock.json is missing -- refusing to install an unpinned tree. Restore it (git checkout -- package-lock.json) and re-run."
   fi
-  ok "Dependencies updated"
+  if [ "${NPM_FAILED:-0}" = "1" ]; then
+    UPDATE_DEGRADED=1
+  elif node -e "require('node-pty')" >/dev/null 2>&1; then
+    ok "Dependencies updated"
+  else
+    # The check IS the point. A half-deleted node_modules exits 0 and looks
+    # like a clean install; only loading the native module that gets clobbered
+    # first tells you otherwise.
+    warn "Dependencies installed but node-pty does not load -- node_modules looks incomplete. Re-run with the server stopped."
+    UPDATE_DEGRADED=1
+  fi
 fi
 
 # Re-assert secret file permissions (see harden_secrets above).
@@ -148,21 +189,9 @@ if $IS_WINDOWS && wsl --list --quiet 2>/dev/null | grep -qi "Ubuntu-24.04"; then
   " 2>/dev/null && ok "WSL Claude Code updated" || warn "WSL update skipped"
 fi
 
-# Restart via PM2.
-#
-# CM_PM2_NAME is which process to restart, and it matters: the name was
-# hardcoded to "claude-mobile", while the guard grepped for that as a
-# SUBSTRING. So an update run from a second instance (claude-mobile-herdr,
-# say) matched the guard and then restarted the LIVE server instead of itself.
-# The server passes its own PM2 name; the default preserves old behaviour for
-# a hand-run update.
-# The existence check is `pm2 describe`, an EXACT lookup, not a grep over
-# `pm2 list`. A substring match is what made this restart the wrong process in
-# the first place: "claude-mobile" matches the line for "claude-mobile-herdr".
-# Passing the name explicitly fixes which process is restarted; it does not fix
-# a guard that answers "yes" for a name that is not there.
-PM2_NAME="${CM_PM2_NAME:-claude-mobile}"
-if command -v pm2 &>/dev/null && pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
+# Restart via PM2. `pm2 restart` also STARTS a stopped app, which matters here:
+# the dependency step above stops it, and this is what brings it back.
+if $PM2_PRESENT; then
   say "Restarting via PM2 ($PM2_NAME)..."
   pm2 restart "$PM2_NAME"
   ok "Restarted"

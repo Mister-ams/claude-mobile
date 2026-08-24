@@ -142,6 +142,13 @@ python.exe test/herdr-pane-geometry.py --port PORT --totp-secret BASE32
   The Restart button says so before the tap. Anything polling across a restart must ask
   liveness UNAUTHENTICATED (`/health`), or it reports "the server never came back" about a
   server that came back fine
+- **npm ci while the server runs half-deletes node_modules**, and it looks like success. npm
+  wipes alphabetically and the live server holds node-pty native binary open, so the wipe dies
+  partway. Observed 24 Aug 2026 on the first real update: 115 entries down to 3, require of
+  node-pty threw, and /health still answered 200 with a live session -- the next restart would
+  have been a dead server. update.sh now stops the PM2 process before installing and verifies
+  node-pty loads afterwards. An instance still on a pre-fix update.sh gets one more exposure on
+  its next dependency-changing update: run that one from the laptop with the process stopped
 - **MSYS bash cannot use an inherited raw fd** for stdout/stderr from a native Windows
   process. `stdio: ['ignore', fd, fd]` makes it exit 1 after ~1.7s having written nothing at
   all -- no error, an empty log, a bare failure code. Pipe and write the file yourself.
