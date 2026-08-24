@@ -190,16 +190,25 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
     # tree IS the audited tree.
     fail "package-lock.json is missing -- refusing to install an unpinned tree. Restore it (git checkout -- package-lock.json) and re-run."
   fi
+  # The check IS the point. A half-deleted node_modules exits 0 and looks like
+  # a clean install -- that is exactly what happened -- so the only honest test
+  # is loading the native module that gets clobbered first.
   if [ "${NPM_FAILED:-0}" = "1" ]; then
     UPDATE_DEGRADED=1
   elif node -e "require('node-pty')" >/dev/null 2>&1; then
     ok "Dependencies updated"
   else
-    # The check IS the point. A half-deleted node_modules exits 0 and looks
-    # like a clean install; only loading the native module that gets clobbered
-    # first tells you otherwise.
-    warn "Dependencies installed but node-pty does not load -- node_modules looks incomplete. Re-run with the server stopped."
-    UPDATE_DEGRADED=1
+    # Detecting a broken tree and restarting into it anyway just converts a
+    # visible problem into a crash loop. The server is already stopped at this
+    # point, which is precisely the condition under which the install works --
+    # so repair it here rather than reporting it and moving on.
+    warn "node-pty does not load -- node_modules is incomplete. Repairing with the server stopped..."
+    if npm ci --omit=dev && node -e "require('node-pty')" >/dev/null 2>&1; then
+      ok "Dependencies repaired"
+    else
+      warn "Repair FAILED -- node_modules is still incomplete. The server will restart but may not stay up; run 'pm2 stop $PM2_NAME && npm ci --omit=dev && pm2 restart $PM2_NAME' on the host."
+      UPDATE_DEGRADED=1
+    fi
   fi
 fi
 
