@@ -124,6 +124,9 @@ fi
 # construct that covers all of those at once.
 STOPPED_FOR_NPM=false
 RESTARTED=false
+# Set only where restarting would be the destructive act -- see the dependency
+# step. Default false so every ordinary run restarts as before.
+SKIP_RESTART=false
 on_exit() {
   if $STOPPED_FOR_NPM && ! $RESTARTED; then
     warn "Update exited before restarting -- bringing $PM2_NAME back up"
@@ -209,7 +212,14 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
     # We could not stop the server, so running npm ci now is the destructive
     # operation this whole change exists to prevent. Refuse, and do not claim
     # to be "repairing with the server stopped" when it is not.
-    warn "node-pty does not load and $PM2_NAME could not be stopped -- NOT installing. Run 'pm2 stop $PM2_NAME && npm ci --omit=dev && pm2 restart $PM2_NAME' on the host."
+    #
+    # And do NOT restart afterwards. This is the one state where restarting is
+    # the destructive act: the on-disk tree is broken, but the running process
+    # is healthy because it holds the modules it loaded at startup. Restarting
+    # trades a working server for a dead one. Leaving it alone keeps the
+    # operator connected while they fix the tree.
+    warn "node-pty does not load and $PM2_NAME could not be stopped -- NOT installing and NOT restarting; the running server still works. Run 'pm2 stop $PM2_NAME && npm ci --omit=dev && pm2 restart $PM2_NAME' on the host."
+    SKIP_RESTART=true
     UPDATE_DEGRADED=1
   else
     # Detecting a broken tree and restarting into it anyway just converts a
@@ -251,7 +261,9 @@ fi
 # The failure is handled rather than allowed to abort under `set -e`: aborting
 # here is the one outcome nobody can recover from remotely, because the server
 # that serves the UI is the server that is down.
-if $PM2_PRESENT; then
+if $PM2_PRESENT && $SKIP_RESTART; then
+  warn "Skipping the restart on purpose -- see the dependency warning above. $PM2_NAME is still serving on its loaded modules."
+elif $PM2_PRESENT; then
   say "Restarting via PM2 ($PM2_NAME)..."
   if pm2 restart "$PM2_NAME"; then
     RESTARTED=true
