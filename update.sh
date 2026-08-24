@@ -181,6 +181,22 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
     # (@peculiar, @simplewebauthn, node-pty), require('node-pty') threw, and
     # /health still answered 200 with a live session. The next restart would
     # have been a dead server.
+    # Prove the PM2 target IS the server that asked, BEFORE stopping it. A
+    # misconfigured pm2Name otherwise stops somebody else's service -- and
+    # since the pid check below then refuses to restart anything, it would be
+    # left stopped. Only meaningful when a server triggered this; a hand-run
+    # update has no pid to compare against and keeps its old behaviour.
+    if $PM2_PRESENT && [ -n "${CM_SERVER_PID:-}" ]; then
+      PM2_PID="$(pm2 pid "$PM2_NAME" 2>/dev/null | tr -d '[:space:]')"
+      if [ -n "$PM2_PID" ] && [ "$PM2_PID" != "$CM_SERVER_PID" ]; then
+        warn "$PM2_NAME is pid $PM2_PID but the server that asked is $CM_SERVER_PID -- refusing to touch a process that is not this one"
+        PM2_PRESENT=false
+        SAFE_TO_INSTALL=false
+        SKIP_RESTART=true
+        UPDATE_DEGRADED=1
+      fi
+    fi
+
     if $PM2_PRESENT; then
       say "Stopping $PM2_NAME so npm can replace node_modules..."
       if pm2 stop "$PM2_NAME" >/dev/null 2>&1; then
