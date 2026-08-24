@@ -164,6 +164,12 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
     # (@peculiar, @simplewebauthn, node-pty), require('node-pty') threw, and
     # /health still answered 200 with a live session. The next restart would
     # have been a dead server.
+    if ! $PM2_PRESENT; then
+      # Nothing to stop through PM2. A fresh or manual install has no server
+      # running and this is fine; a server running OUTSIDE PM2 would be at the
+      # same risk, and the verification before the restart is what catches it.
+      warn "$PM2_NAME not found under PM2 -- installing without stopping anything"
+    fi
     if $PM2_PRESENT; then
       say "Stopping $PM2_NAME so npm can replace node_modules..."
       if pm2 stop "$PM2_NAME" >/dev/null 2>&1; then
@@ -195,44 +201,10 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
     # tree IS the audited tree.
     fail "package-lock.json is missing -- refusing to install an unpinned tree. Restore it (git checkout -- package-lock.json) and re-run."
   fi
-  # The check IS the point, and it runs on EVERY path including a failed
-  # install. A half-deleted node_modules exits 0 and looks like a clean install
-  # -- that is exactly what happened -- so the only honest test is loading the
-  # native module that gets clobbered first. Skipping the check when npm ci
-  # already failed would restart into an unverified tree and report nothing
-  # about it.
-  if node -e "require('node-pty')" >/dev/null 2>&1; then
-    if [ "${NPM_FAILED:-0}" = "1" ]; then
-      warn "npm ci failed, but node-pty still loads -- the previous tree is intact"
-      UPDATE_DEGRADED=1
-    else
-      ok "Dependencies updated"
-    fi
-  elif ! $SAFE_TO_INSTALL; then
-    # We could not stop the server, so running npm ci now is the destructive
-    # operation this whole change exists to prevent. Refuse, and do not claim
-    # to be "repairing with the server stopped" when it is not.
-    #
-    # And do NOT restart afterwards. This is the one state where restarting is
-    # the destructive act: the on-disk tree is broken, but the running process
-    # is healthy because it holds the modules it loaded at startup. Restarting
-    # trades a working server for a dead one. Leaving it alone keeps the
-    # operator connected while they fix the tree.
-    warn "node-pty does not load and $PM2_NAME could not be stopped -- NOT installing and NOT restarting; the running server still works. Run 'pm2 stop $PM2_NAME && npm ci --omit=dev && pm2 restart $PM2_NAME' on the host."
-    SKIP_RESTART=true
+  if [ "${NPM_FAILED:-0}" = "1" ]; then
     UPDATE_DEGRADED=1
-  else
-    # Detecting a broken tree and restarting into it anyway just converts a
-    # visible problem into a crash loop. The server IS stopped at this point,
-    # which is precisely the condition under which the install works -- so
-    # repair it here rather than reporting it and moving on.
-    warn "node-pty does not load -- node_modules is incomplete. Repairing with the server stopped..."
-    if npm ci --omit=dev && node -e "require('node-pty')" >/dev/null 2>&1; then
-      ok "Dependencies repaired"
-    else
-      warn "Repair FAILED -- node_modules is still incomplete. The server will restart but may not stay up; run 'pm2 stop $PM2_NAME && npm ci --omit=dev && pm2 restart $PM2_NAME' on the host."
-      UPDATE_DEGRADED=1
-    fi
+  elif $SAFE_TO_INSTALL; then
+    ok "Dependencies installed"
   fi
 fi
 
@@ -261,6 +233,33 @@ fi
 # The failure is handled rather than allowed to abort under `set -e`: aborting
 # here is the one outcome nobody can recover from remotely, because the server
 # that serves the UI is the server that is down.
+# Verify the tree the restart is about to load, on EVERY run -- not only when
+# the manifests moved. A node_modules left half-deleted by an earlier update
+# stays broken across later ones, and a pull-only update would happily restart
+# into it. A half-deleted tree exits every install cleanly and looks fine; the
+# only honest test is loading the native module that gets clobbered first.
+if ! node -e "require('node-pty')" >/dev/null 2>&1; then
+  if $STOPPED_FOR_NPM; then
+    # The server is stopped, which is exactly the condition under which the
+    # install works. Repair rather than restart into a crash loop.
+    warn "node-pty does not load -- node_modules is incomplete. Repairing with the server stopped..."
+    if npm ci --omit=dev && node -e "require('node-pty')" >/dev/null 2>&1; then
+      ok "Dependencies repaired"
+    else
+      warn "Repair FAILED -- node_modules is still incomplete. The server will restart but may not stay up; run 'pm2 stop $PM2_NAME && npm ci --omit=dev && pm2 restart $PM2_NAME' on the host."
+      UPDATE_DEGRADED=1
+    fi
+  else
+    # Nothing was stopped, so any running server is still healthy on the
+    # modules it loaded at startup -- and restarting is the destructive act
+    # here, not the safe one. Installing is equally unsafe for the same reason.
+    # Leave both alone and say so.
+    warn "node-pty does not load and nothing was stopped -- NOT installing and NOT restarting; a running server still works on its loaded modules. Run 'pm2 stop $PM2_NAME && npm ci --omit=dev && pm2 restart $PM2_NAME' on the host."
+    SKIP_RESTART=true
+    UPDATE_DEGRADED=1
+  fi
+fi
+
 if $PM2_PRESENT && $SKIP_RESTART; then
   warn "Skipping the restart on purpose -- see the dependency warning above. $PM2_NAME is still serving on its loaded modules."
 elif $PM2_PRESENT; then
