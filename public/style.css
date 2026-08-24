@@ -231,6 +231,33 @@ html, body {
   font-family: 'SF Mono', 'Menlo', monospace;
 }
 
+/* ── Server control ──
+   Restart and Update. Shapes borrowed from .qb rather than invented: these are
+   the same kind of control, and a second button vocabulary inside a 280px
+   panel would read as a different app. */
+#settings-panel .set-sep {
+  height: 1px; background: var(--border-muted);
+  margin: 12px -14px 10px;
+}
+#settings-panel .srv-actions { display: flex; gap: 6px; margin-top: 8px; }
+#settings-panel .srv-btn {
+  flex: 1; padding: 6px; font-size: 11px; min-height: 32px;
+  background: var(--surface-alt); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text-sec); cursor: pointer;
+  font-family: 'SF Mono', 'Menlo', monospace;
+}
+#settings-panel .srv-btn:active { background: var(--accent); color: #fff; border-color: var(--accent); }
+#settings-panel .srv-btn[disabled] { opacity: 0.4; cursor: default; }
+/* Armed is the second tap of a two-step confirm. It has to be unmistakable at
+   a glance, because the next tap restarts the server. */
+#settings-panel .srv-btn.armed {
+  background: var(--intent-warn); border-color: var(--intent-warn); color: #fff;
+}
+#settings-panel .srv-btn.busy { opacity: 0.6; cursor: progress; }
+#settings-panel #srv-note.avail { color: var(--accent-light); }
+#settings-panel #srv-result.ok { color: var(--intent-ok); }
+#settings-panel #srv-result.bad { color: var(--intent-danger); }
+
 /* ── T14: full-screen terminal on a hardware keyboard ──
    Direct keystrokes make the compose box the exception rather than the
    primary input path, so it collapses to a slim bar and the terminal keeps

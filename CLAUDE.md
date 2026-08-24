@@ -7,6 +7,9 @@ Claude Mobile Bridge -- mobile web interface for Claude Code terminal sessions o
 ```
 claude-mobile/                    v3.2.18
 ├── server.js                     Node.js: Express + WebSocket + node-pty + session backend + E2E crypto
+├── lib/server-control.js         Restart + update this process, from the client
+├── lib/orphan-spawn.js           Spawn something PM2's tree-kill cannot reach
+├── scripts/update-runner.js      Runs update.sh from outside the server's life
 ├── lib/session-backend/          Session persistence, one module per backend
 │   ├── index.js                  The contract + `sessionBackend` selection (default dtach)
 │   ├── dtach.js                  dtach daemons inside WSL (shipped default)
@@ -25,6 +28,7 @@ claude-mobile/                    v3.2.18
 │   └── apple-touch-icon.png      PWA icon
 ├── test/live-session-verify.py   E2E against a RUNNING server: real auth, real session, 4 viewports
 ├── test/herdr-pane-geometry.py   herdr-only: does a resize reach the PANE, not just our mirror
+├── test/server-control-verify.py Drives the Restart/Update buttons against a live server
 ├── package.json                  Deps: express, ws, node-pty, @simplewebauthn/server, otpauth, qrcode
 └── .gitignore                    node_modules/, config.json, .totp-secret, .credentials.json, .server-identity-key
 ```
@@ -42,6 +46,10 @@ claude-mobile/                    v3.2.18
 - On reconnect, server sends buffer to client; client uses `term.reset()` + chunked writes (50 lines/batch)
 - Tailscale VPN provides zero-public-surface networking; `tailscale serve` proxies HTTPS -> localhost:3456
 - PM2 manages the daemon; dtach sessions survive PM2/node restarts (live in WSL as socket files)
+- Server control lives in the settings panel: **Restart** and **Update** (pull, install if the
+  manifests moved, restart). There is no stop and no start -- the UI is served BY this process,
+  so a stop is a one-way door and a start could never work. Both are auth-gated exactly like
+  every other write route, and confirm with a two-step tap rather than `confirm()`
 - Attention detection (5s debounce) triggers Web Notifications + vibration on permission prompts, questions, idle prompt
 - GPU-accelerated rendering: WebGL -> Canvas -> DOM fallback chain (v3.0.2)
 - Slash command discovery: scans skills/ + commands/ directories (v3.0.1)
@@ -129,6 +137,17 @@ python.exe test/herdr-pane-geometry.py --port PORT --totp-secret BASE32
 - No JS should change `appEl.style.height` or call `scrollToBottom` on resize events
 - `doResize()` must check `proposeDimensions()` before `fit()` -- skip if cols/rows unchanged
 - WSL Ubuntu-24.04 must be running for dtach sessions to work
+- **A restart signs every client out.** Claude sessions survive it -- that is the backend's
+  whole job -- but session TOKENS live in an in-memory Map, so every client re-authenticates.
+  The Restart button says so before the tap. Anything polling across a restart must ask
+  liveness UNAUTHENTICATED (`/health`), or it reports "the server never came back" about a
+  server that came back fine
+- **MSYS bash cannot use an inherited raw fd** for stdout/stderr from a native Windows
+  process. `stdio: ['ignore', fd, fd]` makes it exit 1 after ~1.7s having written nothing at
+  all -- no error, an empty log, a bare failure code. Pipe and write the file yourself.
+  Measured: fd -> exit 1 / 0 bytes, pipe -> exit 0 / 2597 bytes
+- `update.sh` restarts `$CM_PM2_NAME` (default `claude-mobile`). It used to hardcode the name
+  behind a SUBSTRING guard, so an update run from a second instance restarted the LIVE server
 - `sessionPrefix` is what keeps two instances apart. Recovery scans the PREFIX, not the port,
   so a second server sharing a prefix ADOPTS the first one's sessions -- this has happened.
   Any instance that is not the live service gets its own prefix (and its own `auditPath`)
@@ -164,7 +183,7 @@ Per-WS `gridRenderer` flag set from the `connect` message's `renderer` field (`s
 
 ## Current State
 
-v3.4.0. Grid renderer is default; xterm fallback retained via `?renderer=xterm`.
+v3.5.0. Grid renderer is default; xterm fallback retained via `?renderer=xterm`.
 Session backend is dtach by default; herdr ships behind the flag, unproven in daily use.
 
 Current state, open items, the herdr evaluation and the security assessment live in the

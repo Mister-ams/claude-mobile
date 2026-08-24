@@ -2287,6 +2287,7 @@ function openSettings() {
 }
 
 function closeSettings() {
+  srvDisarm();
   $('settings-panel').classList.remove('open');
   $('settings-btn').setAttribute('aria-expanded', 'false');
 }
@@ -2304,7 +2305,256 @@ function refreshSettingsPanel() {
     const d = activeSession !== null ? computeGridDims(gridTerms[activeSession]) : null;
     cols.textContent = d ? `Terminal is ${d.cols} x ${d.rows} cells.` : '';
   }
+  // Re-ask origin on open rather than showing an answer up to half an hour old.
+  srvLoad(true);
 }
+
+// ── Server control ──
+// Restart, and update-then-restart, so neither needs the laptop.
+//
+// Confirmation is a two-step tap on the button itself, NOT confirm(). The
+// native dialog blocks JS, and on iOS a blocked page loses the WebSocket --
+// the same reason the passkey prompt is deferred until a user gesture. A
+// dialog that kills the connection is a poor way to confirm restarting the
+// thing on the other end of it.
+let srvArmTimer = null;
+let srvPollTimer = null;
+
+function srvSetResult(text, kind) {
+  const el = $('srv-result');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'set-note' + (kind ? ' ' + kind : '');
+}
+
+function srvDisarm() {
+  clearTimeout(srvArmTimer);
+  for (const id of ['srv-restart', 'srv-update']) {
+    const b = $(id);
+    if (!b) continue;
+    b.classList.remove('armed');
+    if (b.dataset.label) b.textContent = b.dataset.label;
+  }
+}
+
+// Returns true when this tap was the confirming one.
+function srvArm(btn) {
+  if (btn.classList.contains('armed')) { srvDisarm(); return true; }
+  srvDisarm();
+  btn.dataset.label = btn.dataset.label || btn.textContent;
+  btn.textContent = 'Confirm?';
+  btn.classList.add('armed');
+  // Disarms itself, so a button left armed cannot fire later when the panel
+  // is reopened for something else.
+  srvArmTimer = setTimeout(srvDisarm, 5000);
+  return false;
+}
+
+function srvRender(s) {
+  const ver = $('srv-version');
+  const note = $('srv-note');
+  const upd = $('srv-update');
+  if (!ver || !note || !upd) return;
+
+  ver.textContent = (s.version ? 'v' + s.version : '?') + (s.commit ? ' · ' + s.commit : '');
+
+  // Nothing supervises this process, so an exit would be the end of it -- and
+  // the operator is on a phone with no way to start it again. Offering the
+  // buttons anyway would be offering a trap.
+  const rst = $('srv-restart');
+  if (s.supervised === false) {
+    note.textContent = 'Not running under PM2 -- restart and update are unavailable.';
+    note.className = 'set-note';
+    upd.disabled = true;
+    if (rst) rst.disabled = true;
+    upd.classList.remove('busy');
+    return;
+  }
+  if (rst) rst.disabled = false;
+
+  if (s.updateRunning) {
+    note.textContent = 'Updating...';
+    note.className = 'set-note';
+    upd.disabled = true;
+    upd.classList.add('busy');
+  } else if (s.remote && s.remote.error) {
+    // Could not ask origin. That is not "up to date", and showing it as such
+    // would be the kind of confidently wrong answer that stops anyone looking.
+    note.textContent = 'Update check failed -- ' + s.remote.error;
+    note.className = 'set-note';
+    upd.disabled = false;
+    upd.classList.remove('busy');
+  } else if (s.updateAvailable) {
+    note.textContent = 'Update available: ' + s.commit + ' -> ' + s.remote.commit;
+    note.className = 'set-note avail';
+    upd.disabled = false;
+    upd.classList.remove('busy');
+  } else {
+    note.textContent = 'Up to date' + (s.branch ? ' on ' + s.branch : '') + '.';
+    note.className = 'set-note';
+    // Enabled even with nothing to pull. update.sh is idempotent and does more
+    // than pull -- it re-asserts the secret file permissions and restarts --
+    // so "run update.sh from my iPad" stays possible. The note above already
+    // says whether there is anything to fetch; disabling the button would
+    // decide that for the operator.
+    upd.disabled = false;
+    upd.classList.remove('busy');
+  }
+
+  const last = s.lastUpdate;
+  const resultEl = $('srv-result');
+  if (last && !last.error && last.exitCode === 0 && last.changed) {
+    // The new client only arrives on a reload: index.html cache-busts app.js
+    // with ?v=<version>, and iOS Safari serves the old one until the document
+    // is fetched again.
+    srvSetResult('Updated ' + last.from + ' -> ' + last.to + '. Tap to reload the client.', 'ok');
+    if (resultEl) resultEl.onclick = () => location.reload();
+  } else if (last && (last.error || last.exitCode !== 0)) {
+    // update.sh exits non-zero when it finished DEGRADED, so this is the
+    // script's own verdict rather than merely "did it crash".
+    srvSetResult('Last update failed (' + (last.error || 'exit ' + last.exitCode) + ').', 'bad');
+    if (resultEl) resultEl.onclick = null;
+  }
+}
+
+async function srvStatus(fresh) {
+  if (!sessionToken) return null;
+  const res = await fetch('/api/server/' + (fresh ? 'check' : 'status'), {
+    method: fresh ? 'POST' : 'GET',
+    headers: fresh
+      ? { 'Content-Type': 'application/json', 'X-Session-Token': sessionToken }
+      : { 'X-Session-Token': sessionToken },
+    body: fresh ? '{}' : undefined,
+  });
+  if (!res.ok) throw new Error('status ' + res.status);
+  return res.json();
+}
+
+async function srvLoad(fresh) {
+  try {
+    const s = await srvStatus(fresh);
+    if (s) srvRender(s);
+    return s;
+  } catch (e) {
+    const note = $('srv-note');
+    if (note) { note.textContent = 'Server status unavailable.'; note.className = 'set-note'; }
+    return null;
+  }
+}
+
+// Liveness is asked UNAUTHENTICATED, and that is the point of this function
+// rather than an incidental detail.
+//
+// A restart wipes the in-memory token map, so this client's token is dead the
+// moment the server comes back. Polling /api/server/status -- which is
+// requireSession-guarded -- can therefore NEVER succeed after a restart: it
+// 401s until the timeout and then reports "taking longer than expected" about
+// a server that came back fine, recovered its sessions and is serving
+// requests. /api/auth/status is already public and already exists, so it is
+// what gets asked.
+async function srvAlive() {
+  try {
+    const r = await fetch('/api/auth/status');
+    return r.ok;
+  } catch (e) { return false; }
+}
+
+// One probe, three distinguishable answers -- and the distinctions are the
+// whole mechanism:
+//   'down'        the server is not answering; it is mid-restart
+//   'signed-out'  it IS answering but our token is dead, which only happens
+//                 because it restarted. A positive signal, not an error.
+//   <status>      answering and still ours, so the update is still running
+async function srvProbe() {
+  if (!(await srvAlive())) return 'down';
+  try {
+    const res = await fetch('/api/server/status', { headers: { 'X-Session-Token': sessionToken } });
+    if (res.status === 401 || res.status === 403) return 'signed-out';
+    if (!res.ok) return 'down';
+    return await res.json();
+  } catch (e) { return 'down'; }
+}
+
+// The two flows end differently and cannot share one condition.
+//
+// 'signed-out' is the completion signal for BOTH, because it is proof the
+// server restarted: only a restart empties the token map. Waiting to observe
+// the server DOWN instead does not work -- it comes back inside two seconds
+// and the poll runs every three, so the gap is routinely missed entirely.
+//
+// The difference is what a VALID status means. For a restart it means the
+// restart has not happened yet, so keep waiting. For an update it means
+// update.sh failed early and never restarted, and its recorded verdict is the
+// answer -- so that finishes the poll.
+function srvPollUntilBack(label, opts) {
+  opts = opts || {};
+  const onlySignOut = !!opts.onlySignOut;
+  const maxTicks = opts.maxTicks || 60;
+  clearInterval(srvPollTimer);
+  let ticks = 0;
+  srvPollTimer = setInterval(async () => {
+    ticks++;
+    const p = await srvProbe();
+
+    if (p === 'signed-out') {
+      clearInterval(srvPollTimer);
+      srvSetResult(label + ' done -- sign in again to see the result.', 'ok');
+      return;
+    }
+    if (!onlySignOut && p !== 'down' && !p.updateRunning) {
+      clearInterval(srvPollTimer);
+      srvRender(p);
+      return;
+    }
+
+    if (ticks > maxTicks) {
+      clearInterval(srvPollTimer);
+      srvSetResult(label + ' is taking longer than expected -- check the laptop.', 'bad');
+    }
+  }, 3000);
+}
+
+$('srv-restart')?.addEventListener('click', async () => {
+  const btn = $('srv-restart');
+  if (!srvArm(btn)) return;
+  // Both halves matter. The Claude sessions survive -- that is the whole
+  // point of the backend -- but session TOKENS live in an in-memory map, so
+  // the restart signs this client out. Saying so before the tap beats
+  // discovering it while hunting for an authenticator app.
+  srvSetResult('Restarting -- Claude sessions survive; you will need to sign in again.', null);
+  try {
+    await fetch('/api/server/restart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Session-Token': sessionToken },
+      body: '{}',
+    });
+  } catch (e) { /* the socket dropping IS the success signal here */ }
+  // Only a restart empties the token map, so being signed out is the proof.
+  srvPollUntilBack('Restart', { onlySignOut: true, maxTicks: 60 });
+});
+
+$('srv-update')?.addEventListener('click', async () => {
+  const btn = $('srv-update');
+  if (!srvArm(btn)) return;
+  try {
+    const res = await fetch('/api/server/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Session-Token': sessionToken },
+      body: '{}',
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok || !body.ok) {
+      srvSetResult(body.reason || 'Update could not start.', 'bad');
+      return;
+    }
+    srvSetResult('Updating -- the server restarts when it finishes.', null);
+    // update.sh stays up for its whole run and restarts last, so this must
+    // not stop at the first liveness check. npm ci can make it slow.
+    srvPollUntilBack('Update', { onlySignOut: false, maxTicks: 160 });
+  } catch (e) {
+    srvSetResult('Update could not start: ' + e.message, 'bad');
+  }
+});
 
 $('settings-btn').addEventListener('click', e => { e.preventDefault(); toggleSettings(); });
 $('set-hwkb').addEventListener('change', e => setHwKeyboard(e.target.checked));
