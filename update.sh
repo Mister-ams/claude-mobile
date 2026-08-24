@@ -59,6 +59,23 @@ harden_secrets() {
   return $rc
 }
 
+# Is this PID still running?
+#
+# NOT `kill -0`. Under MSYS bash that answers about MSYS pids, and the pid we
+# care about is a native Windows one from Node's process.pid -- measured: it
+# reports a live node.exe as gone. A guard that can never fire is worse than no
+# guard, because it looks like protection. tasklist answers about the real
+# process table; MSYS_NO_PATHCONV stops /FI being mangled into a path.
+pid_alive() {
+  local pid="$1"
+  [ -n "$pid" ] || return 1
+  if $IS_WINDOWS && command -v tasklist >/dev/null 2>&1; then
+    MSYS_NO_PATHCONV=1 tasklist /FI "PID eq $pid" /NH 2>/dev/null | grep -q "[[:space:]]$pid[[:space:]]"
+  else
+    kill -0 "$pid" 2>/dev/null
+  fi
+}
+
 # Find install directory
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$SCRIPT_DIR/server.js" ]; then
@@ -164,12 +181,6 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
     # (@peculiar, @simplewebauthn, node-pty), require('node-pty') threw, and
     # /health still answered 200 with a live session. The next restart would
     # have been a dead server.
-    if ! $PM2_PRESENT; then
-      # Nothing to stop through PM2. A fresh or manual install has no server
-      # running and this is fine; a server running OUTSIDE PM2 would be at the
-      # same risk, and the verification before the restart is what catches it.
-      warn "$PM2_NAME not found under PM2 -- installing without stopping anything"
-    fi
     if $PM2_PRESENT; then
       say "Stopping $PM2_NAME so npm can replace node_modules..."
       if pm2 stop "$PM2_NAME" >/dev/null 2>&1; then
@@ -183,6 +194,28 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
         SAFE_TO_INSTALL=false
         UPDATE_DEGRADED=1
       fi
+    else
+      warn "$PM2_NAME not found under PM2 -- nothing was stopped"
+    fi
+
+    # Trust the OUTCOME, not the exit code. CM_SERVER_PID is the process that
+    # holds node-pty open, passed in by the server that asked for this update.
+    # If it is still alive, the stop did not achieve what it is for -- whether
+    # because pm2 reported success for the wrong process, because pm2Name is
+    # misconfigured, or because the server runs outside PM2 entirely. Any of
+    # those and npm would half-delete node_modules underneath a live server.
+    if [ -n "${CM_SERVER_PID:-}" ] && pid_alive "$CM_SERVER_PID"; then
+      warn "Server pid $CM_SERVER_PID is still running -- SKIPPING npm ci rather than corrupting node_modules"
+      SAFE_TO_INSTALL=false
+      STOPPED_FOR_NPM=false
+      UPDATE_DEGRADED=1
+    fi
+
+    if ! $SAFE_TO_INSTALL; then
+      # A dependency change was needed and was not installed, so the new code
+      # would come up against the old tree. Leaving the old code running on the
+      # tree it matches is the coherent state; restarting is not.
+      SKIP_RESTART=true
     fi
     if $SAFE_TO_INSTALL; then
       # Not `fail`: the server is stopped now, so exiting here would leave it

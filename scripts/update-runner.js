@@ -67,7 +67,12 @@ const child = spawn(cfg.bashPath, ['update.sh'], {
   // CM_PM2_NAME tells update.sh which PM2 process to restart. Without it the
   // script restarts the one called "claude-mobile" -- so an update triggered
   // from a second instance would restart the LIVE server instead of itself.
-  env: { ...process.env, CM_PM2_NAME: cfg.pm2Name || 'claude-mobile' },
+  env: {
+    ...process.env,
+    CM_PM2_NAME: cfg.pm2Name || 'claude-mobile',
+    // Which process must be gone before npm may touch node_modules.
+    CM_SERVER_PID: String(cfg.serverPid || ''),
+  },
   stdio: ['ignore', 'pipe', 'pipe'],
   windowsHide: true,
 });
