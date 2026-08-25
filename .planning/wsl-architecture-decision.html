@@ -1,0 +1,542 @@
+<title>WSL Architecture Decision</title>
+<style>
+  :root{
+    --ink:#16191d; --ink-soft:#4a5159; --ink-faint:#79828c;
+    --rule:#e2e6ea; --rule-soft:#eef1f4;
+    --bg:#fff; --bg-soft:#f7f9fa; --bg-tint:#f1f5f7;
+    --accent:#1a5f7a; --good:#1f7a4d; --bad:#a32c28; --warn:#a8600f;
+    --win:#f4f1ec; --win-line:#dfd6c6; --wsl:#eef5f0; --wsl-line:#c9dfd2;
+    --client:#eef4f8; --client-line:#c9dae5;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 24px 100px}
+  header.hero{border-bottom:1px solid var(--rule);margin-bottom:42px;padding:54px 0 32px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 12px}
+  h1{font-size:33px;line-height:1.2;margin:0 0 14px;letter-spacing:-.02em;font-weight:650}
+  .standfirst{font-size:17.5px;color:var(--ink-soft);margin:0;max-width:68ch}
+  .stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
+  .stat{flex:1 1 150px;border:1px solid var(--rule);border-radius:8px;padding:12px 14px;background:var(--bg-soft)}
+  .stat b{display:block;font-size:20px;font-weight:650;letter-spacing:-.01em}
+  .stat span{display:block;font-size:12px;color:var(--ink-faint);margin-top:3px}
+  h2{font-size:13px;font-family:var(--mono);letter-spacing:.09em;text-transform:uppercase;
+    color:var(--accent);margin:54px 0 18px;padding-bottom:8px;border-bottom:1px solid var(--rule)}
+  h3{font-size:18.5px;margin:28px 0 9px;letter-spacing:-.01em;font-weight:625}
+  p{margin:0 0 14px} ul{margin:0 0 14px;padding-left:20px} li{margin-bottom:6px}
+  code{font-family:var(--mono);font-size:.87em;background:var(--bg-tint);padding:1px 5px;border-radius:4px}
+  .callout{border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;
+    padding:16px 20px;margin:20px 0;background:var(--bg-soft)}
+  .callout.warn{border-left-color:var(--warn)} .callout.good{border-left-color:var(--good)}
+  .callout.bad{border-left-color:var(--bad)}
+  .callout p:last-child,.callout ul:last-child{margin-bottom:0}
+  .callout .h{font-weight:650;margin:0 0 7px}
+
+  /* three-stack comparison */
+  .stacks{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px;margin:26px 0}
+  .col{border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:var(--bg-soft);
+    display:flex;flex-direction:column}
+  .col-h{padding:13px 16px;border-bottom:1px solid var(--rule);background:#fff}
+  .col-h h4{margin:0 0 3px;font-size:16px;font-weight:640}
+  .col-h .tagline{font-size:12.5px;color:var(--ink-faint)}
+  .col-b{padding:14px 16px;flex:1 1 auto}
+  .lyr{border-radius:6px;padding:7px 10px;margin-bottom:5px;font-family:var(--mono);font-size:12px;
+    border:1px solid transparent;line-height:1.45}
+  .lyr small{display:block;font-size:10.5px;color:var(--ink-faint);font-family:inherit;margin-top:1px}
+  .l-client{background:var(--client);border-color:var(--client-line)}
+  .l-win{background:var(--win);border-color:var(--win-line)}
+  .l-wsl{background:var(--wsl);border-color:var(--wsl-line)}
+  .xing{text-align:center;font-family:var(--mono);font-size:10px;letter-spacing:.06em;
+    color:var(--bad);font-weight:700;padding:4px 0}
+  .xing.none{color:var(--good)}
+  .col-f{padding:12px 16px;border-top:1px solid var(--rule);background:#fff;font-size:13px}
+  .col-f .kv{display:flex;justify-content:space-between;gap:10px;padding:3px 0}
+  .col-f .kv span:first-child{color:var(--ink-faint)}
+  .col-f .kv span:last-child{font-family:var(--mono);font-size:12px;font-weight:650}
+
+  .tbl-scroll{overflow-x:auto;margin:20px 0}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:620px}
+  th{text-align:left;font-size:11.5px;font-family:var(--mono);letter-spacing:.07em;text-transform:uppercase;
+    color:var(--ink-faint);border-bottom:1px solid var(--rule);padding:0 12px 9px 0;font-weight:500}
+  td{padding:11px 12px 11px 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+  td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  .yes{color:var(--good);font-weight:650} .no{color:var(--bad);font-weight:650}
+  .meh{color:var(--warn);font-weight:650}
+  .rec{border:1px solid var(--rule);border-radius:8px;padding:20px 24px;margin:22px 0;background:var(--bg-tint)}
+  .rec p:last-child{margin-bottom:0}
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--rule);font-size:13px;color:var(--ink-faint)}
+  @media(max-width:640px){h1{font-size:26px}.wrap{padding:0 16px 70px}}
+</style>
+
+<div class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">Architecture decision &middot; claude-mobile</p>
+  <h1>WSL-only versus half-WSL</h1>
+  <p class="standfirst">
+    They are not competing designs. Half-WSL is a <b>prefix</b> of WSL-only &mdash; the same first
+    move, stopped one step early. The question is what stopping buys, and whether it is worth
+    what stopping costs.
+  </p>
+  <div class="stats">
+    <div class="stat"><b>373x</b><span>Linux reading Windows files</span></div>
+    <div class="stat"><b>7.5x</b><span>Windows reading Linux files</span></div>
+    <div class="stat"><b>10 KB</b><span>non-git state to carry</span></div>
+    <div class="stat"><b>36.8 GB</b><span>free RAM, memory is moot</span></div>
+  </div>
+</header>
+
+<div class="callout bad" style="margin-top:28px">
+  <p class="h">Superseded &mdash; read this first (22 August)</p>
+  <p>
+    This document recommended WSL-only on the strength of one unique benefit: that only a Claude
+    running inside WSL could be seen by herdr. <b>That is no longer true.</b> herdr v0.8.2 ships
+    <code>herdr-windows-x86_64.zip</code>; the server runs natively on Windows with ConPTY panes,
+    agent process-tree detection, Claude Code integration install, and session persistence after
+    the client detaches. Their docs say WSL is <i>"neither required nor recommended"</i>.
+  </p>
+  <p>
+    The original NO-GO &mdash; and this document &mdash; rested partly on "v0.8.0 ships no Windows
+    binary." <b>When a decision rests on a version-pinned fact, it expires with the version.</b>
+    A fourth option is added below and the recommendation is revised. The filesystem measurements
+    are unaffected and still correct; what changed is which way they point.
+  </p>
+</div>
+
+<h2>1. The stacks, side by side</h2>
+
+<div class="stacks">
+
+  <div class="col">
+    <div class="col-h">
+      <h4>Today</h4>
+      <div class="tagline">Node on Windows, sessions in WSL</div>
+    </div>
+    <div class="col-b">
+      <div class="lyr l-client">iPad Safari<small>app.js, virtual DOM grid</small></div>
+      <div class="lyr l-win">tailscale serve<small>HTTPS to localhost:3456</small></div>
+      <div class="lyr l-win">server.js + PM2<small>Windows</small></div>
+      <div class="lyr l-win">node-pty spawns wsl.exe<small>execFileSync, 100-143ms block</small></div>
+      <div class="xing">crossing #1</div>
+      <div class="lyr l-wsl">dtach + bash<small>/tmp/cm-{id}.dtach</small></div>
+      <div class="lyr l-wsl">cmd.exe /c claude<small>interop launch</small></div>
+      <div class="xing">crossing #2</div>
+      <div class="lyr l-win">Claude Code<small>NTFS repos, native speed</small></div>
+    </div>
+    <div class="col-f">
+      <div class="kv"><span>Crossings</span><span>2</span></div>
+      <div class="kv"><span>Event-loop stalls</span><span class="no">100-143ms</span></div>
+      <div class="kv"><span>herdr detection</span><span class="no">broken</span></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="col-h">
+      <h4>Half-WSL</h4>
+      <div class="tagline">Node moves; Claude stays on Windows</div>
+    </div>
+    <div class="col-b">
+      <div class="lyr l-client">iPad Safari<small>unchanged</small></div>
+      <div class="lyr l-win">tailscale serve<small>localhost forwarding, verified</small></div>
+      <div class="lyr l-wsl">server.js + PM2<small>WSL, under systemd</small></div>
+      <div class="lyr l-wsl">dtach + bash<small>local spawn, ~1-5ms</small></div>
+      <div class="lyr l-wsl">cmd.exe /c claude<small>interop launch KEPT</small></div>
+      <div class="xing">crossing #1</div>
+      <div class="lyr l-win">Claude Code<small>NTFS repos, native speed</small></div>
+    </div>
+    <div class="col-f">
+      <div class="kv"><span>Crossings</span><span>1</span></div>
+      <div class="kv"><span>Event-loop stalls</span><span class="yes">gone</span></div>
+      <div class="kv"><span>herdr detection</span><span class="no">still broken</span></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="col-h">
+      <h4>WSL-only</h4>
+      <div class="tagline">Everything in Linux, repos on ext4</div>
+    </div>
+    <div class="col-b">
+      <div class="lyr l-client">iPad Safari<small>unchanged</small></div>
+      <div class="lyr l-win">tailscale serve<small>localhost forwarding, verified</small></div>
+      <div class="lyr l-wsl">server.js + PM2<small>WSL, under systemd</small></div>
+      <div class="lyr l-wsl">dtach + bash<small>local spawn, ~1-5ms</small></div>
+      <div class="lyr l-wsl">claude<small>native launch, no interop</small></div>
+      <div class="xing none">no crossings</div>
+      <div class="lyr l-wsl">ext4 repos<small>~/projects, 9ms metadata sweep</small></div>
+    </div>
+    <div class="col-f">
+      <div class="kv"><span>Crossings</span><span class="yes">0</span></div>
+      <div class="kv"><span>Event-loop stalls</span><span class="yes">gone</span></div>
+      <div class="kv"><span>herdr detection</span><span class="yes">works</span></div>
+    </div>
+  </div>
+
+  <div class="col" style="border-color:var(--good);border-width:2px">
+    <div class="col-h" style="background:#f3faf6">
+      <h4>Windows-native <span style="font-size:12px;color:var(--good);font-weight:700">NEW</span></h4>
+      <div class="tagline">herdr replaces dtach; WSL leaves the path entirely</div>
+    </div>
+    <div class="col-b">
+      <div class="lyr l-client">iPad Safari<small>unchanged</small></div>
+      <div class="lyr l-win">tailscale serve<small>unchanged, already local</small></div>
+      <div class="lyr l-win">server.js + PM2<small>Windows, unchanged</small></div>
+      <div class="lyr l-win">herdr on Windows<small>native ConPTY panes, replaces dtach</small></div>
+      <div class="lyr l-win">claude<small>native, already authenticated</small></div>
+      <div class="xing none">no crossings, no WSL</div>
+      <div class="lyr l-win">NTFS repos<small>already here, already native</small></div>
+    </div>
+    <div class="col-f">
+      <div class="kv"><span>Crossings</span><span class="yes">0</span></div>
+      <div class="kv"><span>Event-loop stalls</span><span class="yes">gone</span></div>
+      <div class="kv"><span>herdr detection</span><span class="yes">works</span></div>
+      <div class="kv"><span>Migration</span><span class="yes">none</span></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="callout good">
+  <p class="h">What the fourth column costs: nothing that has to move</p>
+  <p>
+    No repo cloning, no memory-slug remap, no Claude re-authentication, no second distro, no CI
+    coupling. It also deletes <i>more</i> code than WSL-only does &mdash; the
+    <code>wsl.exe</code> scaffolding, the <code>cmd.exe /c claude</code> interop launch, and the
+    dtach layer all go. WSL leaves the critical path, which incidentally disposes of the
+    <code>/tmp</code>-purge problem and the sleep/resume networking fragility the readiness audit
+    found.
+  </p>
+</div>
+
+<div class="callout warn">
+  <p class="h">The open question that decides it</p>
+  <p>
+    <code>herdr terminal attach</code> is <b>explicitly unsupported on Windows</b>, and that may be
+    exactly the mechanism the server needs &mdash; today <code>node-pty</code> spawns
+    <code>wsl.exe ... dtach -a</code> to get a PTY onto a session. The docs do say Windows Terminal
+    and PowerShell can attach to existing sessions, so the client path works; what is unproven is
+    whether our server can drive a pane programmatically.
+  </p>
+  <p>
+    Two further unknowns: documented cursor rendering that <i>"may flicker, jump, or briefly remain
+    at an old position"</i> on Windows, which matters for a terminal UI; and stability &mdash; the
+    45 crash-shaped log lines we found were on Linux, so Windows is simply untested.
+  </p>
+</div>
+
+<div class="callout">
+  <p class="h">Read the middle column carefully</p>
+  <p>
+    Half-WSL keeps <code>cmd.exe /c claude</code> &mdash; the interop launch, its two shell layers,
+    and the <code>--exec</code> subtlety that already cost one bug to get right. WSL-only deletes
+    that line entirely. <b>The more ambitious option is the smaller diff.</b>
+  </p>
+</div>
+
+<h2>2. Head to head</h2>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th>Dimension</th><th>Half-WSL</th><th>WSL-only</th>
+      <th style="color:var(--good)">Windows-native</th></tr>
+  <tr><td>Boundary crossings per byte</td><td class="num">1</td><td class="num yes">0</td>
+      <td class="num yes">0</td></tr>
+  <tr><td><code>wsl.exe</code> spawn per management call</td><td class="yes">gone</td>
+      <td class="yes">gone</td><td class="yes">gone</td></tr>
+  <tr><td>100-143ms event-loop stalls</td><td class="yes">gone</td><td class="yes">gone</td>
+      <td class="yes">gone</td></tr>
+  <tr><td>Claude reads repos</td><td>NTFS, native</td><td>ext4, native</td>
+      <td class="yes">NTFS, native</td></tr>
+  <tr><td>Windows tools read repos</td><td class="yes">native</td><td class="meh">7.5x via \\wsl$</td>
+      <td class="yes">native</td></tr>
+  <tr><td><b>herdr agent detection / resume</b></td><td class="no">still broken</td>
+      <td class="yes">works</td><td class="yes">works<sup>*</sup></td></tr>
+  <tr><td>Interop launch code</td><td class="no">kept</td><td class="yes">deleted</td>
+      <td class="yes">deleted</td></tr>
+  <tr><td><b>dtach layer</b> (~330 lines of scaffolding)</td><td class="no">kept</td>
+      <td class="no">kept</td><td class="yes">deleted</td></tr>
+  <tr><td><b>WSL in the critical path</b></td><td class="no">yes</td><td class="no">yes</td>
+      <td class="yes">no</td></tr>
+  <tr><td><b>Shares a distro with 11 CI runners</b></td><td class="no">yes</td><td class="no">yes</td>
+      <td class="yes">n/a</td></tr>
+  <tr><td>Claude auth inside WSL</td><td>not needed</td><td>required (yours to do)</td>
+      <td class="yes">not needed</td></tr>
+  <tr><td>Repos cloned</td><td>no</td><td>yes, plus ~10 KB state each</td>
+      <td class="yes">no</td></tr>
+  <tr><td>Boot path rework (PM2 to systemd)</td><td class="meh">yes</td><td class="meh">yes</td>
+      <td class="yes">no, keeps the existing task</td></tr>
+  <tr><td>Second copy of <code>.loomi-config</code></td><td class="yes">no</td><td class="no">yes</td>
+      <td class="yes">no</td></tr>
+  <tr><td>node-pty compiled from source</td><td class="meh">yes</td><td class="meh">yes</td>
+      <td class="yes">no, win32 prebuild ships</td></tr>
+  <tr><td><b>PTY onto a session pane</b></td><td class="yes">proven (dtach)</td>
+      <td class="yes">proven (dtach)</td><td class="meh">UNPROVEN &mdash; the one open question</td></tr>
+</table>
+</div>
+
+<p style="font-size:14px;color:var(--ink-soft)">
+  <sup>*</sup> Documented as supported on Windows &mdash; native ConPTY panes, agent process-tree
+  detection, Claude Code integration install. Not yet observed on this machine, which is what the
+  one-hour test is for.
+</p>
+
+<div class="callout">
+  <p class="h">Read the last row before anything else</p>
+  <p>
+    Windows-native wins or ties on every line except one, and that one is not a trade-off &mdash;
+    it is an <b>unknown</b>. Both WSL options rest on dtach, which has held sessions through 236
+    server restarts across five months. Windows-native rests on a mechanism nobody here has
+    exercised. That asymmetry is why the recommendation is "test it", not "do it".
+  </p>
+</div>
+
+<h2>3. What each uniquely buys</h2>
+
+<div class="callout">
+  <p class="h">Half-WSL buys exactly one thing</p>
+  <p>
+    <b>Windows-native repo access.</b> That is the entire differentiator. Every other row on its
+    side of the ledger, WSL-only matches or beats.
+  </p>
+</div>
+
+<div class="callout bad">
+  <p class="h">WSL-only bought the herdr unlock &mdash; and no longer does</p>
+  <p>
+    <s>herdr's Claude integration is a hook that only ever fires for a Claude running in WSL, and
+    no half-measure reaches it.</s>
+  </p>
+  <p>
+    True of v0.8.0, false of v0.8.2. herdr's Windows build installs Claude Code integration on
+    Windows and does agent process-tree detection there. <b>Removing this row removes the entire
+    case for WSL-only</b> &mdash; it was the one thing the migration bought that nothing cheaper
+    could.
+  </p>
+</div>
+
+<div class="callout warn">
+  <p class="h">And the filesystem argument now points the other way</p>
+  <p>
+    The 373x measurement answered a conditional: <i>if Claude moves to Linux, must the repos
+    follow?</i> Yes. It never argued Claude <i>should</i> move &mdash; the herdr unlock did.
+    With that gone, the same data argues for <b>staying</b>: the repos are already on NTFS, which
+    is already native to where Claude already runs. Moving them would introduce a penalty that
+    does not currently exist.
+  </p>
+</div>
+
+<h2>4. The measurements behind this</h2>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th>Measured</th><th>Result</th><th>What it decides</th></tr>
+  <tr>
+    <td>Linux reading Windows files<br><span style="color:var(--ink-faint);font-size:13px">
+      2,016 files, find + stat / grep</span></td>
+    <td class="num">3,362ms vs 9ms<br><b>373x</b> (48x content)</td>
+    <td>Claude cannot read NTFS repos from Linux. Repos must move if Claude moves</td>
+  </tr>
+  <tr>
+    <td>Windows reading Linux files<br><span style="color:var(--ink-faint);font-size:13px">
+      same tree via \\wsl$</span></td>
+    <td class="num">892ms vs 119ms<br><b>7.5x</b></td>
+    <td>The reverse tax is mild. <b>The penalty is not symmetric</b> &mdash; this is what makes
+        WSL-only viable</td>
+  </tr>
+  <tr>
+    <td>Windows reaching a WSL listener</td>
+    <td class="num">HTTP 200, 0.26s</td>
+    <td><code>tailscale serve</code> can front a Node server inside WSL</td>
+  </tr>
+  <tr>
+    <td>Memory headroom</td>
+    <td class="num">WSL 2.55 GB<br>+2.49 GB Claude<br>36.8 GB free</td>
+    <td>Moving Claude into the VM is a non-issue on this machine</td>
+  </tr>
+  <tr>
+    <td>Non-git state in claude-mobile</td>
+    <td class="num">10 KB, 5 files</td>
+    <td>There is no "migration" &mdash; it is a clone plus a handful of small files</td>
+  </tr>
+  <tr>
+    <td><b>herdr release assets, v0.8.2</b><br><span style="color:var(--ink-faint);font-size:13px">
+      GitHub releases API</span></td>
+    <td class="num yes">herdr-windows-<br>x86_64.zip present</td>
+    <td><b>Kills the premise of the original NO-GO.</b> v0.8.0, which we pinned, shipped no
+        Windows binary. We were two patch releases behind the fact the decision rested on</td>
+  </tr>
+  <tr>
+    <td>Claude reading NTFS from Windows<br><span style="color:var(--ink-faint);font-size:13px">
+      same 2,016-file tree, native</span></td>
+    <td class="num yes">119 ms</td>
+    <td>What Claude gets today and keeps under Windows-native. Nothing to gain by moving it &mdash;
+        ext4 is only faster than <code>/mnt/c</code>, not faster than NTFS-from-Windows</td>
+  </tr>
+  <tr>
+    <td>Actions runners inside Ubuntu-24.04</td>
+    <td class="num no">11 services<br>3 repos</td>
+    <td>Both WSL options put claude-mobile beside the runners that serve
+        <code>ci</code> and <code>Semgrep</code> &mdash; required checks. Windows-native avoids
+        this entirely</td>
+  </tr>
+  <tr>
+    <td>herdr on Windows, this machine</td>
+    <td class="num">not installed</td>
+    <td>Nothing on PATH, no binary anywhere. Everything about Windows-native is documented
+        capability, not observed behaviour</td>
+  </tr>
+</table>
+</div>
+
+<h3>What is NOT measured &mdash; and decides it</h3>
+
+<p>
+  Everything above is observed. Everything below is read from documentation or simply unknown,
+  and the difference matters more than any number on this page.
+</p>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th>Unknown</th><th>Why it decides</th><th>Cost to answer</th></tr>
+  <tr>
+    <td><b>Can the server get a PTY onto a herdr pane on Windows?</b></td>
+    <td><code>herdr terminal attach</code> is documented unsupported on Windows. Today
+        <code>node-pty</code> spawns <code>wsl.exe ... dtach -a</code> for exactly this. If there
+        is no Windows equivalent, the fourth column collapses</td>
+    <td class="num">~1 hour</td>
+  </tr>
+  <tr>
+    <td>Cursor rendering fidelity on Windows</td>
+    <td>Docs warn it <i>"may flicker, jump, or briefly remain at an old position"</i>. Tolerable in
+        a native terminal; unclear through a server-side mirror and a DOM grid</td>
+    <td class="num">same hour</td>
+  </tr>
+  <tr>
+    <td>herdr stability on Windows</td>
+    <td>45 crash-shaped lines and repeated SIGABRT on Linux, 17 August. Windows is untested. dtach
+        has held sessions through 236 restarts in five months without one</td>
+    <td class="num">days of soak</td>
+  </tr>
+</table>
+</div>
+
+<div class="callout warn">
+  <p class="h">The honest asymmetry</p>
+  <p>
+    The WSL options are backed by measurements. Windows-native is backed by a documentation page
+    and a release asset listing. It looks better on every axis <i>precisely because nothing has
+    been tried yet</i> &mdash; and the third row above is the one that would take weeks, not an
+    hour, to retire.
+  </p>
+</div>
+
+<div class="callout warn">
+  <p class="h">The asymmetry is the whole finding</p>
+  <p>
+    Folklore says the WSL filesystem boundary costs 5-20x. Measured here it is <b>373x one way and
+    7.5x the other</b>. Two facts follow. First, the current architecture is <i>right</i> to keep
+    Claude on Windows while repos are on NTFS &mdash; that double crossing is buying something real.
+    Second, once repos move to ext4 the calculus inverts completely, and the same reasoning that
+    justifies today's design argues for going all the way.
+  </p>
+</div>
+
+<h2>5. Considerations genuinely against WSL-only</h2>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th>Concern</th><th>Weight</th><th>Detail</th></tr>
+  <tr>
+    <td><b><code>.loomi-config</code> blast radius</b></td>
+    <td class="no">Real</td>
+    <td>A second cleartext copy of the whole secret estate works directly against finding C1 in
+        your own security audit, which exists <i>because</i> that file is a single-file blast
+        radius. Needs its own <code>chmod 600</code>, and means two files to rotate rather than one</td>
+  </tr>
+  <tr>
+    <td><b>Single point of failure</b></td>
+    <td class="meh">Moderate</td>
+    <td>Today a broken WSL costs sessions but Claude still runs on Windows. All-in, a
+        <code>wsl --shutdown</code> or corrupted distro takes everything at once</td>
+  </tr>
+  <tr>
+    <td><b>It moves the whole environment</b></td>
+    <td class="meh">Moderate</td>
+    <td>Not just this tool. The Claude Code session you work in daily would eventually live there
+        too. This is the part that deserves a pilot rather than a decision</td>
+  </tr>
+  <tr>
+    <td><b>Windows-native tooling</b></td>
+    <td class="meh">Mild</td>
+    <td>Explorer and Windows-native tools pay 7.5x. VS Code sidesteps it entirely with WSL Remote</td>
+  </tr>
+  <tr>
+    <td><b>node-gyp</b></td>
+    <td class="meh">Mild</td>
+    <td>node-pty ships no linux prebuild, so <code>npm ci</code> compiles from source. Needs
+        <code>build-essential</code> and <code>python3</code>. Applies to both options</td>
+  </tr>
+</table>
+</div>
+
+<h2>6. Recommendation</h2>
+
+<div class="rec">
+  <p>
+    <b>Revised 22 August: test Windows-native first. Do not start the WSL migration.</b>
+  </p>
+  <p>
+    The fourth column reaches every goal the migration was for &mdash; zero crossings, native
+    filesystem, herdr able to see the agent &mdash; while moving nothing, re-authenticating
+    nothing, and keeping WSL out of the path that gates your production deploys. It deletes more
+    code than WSL-only does.
+  </p>
+  <p>
+    It hinges on one unproven mechanism: whether the server can get a PTY onto a herdr pane on
+    Windows when <code>herdr terminal attach</code> is unsupported there. <b>That is roughly an
+    hour to answer</b>, non-destructively, alongside the running service. If it works, the entire
+    WSL programme is unnecessary. If it does not, we return here having lost an hour.
+  </p>
+  <p>
+    The previous recommendation stands only as a fallback, and if we do end up in WSL it should be
+    a <b>dedicated distro</b> rather than Ubuntu-24.04 &mdash; that distro hosts 11 Actions runners
+    serving the required checks on three repos, so putting an unstable experiment beside it puts
+    your merges and deploys behind it.
+  </p>
+</div>
+
+<h3>Order of operations</h3>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th>#</th><th>Step</th><th>Who</th><th>Reversible</th></tr>
+  <tr><td class="num">1</td><td>Authenticate Claude Code inside WSL</td><td>you</td><td class="yes">yes</td></tr>
+  <tr><td class="num">2</td><td><code>build-essential</code> + <code>python3</code>, clone claude-mobile to ext4,
+      copy the 5 small files, <code>npm ci</code></td><td>me</td><td class="yes">delete a directory</td></tr>
+  <tr><td class="num">3</td><td>Run it on a second port beside the live one; drive both from the iPad</td>
+      <td>me, then you</td><td class="yes">yes</td></tr>
+  <tr><td class="num">4</td><td>Point <code>tailscale serve</code> at the WSL instance; PM2 under systemd</td>
+      <td>me</td><td class="yes">one command back</td></tr>
+  <tr><td class="num">5</td><td>Decide on the other repos with a week of real use behind it</td>
+      <td>you</td><td>&mdash;</td></tr>
+</table>
+</div>
+
+<p>
+  Steps 2 through 4 are reversible on their own. Nothing before step 5 commits you to anything,
+  and step 5 is a judgement you will be far better placed to make than either of us is now.
+</p>
+
+<footer>
+  <p>
+    claude-mobile v3.4.0, master <code>f4ff5ab</code>. Filesystem figures measured on this machine
+    against a 2,016-file tree; memory and listener figures measured live. The 5-20x figure quoted
+    in the earlier review was folklore and is superseded by the numbers here.
+  </p>
+</footer>
+
+</div>
