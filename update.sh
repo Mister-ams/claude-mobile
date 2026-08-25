@@ -59,6 +59,23 @@ harden_secrets() {
   return $rc
 }
 
+# Is this PID still running?
+#
+# NOT `kill -0`. Under MSYS bash that answers about MSYS pids, and the pid we
+# care about is a native Windows one from Node's process.pid -- measured: it
+# reports a live node.exe as gone. A guard that can never fire is worse than no
+# guard, because it looks like protection. tasklist answers about the real
+# process table; MSYS_NO_PATHCONV stops /FI being mangled into a path.
+pid_alive() {
+  local pid="$1"
+  [ -n "$pid" ] || return 1
+  if $IS_WINDOWS && command -v tasklist >/dev/null 2>&1; then
+    MSYS_NO_PATHCONV=1 tasklist /FI "PID eq $pid" /NH 2>/dev/null | grep -q "[[:space:]]$pid[[:space:]]"
+  else
+    kill -0 "$pid" 2>/dev/null
+  fi
+}
+
 # Find install directory
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "$SCRIPT_DIR/server.js" ]; then
@@ -104,6 +121,39 @@ if [ "${STASHED:-0}" = "1" ]; then
   git stash pop || warn "Stash pop failed -- check manually"
 fi
 
+# Which PM2 process this install IS, resolved BEFORE the dependency step
+# because that step now has to stop it. CM_PM2_NAME is set by the server when
+# an update is triggered from the client; the default preserves the behaviour
+# of a hand-run update.
+#
+# The existence check is `pm2 describe`, an EXACT lookup, not a grep over
+# `pm2 list`. A substring match is what made this restart the wrong process:
+# "claude-mobile" matches the line for "claude-mobile-herdr".
+PM2_NAME="${CM_PM2_NAME:-claude-mobile}"
+PM2_PRESENT=false
+if command -v pm2 &>/dev/null && pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
+  PM2_PRESENT=true
+fi
+
+# If this script stops the server, SOMETHING has to start it again on every
+# exit path -- not just the happy one. `set -e` is on, `fail` calls exit, and
+# the operator may be holding a phone with no other way in. A trap is the only
+# construct that covers all of those at once.
+STOPPED_FOR_NPM=false
+RESTARTED=false
+# Set only where restarting would be the destructive act -- see the dependency
+# step. Default false so every ordinary run restarts as before.
+SKIP_RESTART=false
+on_exit() {
+  if $STOPPED_FOR_NPM && ! $RESTARTED; then
+    warn "Update exited before restarting -- bringing $PM2_NAME back up"
+    pm2 restart "$PM2_NAME" >/dev/null 2>&1 \
+      || pm2 start server.js --name "$PM2_NAME" >/dev/null 2>&1 \
+      || warn "Could not bring $PM2_NAME back -- start it manually on the host"
+  fi
+}
+trap on_exit EXIT
+
 # Update npm deps if EITHER manifest moved.
 # package-lock.json matters on its own: a security fix is very often
 # lockfile-only (the fixed version already satisfies the existing caret range,
@@ -116,8 +166,82 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
   # With `npm install` the lockfile is advisory and every caret range
   # re-resolves on each update, so a compromised upstream patch release
   # lands silently.
+  # Default true so the verification block below can test it on every path,
+  # including the one where the lockfile is missing.
+  SAFE_TO_INSTALL=true
   if [ -f package-lock.json ]; then
-    npm ci --omit=dev
+    # STOP THE SERVER FIRST. npm deletes node_modules alphabetically, and a
+    # running server holds node-pty's native .node open -- so the wipe dies
+    # partway and everything before it is simply gone. It stays invisible
+    # until the next restart, because the live process keeps running on the
+    # modules it already loaded.
+    #
+    # Not hypothetical. This fired on the first real update through the new
+    # client button, 24 Aug 2026: node_modules went from 115 entries to 3
+    # (@peculiar, @simplewebauthn, node-pty), require('node-pty') threw, and
+    # /health still answered 200 with a live session. The next restart would
+    # have been a dead server.
+    # Prove the PM2 target IS the server that asked, BEFORE stopping it. A
+    # misconfigured pm2Name otherwise stops somebody else's service -- and
+    # since the pid check below then refuses to restart anything, it would be
+    # left stopped. Only meaningful when a server triggered this; a hand-run
+    # update has no pid to compare against and keeps its old behaviour.
+    if $PM2_PRESENT && [ -n "${CM_SERVER_PID:-}" ]; then
+      PM2_PID="$(pm2 pid "$PM2_NAME" 2>/dev/null | tr -d '[:space:]')"
+      if [ -n "$PM2_PID" ] && [ "$PM2_PID" != "$CM_SERVER_PID" ]; then
+        warn "$PM2_NAME is pid $PM2_PID but the server that asked is $CM_SERVER_PID -- refusing to touch a process that is not this one"
+        PM2_PRESENT=false
+        SAFE_TO_INSTALL=false
+        SKIP_RESTART=true
+        UPDATE_DEGRADED=1
+      fi
+    fi
+
+    if $PM2_PRESENT; then
+      say "Stopping $PM2_NAME so npm can replace node_modules..."
+      if pm2 stop "$PM2_NAME" >/dev/null 2>&1; then
+        STOPPED_FOR_NPM=true
+      else
+        # Installing anyway is what causes the damage. A dependency tree one
+        # version behind still runs; a half-deleted one does not, and it fails
+        # silently until the next restart. Skipping leaves node_modules
+        # untouched and the server serving.
+        warn "Could not stop $PM2_NAME -- SKIPPING npm ci rather than corrupting node_modules"
+        SAFE_TO_INSTALL=false
+        UPDATE_DEGRADED=1
+      fi
+    else
+      warn "$PM2_NAME not found under PM2 -- nothing was stopped"
+    fi
+
+    # Trust the OUTCOME, not the exit code. CM_SERVER_PID is the process that
+    # holds node-pty open, passed in by the server that asked for this update.
+    # If it is still alive, the stop did not achieve what it is for -- whether
+    # because pm2 reported success for the wrong process, because pm2Name is
+    # misconfigured, or because the server runs outside PM2 entirely. Any of
+    # those and npm would half-delete node_modules underneath a live server.
+    if [ -n "${CM_SERVER_PID:-}" ] && pid_alive "$CM_SERVER_PID"; then
+      warn "Server pid $CM_SERVER_PID is still running -- SKIPPING npm ci rather than corrupting node_modules"
+      SAFE_TO_INSTALL=false
+      STOPPED_FOR_NPM=false
+      UPDATE_DEGRADED=1
+    fi
+
+    if ! $SAFE_TO_INSTALL; then
+      # A dependency change was needed and was not installed, so the new code
+      # would come up against the old tree. Leaving the old code running on the
+      # tree it matches is the coherent state; restarting is not.
+      SKIP_RESTART=true
+    fi
+    if $SAFE_TO_INSTALL; then
+      # Not `fail`: the server is stopped now, so exiting here would leave it
+      # down. Record it and press on to the restart. One retry, because the
+      # common cause of a first failure is a file still being released.
+      npm ci --omit=dev || {
+        warn "npm ci failed -- retrying once"
+        npm ci --omit=dev || { warn "npm ci FAILED twice -- the installed tree is probably incomplete"; NPM_FAILED=1; }
+      }
+    fi
   else
     # No silent fallback to `npm install`. package-lock.json is committed, so
     # a missing one means a broken checkout -- and installing anyway would
@@ -126,7 +250,11 @@ if [ "$CURRENT" != "$NEW" ] && git diff "$CURRENT".."$NEW" --name-only 2>/dev/nu
     # tree IS the audited tree.
     fail "package-lock.json is missing -- refusing to install an unpinned tree. Restore it (git checkout -- package-lock.json) and re-run."
   fi
-  ok "Dependencies updated"
+  if [ "${NPM_FAILED:-0}" = "1" ]; then
+    UPDATE_DEGRADED=1
+  elif $SAFE_TO_INSTALL; then
+    ok "Dependencies installed"
+  fi
 fi
 
 # Re-assert secret file permissions (see harden_secrets above).
@@ -148,26 +276,56 @@ if $IS_WINDOWS && wsl --list --quiet 2>/dev/null | grep -qi "Ubuntu-24.04"; then
   " 2>/dev/null && ok "WSL Claude Code updated" || warn "WSL update skipped"
 fi
 
-# Restart via PM2.
+# Restart via PM2. `pm2 restart` also STARTS a stopped app, which matters here:
+# the dependency step above stops it, and this is what brings it back.
 #
-# CM_PM2_NAME is which process to restart, and it matters: the name was
-# hardcoded to "claude-mobile", while the guard grepped for that as a
-# SUBSTRING. So an update run from a second instance (claude-mobile-herdr,
-# say) matched the guard and then restarted the LIVE server instead of itself.
-# The server passes its own PM2 name; the default preserves old behaviour for
-# a hand-run update.
-# The existence check is `pm2 describe`, an EXACT lookup, not a grep over
-# `pm2 list`. A substring match is what made this restart the wrong process in
-# the first place: "claude-mobile" matches the line for "claude-mobile-herdr".
-# Passing the name explicitly fixes which process is restarted; it does not fix
-# a guard that answers "yes" for a name that is not there.
-PM2_NAME="${CM_PM2_NAME:-claude-mobile}"
-if command -v pm2 &>/dev/null && pm2 describe "$PM2_NAME" >/dev/null 2>&1; then
+# The failure is handled rather than allowed to abort under `set -e`: aborting
+# here is the one outcome nobody can recover from remotely, because the server
+# that serves the UI is the server that is down.
+# Verify the tree the restart is about to load, on EVERY run -- not only when
+# the manifests moved. A node_modules left half-deleted by an earlier update
+# stays broken across later ones, and a pull-only update would happily restart
+# into it. A half-deleted tree exits every install cleanly and looks fine; the
+# only honest test is loading the native module that gets clobbered first.
+if ! node -e "require('node-pty')" >/dev/null 2>&1; then
+  if $STOPPED_FOR_NPM; then
+    # The server is stopped, which is exactly the condition under which the
+    # install works. Repair rather than restart into a crash loop.
+    warn "node-pty does not load -- node_modules is incomplete. Repairing with the server stopped..."
+    if npm ci --omit=dev && node -e "require('node-pty')" >/dev/null 2>&1; then
+      ok "Dependencies repaired"
+    else
+      warn "Repair FAILED -- node_modules is still incomplete. The server will restart but may not stay up; run 'pm2 stop $PM2_NAME && npm ci --omit=dev && pm2 restart $PM2_NAME' on the host."
+      UPDATE_DEGRADED=1
+    fi
+  else
+    # Nothing was stopped, so any running server is still healthy on the
+    # modules it loaded at startup -- and restarting is the destructive act
+    # here, not the safe one. Installing is equally unsafe for the same reason.
+    # Leave both alone and say so.
+    warn "node-pty does not load and nothing was stopped -- NOT installing and NOT restarting; a running server still works on its loaded modules. Run 'pm2 stop $PM2_NAME && npm ci --omit=dev && pm2 restart $PM2_NAME' on the host."
+    SKIP_RESTART=true
+    UPDATE_DEGRADED=1
+  fi
+fi
+
+if $PM2_PRESENT && $SKIP_RESTART; then
+  warn "Skipping the restart on purpose -- see the dependency warning above. $PM2_NAME is still serving on its loaded modules."
+elif $PM2_PRESENT; then
   say "Restarting via PM2 ($PM2_NAME)..."
-  pm2 restart "$PM2_NAME"
-  ok "Restarted"
-  sleep 2
-  pm2 logs "$PM2_NAME" --lines 8 --nostream
+  if pm2 restart "$PM2_NAME"; then
+    RESTARTED=true
+    ok "Restarted"
+    sleep 2
+    pm2 logs "$PM2_NAME" --lines 8 --nostream
+  elif pm2 start server.js --name "$PM2_NAME"; then
+    RESTARTED=true
+    warn "pm2 restart failed; started $PM2_NAME fresh instead"
+    UPDATE_DEGRADED=1
+  else
+    warn "Could not restart $PM2_NAME -- start it manually on the host"
+    UPDATE_DEGRADED=1
+  fi
 else
   ok "Update complete. Restart manually: node server.js"
 fi

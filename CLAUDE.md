@@ -137,11 +137,18 @@ python.exe test/herdr-pane-geometry.py --port PORT --totp-secret BASE32
 - No JS should change `appEl.style.height` or call `scrollToBottom` on resize events
 - `doResize()` must check `proposeDimensions()` before `fit()` -- skip if cols/rows unchanged
 - WSL Ubuntu-24.04 must be running for dtach sessions to work
-- **A restart signs every client out.** Claude sessions survive it -- that is the backend's
-  whole job -- but session TOKENS live in an in-memory Map, so every client re-authenticates.
-  The Restart button says so before the tap. Anything polling across a restart must ask
-  liveness UNAUTHENTICATED (`/health`), or it reports "the server never came back" about a
-  server that came back fine
+- **A restart signs every client out.** Claude sessions survive -- that is the backend's whole
+  job -- but session TOKENS live in an in-memory Map. The Restart button says so before the tap.
+  Anything polling across a restart must ask liveness UNAUTHENTICATED, or it reports "the server
+  never came back" about a server that came back fine
+- **npm ci while the server runs half-deletes node_modules, and it looks like success.** npm
+  wipes alphabetically and the live server holds node-pty's native binary open, so the wipe
+  dies partway. Observed 24 Aug 2026: 115 entries down to 3, `require('node-pty')` threw, and
+  /health still answered 200 with a live session. `update.sh` stops PM2 before installing,
+  verifies node-pty loads, and re-installs if it does not; it skips the install entirely if it
+  cannot stop the process, and a trap restores the process on every exit path. An instance on a
+  pre-fix `update.sh` is exposed once more -- the OLD script runs that update -- so do that one
+  from the laptop with the process stopped
 - **MSYS bash cannot use an inherited raw fd** for stdout/stderr from a native Windows
   process. `stdio: ['ignore', fd, fd]` makes it exit 1 after ~1.7s having written nothing at
   all -- no error, an empty log, a bare failure code. Pipe and write the file yourself.
