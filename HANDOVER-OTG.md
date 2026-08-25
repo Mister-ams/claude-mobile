@@ -56,9 +56,33 @@ restart then persisted the loss.
 
 ## Do this before P2 opens
 
-1. **Prune to one instance.** 3459 (`claude-mobile-ctl`) and the `cm-wt-fix`
-   worktree are disposable. Leaving them running means the soak measures the
-   wrong thing. `pm2 delete claude-mobile-ctl`.
+1. **Prune to one instance -- BOTH halves, or you strand a session.**
+   `pm2 delete` does NOT stop the herdr session. The herdr server is
+   deliberately not a child of the node process -- that orphaning is exactly
+   what makes sessions survive `pm2 restart` -- so deleting the PM2 process
+   leaves an orphaned herdr server and its Claude session running forever with
+   nothing supervising it. Verified: `herdr session list` currently shows
+   `cmc-0` and `cmh-0` both `running`, each on its own socket.
+
+   ```
+   pm2 delete claude-mobile-ctl
+   herdr session stop cmc-0 && herdr session delete cmc-0
+   herdr session list          # confirm; a stopped-but-not-deleted record
+                               # persists and blocks reusing the name
+   ```
+
+   The same applies whenever 3457 is retired -- stop `cmh-0` explicitly.
+   Disposable alongside it: the `cm-wt-ctl` and `cm-wt-fix` worktrees, and the
+   dead `.claude-mobile-ctl-audit.log` / `-dtach-audit.log` in the home
+   directory (the `auditPath` knob exists so a second instance cannot interleave
+   writes into the live server's trail).
+
+   **Secret hygiene:** each test instance minted its OWN TOTP secret via its
+   localhost `/setup` -- the operator's was never copied -- but
+   `.totp-secret` and `.server-identity-key` in `cm-wt-p1` and `cm-wt-ctl` are
+   real credentials with a lifetime. They should die with the worktrees. Both
+   instances bind localhost only and `tailscale serve` fronts 3456 alone, so
+   nothing was tailnet-reachable.
 2. **Chase the resume lead -- about ten minutes.** `herdr api snapshot` reports
    `agent_session {kind:"id", source:"herdr:claude", value:<uuid>}` on our pane.
    `pane report-agent-session` is exactly what the SessionStart hook calls, so
@@ -87,6 +111,18 @@ restart then persisted the loss.
   different build so the number transfers nothing either way. Only P2 answers it.
   dtach is the incumbent: 236 restarts over five months, zero aborts.
 - **The `npm ci` path has no automated coverage.** Both arms measured by hand.
+- **Three guards in `update.sh` are verified as primitives, not in situ** --
+  self-flagged by OTG-P1 against the "have I watched it fail?" standard, and
+  worth honouring rather than filing away. The `CM_SERVER_PID` guard (refuses to
+  install while the server that asked is still alive) has **never fired in a
+  real update**, because `pm2 stop` has always succeeded. The primitive was
+  proven both ways in isolation -- and that mattered: `kill -0` could not see a
+  Windows pid at all and would have made the guard silently inert, so it uses
+  `tasklist`. The `pm2 start` fallback in the trap, and the restart block, are
+  likewise unexercised. The sibling paths WERE exercised for real: the trap, by
+  killing a script mid-update and watching the server return with its session;
+  and the broken-tree refusal, against a tree with no `node_modules`. Closing
+  the remaining three needs the same local-origin harness as the `npm ci` gap.
 - `newSession()` sends `rows=200` on create, so every pty is briefly 200 rows.
   Harmless under dtach; it made a sizing guard inert once.
 
