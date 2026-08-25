@@ -157,8 +157,8 @@ agreeing while the update had failed. None of it was found by reading code.
 - herdr v0.8.2 at `C:\Users\MRAL-\tools\herdr\herdr.exe` -- keep `conpty\` beside it.
 - Integration hook v8 at `C:\Users\MRAL-\.claude\hooks\herdr-agent-state.ps1`,
   one `SessionStart` entry in `~/.claude/settings.json`. No-ops outside herdr.
-- Instances: **3456** live (dtach, v3.4.0, do not touch) · **3457** soak
-  (herdr, worktree `cm-wt-p1`) · **3459** disposable.
+- Instances: **3456** live (dtach, v3.4.0, do not touch) | **3457** soak
+  (herdr, worktree `cm-wt-p1`) | **3459** disposable.
 - Harnesses: `test/live-session-verify.py` (real login, real session, asserts
   which backend answered) and `test/ipad-emulator.py` (static client only --
   it cannot test a backend).
