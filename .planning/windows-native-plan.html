@@ -1,0 +1,441 @@
+<title>Windows-Native Delivery Plan</title>
+<style>
+  :root{
+    --ink:#16191d; --ink-soft:#4a5159; --ink-faint:#79828c;
+    --rule:#e2e6ea; --rule-soft:#eef1f4;
+    --bg:#fff; --bg-soft:#f7f9fa; --bg-tint:#f1f5f7;
+    --accent:#1a5f7a; --good:#1f7a4d; --bad:#a32c28; --warn:#a8600f;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px 100px}
+  header.hero{border-bottom:1px solid var(--rule);margin-bottom:40px;padding:54px 0 32px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 12px}
+  h1{font-size:33px;line-height:1.2;margin:0 0 14px;letter-spacing:-.02em;font-weight:650}
+  .standfirst{font-size:17.5px;color:var(--ink-soft);margin:0;max-width:68ch}
+  .stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
+  .stat{flex:1 1 150px;border:1px solid var(--rule);border-radius:8px;padding:12px 14px;background:var(--bg-soft)}
+  .stat b{display:block;font-size:20px;font-weight:650;letter-spacing:-.01em}
+  .stat span{display:block;font-size:12px;color:var(--ink-faint);margin-top:3px}
+  h2{font-size:13px;font-family:var(--mono);letter-spacing:.09em;text-transform:uppercase;
+    color:var(--accent);margin:52px 0 18px;padding-bottom:8px;border-bottom:1px solid var(--rule)}
+  h3{font-size:18.5px;margin:28px 0 9px;letter-spacing:-.01em;font-weight:625}
+  p{margin:0 0 14px} ul{margin:0 0 14px;padding-left:20px} li{margin-bottom:6px}
+  code{font-family:var(--mono);font-size:.87em;background:var(--bg-tint);padding:1px 5px;border-radius:4px}
+  .callout{border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;
+    padding:16px 20px;margin:20px 0;background:var(--bg-soft)}
+  .callout.warn{border-left-color:var(--warn)} .callout.bad{border-left-color:var(--bad)}
+  .callout.good{border-left-color:var(--good)}
+  .callout p:last-child,.callout ul:last-child{margin-bottom:0}
+  .callout .h{font-weight:650;margin:0 0 7px}
+
+  .phase{border:1px solid var(--rule);border-radius:10px;margin:0 0 16px;overflow:hidden}
+  .phase.decider{border-color:var(--warn);border-width:2px}
+  .phase-h{display:flex;align-items:baseline;gap:12px;padding:14px 18px;background:var(--bg-soft);
+    border-bottom:1px solid var(--rule);flex-wrap:wrap}
+  .phase.decider .phase-h{background:#fdf8f0}
+  .phase-h .pid{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.06em}
+  .phase-h h3{margin:0;font-size:17px}
+  .phase-h .meta{margin-left:auto;font-size:12px;color:var(--ink-faint);font-family:var(--mono)}
+  .phase-b{padding:6px 18px 14px}
+  .task{display:flex;gap:11px;padding:9px 0;border-bottom:1px dashed var(--rule-soft);align-items:flex-start}
+  .task:last-child{border-bottom:none}
+  .task .tid{flex:0 0 46px;font-family:var(--mono);font-size:11.5px;font-weight:650;color:var(--ink-faint);padding-top:2px}
+  .task .td{flex:1 1 auto;min-width:0}
+  .task .td b{font-weight:600;display:block;font-size:14.5px}
+  .task .td span{display:block;font-size:13px;color:var(--ink-faint);margin-top:2px}
+  .task .who{flex:0 0 auto;font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;
+    text-transform:uppercase;padding:2px 7px;border-radius:4px;border:1px solid currentColor;margin-top:2px}
+  .w-me{color:var(--accent)} .w-you{color:var(--warn)} .w-both{color:var(--good)}
+  .accept{margin:10px 0 2px;padding:9px 12px;background:var(--bg-tint);border-radius:6px;
+    font-size:13px;color:var(--ink-soft)}
+  .accept b{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--ink-faint);display:block;margin-bottom:3px}
+  .gate{border:1px solid var(--warn);background:#fdf8f0;border-radius:9px;padding:14px 18px;margin:0 0 16px}
+  .gate .h{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--warn);font-weight:700;margin-bottom:5px}
+  .gate p{margin:0 0 8px;font-size:14.5px} .gate p:last-child{margin:0}
+
+  .tbl-scroll{overflow-x:auto;margin:20px 0}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:600px}
+  th{text-align:left;font-size:11.5px;font-family:var(--mono);letter-spacing:.07em;text-transform:uppercase;
+    color:var(--ink-faint);border-bottom:1px solid var(--rule);padding:0 12px 9px 0;font-weight:500}
+  td{padding:11px 12px 11px 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+  td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  .yes{color:var(--good);font-weight:650} .no{color:var(--bad);font-weight:650} .meh{color:var(--warn);font-weight:650}
+  .path{font-family:var(--mono);font-size:12.5px;line-height:1.85;background:var(--bg-tint);
+    border:1px solid var(--rule);border-radius:8px;padding:14px 16px;margin:16px 0;overflow-x:auto;
+    white-space:pre;color:var(--ink-soft)}
+  footer{margin-top:54px;padding-top:20px;border-top:1px solid var(--rule);font-size:13px;color:var(--ink-faint)}
+  @media(max-width:640px){h1{font-size:26px}.wrap{padding:0 16px 70px}.task .who{display:none}}
+</style>
+
+<div class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">Delivery plan &middot; claude-mobile 4.0.0</p>
+  <h1>Windows-native: herdr replaces dtach, WSL leaves the path</h1>
+  <p class="standfirst">
+    Everything already runs on Windows except session persistence. Move that last piece and the
+    architecture collapses to one operating system, no boundary crossings, and no migration of
+    anything.
+  </p>
+  <div class="stats">
+    <div class="stat"><b>~1 hr</b><span>to know if this is real</span></div>
+    <div class="stat"><b>0</b><span>repos moved</span></div>
+    <div class="stat"><b>~800</b><span>lines deleted if it lands</span></div>
+    <div class="stat"><b>0</b><span>CI runners disturbed</span></div>
+  </div>
+</header>
+
+<h2>Target state</h2>
+
+<div class="path">TODAY   iPad -> tailscale -> [Win] node -> wsl.exe -> dtach -> bash -> cmd.exe /c claude -> [Win] Claude
+                                            two boundary crossings, WSL on the critical path
+
+TARGET  iPad -> tailscale -> [Win] node -> herdr (ConPTY panes) -> claude -> NTFS repos
+                                            one OS, no crossings, nothing moved</div>
+
+<div class="callout good">
+  <p class="h">What makes this cheap</p>
+  <p>
+    Claude Code is already on Windows and already authenticated. The repos are already on NTFS,
+    where <code>find + stat</code> over 2,016 files takes <b>119ms</b>. Tailscale is already on
+    Windows. The only thing living in WSL is dtach &mdash; and herdr v0.8.2 hosts native ConPTY
+    panes on Windows, which is precisely dtach's job.
+  </p>
+  <p>
+    WSL is not removed from the machine. It keeps running the 11 Actions runners. It just leaves
+    <i>claude-mobile's</i> critical path.
+  </p>
+</div>
+
+<h2>Phases</h2>
+
+<!-- PHASE 0 -->
+<div class="phase decider">
+  <div class="phase-h">
+    <span class="pid">P0</span><h3>Prove the mechanism &mdash; the deciding hour</h3>
+    <span class="meta">nothing touched &middot; live service untouched</span>
+  </div>
+  <div class="phase-b">
+    <div class="task">
+      <span class="tid">P0.1</span>
+      <span class="td"><b>Install herdr v0.8.2 on Windows, side by side</b>
+      <span>Extract <code>herdr-windows-x86_64.zip</code> whole &mdash; the docs warn the ConPTY
+      runtime ships beside <code>herdr.exe</code> and the directory must stay intact. Nothing on
+      PATH is replaced.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P0.2</span>
+      <span class="td"><b>Install the Claude Code integration on Windows</b>
+      <span><code>herdr integration install claude</code>, then confirm the hook lands in
+      <code>C:\Users\MRAL-\.claude\hooks\</code> &mdash; currently empty, verified. This is the
+      thing that was in the wrong Claude all along.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P0.3</span>
+      <span class="td"><b>Run a real Claude session in a herdr pane</b>
+      <span>Then <code>herdr agent list</code>. Non-empty, with <code>agent_status</code> something
+      other than <code>unknown</code>, is the payoff the whole WSL programme was chasing.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P0.4</span>
+      <span class="td"><b>THE DECIDER &mdash; get a PTY onto a pane from node-pty</b>
+      <span><code>herdr terminal attach</code> is documented unsupported on Windows. Today
+      <code>node-pty</code> spawns <code>wsl.exe ... dtach -a</code> for exactly this. Find the
+      Windows equivalent, or establish there isn't one.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P0.5</span>
+      <span class="td"><b>Cursor fidelity through the grid renderer</b>
+      <span>Docs warn the native cursor <i>"may flicker, jump, or briefly remain at an old
+      position"</i>. Tolerable in a native terminal; unknown through a server-side mirror and DOM
+      rows.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P0.6</span>
+      <span class="td"><b>Persistence check</b>
+      <span>Close the client, close the terminal window, reattach. Docs claim sessions survive
+      both. dtach's five-month record is the bar.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="accept"><b>Acceptance</b>
+      P0.3 and P0.4 both pass. <b>If P0.4 fails there is no Windows-native architecture</b> and we
+      fall back to the dedicated-distro plan without spending anything further.</div>
+  </div>
+</div>
+
+<div class="gate">
+  <div class="h">Gate &mdash; go / no-go on evidence</div>
+  <p>
+    <b>P0.4 is a hard stop.</b> Everything below assumes the server can drive a herdr pane on
+    Windows. If it cannot, this plan ends here and the WSL dedicated-distro plan resumes.
+  </p>
+  <p>
+    No operator action needed for the gate itself &mdash; it is a technical fact, not a judgement.
+  </p>
+</div>
+
+<!-- PHASE 1 -->
+<div class="phase">
+  <div class="phase-h">
+    <span class="pid">P1</span><h3>Session backend behind a flag</h3>
+    <span class="meta">dtach stays the default</span>
+  </div>
+  <div class="phase-b">
+    <div class="task">
+      <span class="tid">P1.1</span>
+      <span class="td"><b>Extract a session-backend seam</b>
+      <span>The dtach calls are already concentrated &mdash; <code>createDtachDaemon</code>,
+      <code>attachToDtach</code>, <code>dtachSocketState</code>, <code>recoverDtachSessions</code>.
+      Put a herdr implementation beside them, selected by config, exactly as
+      <code>RENDERER_MODE</code> already selects grid vs xterm.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P1.2</span>
+      <span class="td"><b>Second instance on another port, herdr backend</b>
+      <span>Live instance keeps running dtach on 3456, untouched. New one on 3457.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P1.3</span>
+      <span class="td"><b>Verify with the iPad emulator</b>
+      <span>Four viewports, the rail, both scroll behaviours. You are not the first to look at
+      it.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P1.4</span>
+      <span class="td"><b>Survive a server restart</b>
+      <span><code>pm2 restart</code> and confirm sessions recover. This is dtach's core value and
+      the reason it survived 236 restarts &mdash; herdr must match it before it can replace
+      it.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="accept"><b>Acceptance</b>
+      3457 serves a herdr-backed session that survives a server restart, and the emulator passes.
+      Backing out is a config flag, not a revert.</div>
+  </div>
+</div>
+
+<!-- PHASE 2 -->
+<div class="phase">
+  <div class="phase-h">
+    <span class="pid">P2</span><h3>Soak &mdash; the stability question</h3>
+    <span class="meta">the part that cannot be rushed</span>
+  </div>
+  <div class="phase-b">
+    <div class="task">
+      <span class="tid">P2.1</span>
+      <span class="td"><b>Automated crash watch</b>
+      <span>Poll herdr's log and process state; record every abort with a timestamp. On Linux it
+      produced <b>45 crash-shaped lines and repeated SIGABRT in a single day</b>. Assume nothing
+      about Windows.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P2.2</span>
+      <span class="td"><b>Use it for a week from the iPad</b>
+      <span>Real work. The questions are whether it stays up, whether agent status is actually
+      useful, and whether the cursor is acceptable in practice.</span></span>
+      <span class="who w-you">you</span>
+    </div>
+    <div class="accept"><b>Acceptance</b>
+      A week with <b>zero unexplained aborts</b>, plus your go / no-go. dtach set the bar at 236
+      restarts across five months without one; herdr does not have to match that, but it has to be
+      boring.</div>
+  </div>
+</div>
+
+<!-- PHASE 3 -->
+<div class="phase">
+  <div class="phase-h">
+    <span class="pid">P3</span><h3>Cutover and deletion &mdash; 4.0.0</h3>
+    <span class="meta">where the architecture gets smaller</span>
+  </div>
+  <div class="phase-b">
+    <div class="task">
+      <span class="tid">P3.1</span>
+      <span class="td"><b>Flip the default to herdr</b>
+      <span>One config change; dtach stays selectable for a fortnight as rollback.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P3.2</span>
+      <span class="td"><b>Delete the wsl.exe scaffolding</b>
+      <span>17 <code>execFileSync</code> call sites and the wrapper layer. The 100-143ms
+      event-loop stalls disappear at the root, not by becoming async.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P3.3</span>
+      <span class="td"><b>Delete the interop launch and the dtach layer</b>
+      <span><code>cmd.exe /c claude</code> becomes <code>claude</code>. Two shell layers, the
+      <code>--exec</code> subtlety, socket liveness probing and recovery scanning all go.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P3.4</span>
+      <span class="td"><b>Retire the backbone probe, keep an honest health signal</b>
+      <span><code>checkBackbone()</code> exists to watch WSL. With WSL out of the path it should
+      watch herdr instead &mdash; same banner, different subject.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P3.5</span>
+      <span class="td"><b>Cold-boot verification</b>
+      <span>Reboot the machine and confirm the service returns with sessions intact. The existing
+      Windows scheduled task stays &mdash; <b>no boot-path rework</b>, which is a real saving over
+      either WSL plan.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P3.6</span>
+      <span class="td"><b>Re-measure and publish</b>
+      <span>Crossings, stalls, echo latency, line count &mdash; same harness, printed beside the
+      old numbers so the claim is observed rather than asserted.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="accept"><b>Acceptance</b>
+      Zero <code>wsl.exe</code> references in server.js, a cold boot that recovers sessions
+      observed rather than reasoned about, and published before/after numbers.</div>
+  </div>
+</div>
+
+<!-- PHASE 4 -->
+<div class="phase">
+  <div class="phase-h">
+    <span class="pid">P4</span><h3>The things this unblocks</h3>
+    <span class="meta">independent of the above, worth doing anyway</span>
+  </div>
+  <div class="phase-b">
+    <div class="task">
+      <span class="tid">P4.1</span>
+      <span class="td"><b>Claude Code hooks to Web Push</b>
+      <span>Replaces regex attention detection, whose misses are 17.5% of the entire audit log.
+      Now doubly natural: the integration hook is already installed on Windows by P0.2.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P4.2</span>
+      <span class="td"><b>T22 mouse tracking</b>
+      <span>herdr is mouse-first &mdash; click panes, drag borders, right-click menus. Every one of
+      those is currently inert in our client, which is the most likely reason it felt bad on the
+      iPad.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+    <div class="task">
+      <span class="tid">P4.3</span>
+      <span class="td"><b>Session chip density and the theme default</b>
+      <span>44px chips are generous now they stack vertically; dark is still the default against
+      your standing preference.</span></span>
+      <span class="who w-me">me</span>
+    </div>
+  </div>
+</div>
+
+<h2>Risks</h2>
+
+<div class="callout bad">
+  <p class="h">1. herdr stability is the real risk, and P0 does not retire it</p>
+  <p>
+    45 crash-shaped lines and repeated SIGABRT on Linux on 17 August &mdash; the same day it was
+    installed and tried. Windows is a different build, so the number transfers nothing in either
+    direction. <b>Only P2's soak answers this</b>, and it takes a week, not an hour.
+  </p>
+  <p>
+    dtach is the incumbent it must displace: 236 server restarts across five months, zero aborts.
+    That is a high bar for a pre-1.0 tool, and it is the bar that matters &mdash; this thing holds
+    your working sessions.
+  </p>
+</div>
+
+<div class="callout warn">
+  <p class="h">2. Pre-1.0 protocol churn</p>
+  <p>
+    v0.8.0 to v0.8.2 already changed what platforms ship. Agent state also lives in a
+    <b>remotely-fetched manifest outside the version pin</b> &mdash; which is how a busy Claude got
+    reported <code>idle</code> for 367 samples. The Windows integration hook should make detection
+    authoritative and bypass the manifest entirely, but P0.3 must confirm that rather than assume
+    it.
+  </p>
+</div>
+
+<div class="callout warn">
+  <p class="h">3. We are replacing the one component that has never failed</p>
+  <p>
+    Everything else in this system has broken at some point. dtach has not. The upside is real
+    &mdash; agent state, resume, ~800 lines deleted &mdash; but the thing being swapped out is the
+    quiet, reliable part. That is why dtach stays behind a flag through P3 and is not deleted until
+    a week of evidence says so.
+  </p>
+</div>
+
+<div class="callout">
+  <p class="h">4. Windows-specific unknowns</p>
+  <p>
+    Cursor flicker is documented. SmartScreen may object to an unsigned binary. ConPTY behaviour
+    under a server-side <code>@xterm/headless</code> mirror is untested by anyone, since that
+    combination is unusual. None of these are likely to be fatal; all of them are P0 findings
+    rather than assumptions.
+  </p>
+</div>
+
+<h2>What needs you</h2>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th>When</th><th>What</th><th>Blocks</th></tr>
+  <tr><td class="num">P0</td><td>Nothing &mdash; it is a technical gate, not a judgement</td>
+      <td>&mdash;</td></tr>
+  <tr><td class="num">P1, P3</td><td>Merge approval per PR, as always</td><td>Each landing</td></tr>
+  <tr><td class="num">P2</td><td><b>A week of real use</b>, then go / no-go</td><td>Cutover</td></tr>
+  <tr><td class="num">P3.1</td><td>Explicit sign-off to make herdr the default</td>
+      <td>The only irreversible-feeling step, and it is still a config flag</td></tr>
+</table>
+</div>
+
+<h2>Reversibility</h2>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th>Phase</th><th>Touches production</th><th>How you undo it</th></tr>
+  <tr><td>P0 proof</td><td class="yes">no</td><td>delete a folder</td></tr>
+  <tr><td>P1 flagged backend</td><td class="yes">no</td><td>the flag defaults to dtach; nothing changes until flipped</td></tr>
+  <tr><td>P2 soak</td><td class="yes">no</td><td>stop using 3457</td></tr>
+  <tr><td>P3.1 default flip</td><td class="no">yes</td><td>flip the flag back</td></tr>
+  <tr><td>P3.2&ndash;3.3 deletion</td><td class="no">yes</td><td>git revert &mdash; the genuine
+      point of no easy return, deliberately after a week of use</td></tr>
+</table>
+</div>
+
+<div class="callout good">
+  <p class="h">If P0.4 fails</p>
+  <p>
+    We lose an hour and return to the WSL plan &mdash; with a <b>dedicated distro</b>, not
+    Ubuntu-24.04, because that one hosts 11 Actions runners serving the required checks on three
+    repos. That fallback is already written and stays valid.
+  </p>
+</div>
+
+<footer>
+  <p>
+    claude-mobile v3.4.0 -&gt; 4.0.0. Supersedes the WSL-first plan, which is retained as the
+    fallback. herdr v0.8.2 Windows capability is read from vendor documentation and the release
+    asset list; nothing about it has been observed on this machine yet, which is what P0 is for.
+  </p>
+</footer>
+
+</div>

@@ -1,0 +1,481 @@
+<title>Windows-Native Tracker</title>
+<style>
+  :root{
+    --ink:#16191d; --ink-soft:#4a5159; --ink-faint:#79828c;
+    --rule:#e2e6ea; --rule-soft:#eef1f4;
+    --bg:#fff; --bg-soft:#f7f9fa; --bg-tint:#f1f5f7;
+    --accent:#1a5f7a; --good:#1f7a4d; --bad:#a32c28; --warn:#a8600f;
+    --todo:#9aa4ae;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px 90px}
+
+  header.hero{border-bottom:1px solid var(--rule);margin-bottom:30px;padding:44px 0 26px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 10px}
+  h1{font-size:30px;line-height:1.2;margin:0 0 8px;letter-spacing:-.02em;font-weight:650}
+  .stamp{font-family:var(--mono);font-size:12px;color:var(--ink-faint);margin:0}
+
+  .overall{margin-top:24px;border:1px solid var(--rule);border-radius:10px;padding:16px 18px;background:var(--bg-soft)}
+  .bar{height:9px;border-radius:5px;background:#e6eaee;overflow:hidden;display:flex;margin:9px 0 10px}
+  .bar i{display:block;height:100%}
+  .bar .b-done{background:var(--good)} .bar .b-active{background:var(--accent)}
+  .bar .b-block{background:var(--bad)}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--ink-soft)}
+  .legend span b{font-family:var(--mono);font-weight:700}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:baseline}
+  .d-done{background:var(--good)} .d-active{background:var(--accent)} .d-todo{background:var(--todo)}
+  .d-block{background:var(--bad)}
+
+  .now{border:2px solid var(--accent);border-radius:10px;padding:16px 20px;margin:0 0 26px;background:#f2f8fa}
+  .now .h{font-family:var(--mono);font-size:11px;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--accent);font-weight:700;margin-bottom:6px}
+  .now p{margin:0 0 8px;font-size:15px} .now p:last-child{margin:0}
+
+  h2{font-size:13px;font-family:var(--mono);letter-spacing:.09em;text-transform:uppercase;
+    color:var(--accent);margin:40px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--rule)}
+  p{margin:0 0 13px}
+  code{font-family:var(--mono);font-size:.86em;background:var(--bg-tint);padding:1px 5px;border-radius:4px}
+
+  .phase{border:1px solid var(--rule);border-radius:10px;margin:0 0 14px;overflow:hidden}
+  .phase-h{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--bg-soft);
+    border-bottom:1px solid var(--rule);flex-wrap:wrap}
+  .phase-h .pid{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--accent)}
+  .phase-h h3{margin:0;font-size:16px;font-weight:640}
+  .phase-h .prog{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink-faint)}
+  .phase-h .minibar{width:90px;height:6px;border-radius:3px;background:#e6eaee;overflow:hidden;display:flex}
+  .phase-h .minibar i{display:block;height:100%;background:var(--good)}
+
+  table{border-collapse:collapse;width:100%;font-size:14px}
+  .tbl-scroll{overflow-x:auto}
+  th{text-align:left;font-size:10.5px;font-family:var(--mono);letter-spacing:.07em;text-transform:uppercase;
+    color:var(--ink-faint);border-bottom:1px solid var(--rule);padding:9px 12px 8px 16px;font-weight:500;
+    background:#fff}
+  td{padding:10px 12px 10px 16px;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  td.tid{font-family:var(--mono);font-size:12px;font-weight:650;color:var(--ink-faint);white-space:nowrap;width:52px}
+  td.task b{display:block;font-weight:600}
+  td.task span{display:block;font-size:12.5px;color:var(--ink-faint);margin-top:2px}
+  td.who,td.st{white-space:nowrap;width:1%}
+  td.ev{font-size:12.5px;color:var(--ink-soft);min-width:160px}
+  td.ev em{color:var(--ink-faint);font-style:normal}
+
+  .chip{display:inline-block;font-family:var(--mono);font-size:10px;letter-spacing:.05em;
+    text-transform:uppercase;padding:3px 8px;border-radius:4px;font-weight:700;white-space:nowrap}
+  .c-todo{color:#5c666f;background:#eef1f4;border:1px solid #dbe1e6}
+  .c-active{color:#fff;background:var(--accent)}
+  .c-done{color:#fff;background:var(--good)}
+  .c-block{color:#fff;background:var(--bad)}
+  .c-fail{color:var(--bad);background:#fbeceb;border:1px solid #f0cfcd}
+  .who-me{color:var(--accent);font-family:var(--mono);font-size:10.5px;text-transform:uppercase;
+    border:1px solid currentColor;padding:2px 6px;border-radius:4px}
+  .who-you{color:var(--warn);font-family:var(--mono);font-size:10.5px;text-transform:uppercase;
+    border:1px solid currentColor;padding:2px 6px;border-radius:4px}
+
+  .gate{border:2px solid var(--warn);background:#fdf8f0;border-radius:9px;padding:13px 18px;margin:0 0 14px}
+  .gate .h{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--warn);font-weight:700;margin-bottom:5px}
+  .gate p{margin:0;font-size:14px}
+
+  .callout{border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;
+    padding:14px 18px;margin:18px 0;background:var(--bg-soft);font-size:14.5px}
+  .callout.bad{border-left-color:var(--bad)}
+  .callout p:last-child{margin-bottom:0}
+  .callout .h{font-weight:650;margin:0 0 6px}
+  footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--rule);font-size:12.5px;color:var(--ink-faint)}
+  @media(max-width:700px){h1{font-size:24px}.wrap{padding:0 14px 60px}td.who,td.ev{display:none}}
+</style>
+
+<div class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">Live tracker &middot; claude-mobile 4.0.0</p>
+  <h1>Windows-native: herdr replaces dtach</h1>
+  <p class="stamp">Last updated 25 August 2026 &middot; <b>P1 + server control shipped</b>
+     &middot; 13 / 23 tasks complete &middot; <b>P2 soak running &mdash; restarted 24 Aug</b></p>
+
+  <div class="overall">
+    <div class="bar"><i class="b-done" style="width:57%"></i><i class="b-active" style="width:0%"></i></div>
+    <div class="legend">
+      <span><i class="dot d-done"></i><b>13</b> done</span>
+      <span><i class="dot d-active"></i><b>0</b> active</span>
+      <span><i class="dot d-todo"></i><b>10</b> to do</span>
+      <span><i class="dot d-block"></i><b>0</b> blocked</span>
+    </div>
+  </div>
+</header>
+
+<div class="now">
+  <div class="h">Right now &mdash; 25 August, P1 complete</div>
+  <p>
+    <b>P0 and P1 are both done.</b> PRs #14-#17 merged, v3.5.0. The seam landed with dtach still
+    the default, and 3457 has been serving a herdr-backed session for 72 minutes. P1.4 was
+    <i>observed</i> rather than inferred &mdash; and it failed first: PM2 tree-kill was taking
+    herdr&apos;s server, because <code>herdr --session</code> spawns it as our child and
+    <code>detached:true</code> does not fix that on Windows.
+  </p>
+  <p>
+    <b>Next is P2, the soak</b> &mdash; the phase no amount of testing shortens. Before it starts,
+    prune to one instance: 3459 (<code>claude-mobile-ctl</code>) and the <code>cm-wt-fix</code>
+    worktree are disposable, and leaving them running means the soak measures the wrong thing.
+  </p>
+  <p style="color:var(--bad)">
+    <b>Correction to my own earlier entry.</b> I recorded that PR #15 closed the
+    <code>HERDR_ENV</code>/<code>HERDR_PANE_ID</code> gotcha. <b>It did not.</b> #15 runs the
+    opposite direction &mdash; it stops the server&apos;s environment leaking INTO the pane, where
+    a stray <code>CLAUDE_CODE_CHILD_SESSION</code> was silently disabling transcript saving.
+    <b>Session identity and resume remain UNVERIFIED.</b>
+  </p>
+  <p style="color:var(--warn)">
+    <b>A lead worth ten minutes.</b> <code>herdr api snapshot</code> reports
+    <code>agent_session {kind:"id", source:"herdr:claude", value:&lt;uuid&gt;}</code> on our pane.
+    <code>pane report-agent-session</code> is exactly what the SessionStart hook calls &mdash; so
+    the hook may be firing after all, which would contradict the P0 finding that detection is
+    screen-scraping only. Unchased.
+  </p>
+  <p style="color:var(--good)">
+    <b>The pattern to carry into P2, in OTG-P1&apos;s words:</b> <i>this system fails by reporting
+    success.</i> An <code>npm ci</code> exited 0 while deleting 112 of 115 packages, with
+    <code>/health</code> still answering 200 and a live session attached. A guard that could not
+    fire. A poll that could never succeed. Green CI, <code>ok:true</code> and a written state file
+    all agreeing while the update had failed. <b>Watch the soak for outcomes, not for absence of
+    errors.</b>
+  </p>
+</div>
+
+<h2>P0 &mdash; Prove the mechanism</h2>
+
+<div class="phase">
+  <div class="phase-h">
+    <span class="pid">P0</span><h3>The deciding hour</h3>
+    <span class="minibar"><i style="width:100%"></i></span>
+    <span class="prog">6 / 6</span>
+  </div>
+  <div class="tbl-scroll">
+  <table>
+    <tr><th>ID</th><th>Task</th><th>Who</th><th>Status</th><th>Evidence</th></tr>
+    <tr>
+      <td class="tid">P0.1</td>
+      <td class="task"><b>Install herdr v0.8.2 on Windows</b>
+        <span>Extract the zip whole &mdash; ConPTY runtime ships beside herdr.exe</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev">herdr 0.8.2 runs; ConPTY runtime bundled (conpty.dll + OpenConsole x64/arm64)</td>
+    </tr>
+    <tr>
+      <td class="tid">P0.2</td>
+      <td class="task"><b>Install the Claude integration on Windows</b>
+        <span>Hook must land in <code>C:\Users\MRAL-\.claude\hooks\</code> (verified empty today)</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev">hook v8 installed; settings.json gained one SessionStart entry; no-ops unless HERDR_ENV=1. <em>Config backed up.</em></td>
+    </tr>
+    <tr>
+      <td class="tid">P0.3</td>
+      <td class="task"><b>Run a real Claude session in a pane</b>
+        <span><code>herdr agent list</code> non-empty, status not <code>unknown</code></span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev"><b>DETECTED in 6s</b> &mdash; agent=claude, status=blocked, pane w1:p1. <em>Via screen manifest, not the hook; status accuracy unverified.</em></td>
+    </tr>
+    <tr style="background:#fdf8f0">
+      <td class="tid">P0.4</td>
+      <td class="task"><b>THE DECIDER &mdash; PTY onto a pane from node-pty</b>
+        <span><code>herdr terminal attach</code> is unsupported on Windows; find the equivalent or
+        establish there is none</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev"><b>GATE CLEARED.</b> node-pty spawned herdr.exe; alt-screen + 57 box glyphs; mouse tracking requested; input accepted. <em>Kill path throws AttachConsole failed.</em></td>
+    </tr>
+    <tr>
+      <td class="tid">P0.5</td>
+      <td class="task"><b>Cursor fidelity through the grid renderer</b>
+        <span>Docs warn of flicker / jump / stale position on Windows</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev"><b>No flicker, no drift.</b> 60 idle samples: 0 moves, 0 oscillations. DOM cursor lands 0.7px from snapshot col. Real herdr TUI renders in the client -- box drawing + bold intact.</td>
+    </tr>
+    <tr>
+      <td class="tid">P0.6</td>
+      <td class="task"><b>Persistence across client + terminal close</b>
+        <span>Docs claim both survive; dtach's record is the bar</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev">server stayed running after the client process died</td>
+    </tr>
+  </table>
+  </div>
+</div>
+
+<div class="gate">
+  <div class="h">Gate &mdash; hard stop on P0.4</div>
+  <p>
+    A technical fact, not a judgement, so it needs nothing from you. Pass and P1 begins. Fail and
+    this tracker closes; the WSL dedicated-distro plan resumes, having cost an hour.
+  </p>
+</div>
+
+<h2>P1 &mdash; Session backend behind a flag</h2>
+
+<div class="phase">
+  <div class="phase-h">
+    <span class="pid">P1</span><h3>dtach stays the default throughout</h3>
+    <span class="minibar"><i style="width:100%"></i></span>
+    <span class="prog">4 / 4</span>
+  </div>
+  <div class="tbl-scroll">
+  <table>
+    <tr><th>ID</th><th>Task</th><th>Who</th><th>Status</th><th>Evidence</th></tr>
+    <tr>
+      <td class="tid">P1.1</td>
+      <td class="task"><b>Extract a session-backend seam</b>
+        <span>herdr implementation beside the dtach one, selected by config &mdash; same pattern as
+        <code>RENDERER_MODE</code></span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev"><b>PR #14 merged.</b> <code>lib/session-backend/{index,dtach,herdr}.js</code> (794 lines); default is <code>config.sessionBackend || dtach</code> &mdash; constraint held. server.js net -300 lines.</td>
+    </tr>
+    <tr>
+      <td class="tid">P1.2</td>
+      <td class="task"><b>Second instance on 3457, herdr backend</b>
+        <span>3456 keeps running dtach, untouched</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev"><b>3457 serving <code>backend=herdr</code></b>, 1 session, 72m uptime, <code>backendAvailable:true</code>. 3456 untouched on dtach with its session intact.</td>
+    </tr>
+    <tr>
+      <td class="tid">P1.3</td>
+      <td class="task"><b>Verify against a live server</b>
+        <span>4 viewports, real auth, real session &mdash; and iPad rotation</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev"><b>Done, but not as written.</b> My premise was false -- the emulator drives a static server and cannot test a backend. <code>live-session-verify.py</code>: real TOTP login, 4 viewports, asserts <code>--expect-backend</code>, plus rotation 120x48 &lt;-&gt; 104x58.</td>
+    </tr>
+    <tr>
+      <td class="tid">P1.4</td>
+      <td class="task"><b>Survive a server restart</b>
+        <span>dtach's core value; herdr must match before it can replace</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev"><b>OBSERVED, and it failed first.</b> PM2 tree-kill took herdr&apos;s server (it spawns as our child; <code>detached:true</code> does NOT fix this on Windows). Fixed via orphaning. Evidence: identical <code>terminal_id</code> across restart. Automated, and asserts id+name+dir, not a count.</td>
+    </tr>
+  </table>
+  </div>
+</div>
+
+<h2>P2 &mdash; Soak</h2>
+
+<div class="phase">
+  <div class="phase-h">
+    <span class="pid">P2</span><h3>The week that decides it</h3>
+    <span class="minibar"><i style="width:0%"></i></span>
+    <span class="prog">0 / 2</span>
+  </div>
+  <div class="tbl-scroll">
+  <table>
+    <tr><th>ID</th><th>Task</th><th>Who</th><th>Status</th><th>Evidence</th></tr>
+    <tr>
+      <td class="tid">P2.1</td>
+      <td class="task"><b>Automated crash watch</b>
+        <span>Poll herdr log + process state, record every abort with a timestamp</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-todo">to do</span></td>
+      <td class="ev"><em>Linux baseline: 45 crash lines in one day</em></td>
+    </tr>
+    <tr>
+      <td class="tid">P2.2</td>
+      <td class="task"><b>A week of real use from the iPad</b>
+        <span>Does it stay up, is agent status useful, is the cursor acceptable</span></td>
+      <td class="who"><span class="who-you">you</span></td>
+      <td class="st"><span class="chip c-todo">to do</span></td>
+      <td class="ev"><em>go / no-go</em></td>
+    </tr>
+  </table>
+  </div>
+</div>
+
+<div class="gate">
+  <div class="h">Gate &mdash; needs you</div>
+  <p>
+    A week with <b>zero unexplained aborts</b>, plus your go / no-go. dtach set the bar at 236
+    restarts across five months without one.
+  </p>
+</div>
+
+<h2>P3 &mdash; Cutover and deletion</h2>
+
+<div class="phase">
+  <div class="phase-h">
+    <span class="pid">P3</span><h3>Where the architecture gets smaller</h3>
+    <span class="minibar"><i style="width:0%"></i></span>
+    <span class="prog">0 / 6</span>
+  </div>
+  <div class="tbl-scroll">
+  <table>
+    <tr><th>ID</th><th>Task</th><th>Who</th><th>Status</th><th>Evidence</th></tr>
+    <tr>
+      <td class="tid">P3.1</td>
+      <td class="task"><b>Flip the default to herdr</b>
+        <span>dtach stays selectable for a fortnight as rollback</span></td>
+      <td class="who"><span class="who-you">you</span></td>
+      <td class="st"><span class="chip c-todo">to do</span></td>
+      <td class="ev"><em>explicit sign-off</em></td>
+    </tr>
+    <tr>
+      <td class="tid">P3.2</td>
+      <td class="task"><b>Delete the wsl.exe scaffolding</b>
+        <span>17 <code>execFileSync</code> call sites; the 100-143ms stalls go at the root</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-todo">to do</span></td>
+      <td class="ev"><em>&mdash;</em></td>
+    </tr>
+    <tr>
+      <td class="tid">P3.3</td>
+      <td class="task"><b>Delete the interop launch and dtach layer</b>
+        <span><code>cmd.exe /c claude</code> becomes <code>claude</code></span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-todo">to do</span></td>
+      <td class="ev"><em>&mdash;</em></td>
+    </tr>
+    <tr>
+      <td class="tid">P3.4</td>
+      <td class="task"><b>Repoint the health probe at herdr</b>
+        <span><code>checkBackbone()</code> watches WSL today; same banner, new subject</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-todo">to do</span></td>
+      <td class="ev"><em>&mdash;</em></td>
+    </tr>
+    <tr>
+      <td class="tid">P3.5</td>
+      <td class="task"><b>Cold-boot verification</b>
+        <span>Existing Windows scheduled task stays &mdash; no boot-path rework</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-todo">to do</span></td>
+      <td class="ev"><em>observed, not reasoned</em></td>
+    </tr>
+    <tr>
+      <td class="tid">P3.6</td>
+      <td class="task"><b>Re-measure and publish</b>
+        <span>Crossings, stalls, echo latency, line count, beside the old numbers</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-todo">to do</span></td>
+      <td class="ev"><em>&mdash;</em></td>
+    </tr>
+  </table>
+  </div>
+</div>
+
+<h2>P4 &mdash; Worth doing regardless</h2>
+
+<div class="phase">
+  <div class="phase-h">
+    <span class="pid">P4</span><h3>Independent of how the above lands</h3>
+    <span class="minibar"><i style="width:60%"></i></span>
+    <span class="prog">3 / 5</span>
+  </div>
+  <div class="tbl-scroll">
+  <table>
+    <tr><th>ID</th><th>Task</th><th>Who</th><th>Status</th><th>Evidence</th></tr>
+    <tr>
+      <td class="tid">P4.1</td>
+      <td class="task"><b>Claude Code hooks to Web Push</b>
+        <span>Replaces regex attention detection &mdash; its misses are 17.5% of the audit log</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-todo">to do</span></td>
+      <td class="ev"><em>&mdash;</em></td>
+    </tr>
+    <tr>
+      <td class="tid">P4.2</td>
+      <td class="task"><b>T22 mouse tracking</b>
+        <span>herdr is mouse-first; every click is currently inert in our client</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-todo">to do</span></td>
+      <td class="ev"><em>likely why herdr felt bad on the iPad</em></td>
+    </tr>
+    <tr>
+      <td class="tid">P4.3</td>
+      <td class="task"><b>Chip density and the theme default</b>
+        <span>44px chips are generous stacked; dark is still default against your rule</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-todo">to do</span></td>
+      <td class="ev"><em>&mdash;</em></td>
+    </tr>
+    <tr>
+      <td class="tid">P4.5</td>
+      <td class="task"><b>update.sh must not corrupt node_modules</b>
+        <span>npm ci ran with the server up on the first real update</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev"><b>PR #17 merged</b> (63b9b2c). Found by USING the button: node_modules went 115
+        entries to 3, node-pty stopped loading, and /health still said 200 with a live session.
+        Nine failure paths fixed over six judge rounds; one of my own guards was inert
+        (<code>kill -0</code> cannot see a Windows pid).</td>
+    </tr>
+    <tr>
+      <td class="tid">P4.4</td>
+      <td class="task"><b>Server control from the client</b>
+        <span>Restart and Update in the settings panel &mdash; no stop, no start</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev"><b>PR #16 merged</b> (cdd045a), judge MATCH. Removes the laptop from the update
+        loop. Found the kill switch was already broken (no caller, and PM2 autorestart meant it
+        never killed) and that <code>update.sh</code> restarted the wrong process by substring
+        match.</td>
+    </tr>
+  </table>
+  </div>
+</div>
+
+<h2>Standing risks</h2>
+
+<div class="callout bad">
+  <p class="h">herdr stability &mdash; not retired by P0</p>
+  <p>
+    45 crash-shaped lines and repeated SIGABRT on Linux, 17 August. Windows is a different build so
+    the number transfers nothing either way. <b>Only P2 answers this</b>, and it takes a week.
+    We are replacing the one component in this system that has never failed.
+  </p>
+</div>
+
+<div class="callout">
+  <p class="h">What P1 changed about the risk picture</p>
+  <p>
+    Restart survival is <b>proven on herdr</b>, which was the open question that mattered most
+    &mdash; but it needed a fix we did not know we needed, and the failure was silent: the session
+    was simply gone after a restart, with nothing logged as wrong. Two more of the same shape
+    turned up in the same work: a sizing guard that could never fire because the client sends
+    <code>rows=200</code>, and a column check that estimated a number
+    <code>herdr api snapshot</code> reports exactly.
+  </p>
+  <p>
+    The lesson to carry into P2: <b>this system fails by reporting success.</b> Green CI, a
+    returned <code>ok:true</code>, and a written state file all agreed while the update had
+    actually failed. Watch the soak for outcomes, not for absence of errors.
+  </p>
+</div>
+
+<div class="callout">
+  <p class="h">Reversibility, at a glance</p>
+  <p>
+    P0 undoes by deleting a folder. P1 ships with the flag defaulting to dtach, so nothing changes
+    until P3.1 flips it. P3.1 undoes by flipping it back. <b>P3.2 and P3.3 are the real point of no
+    easy return</b> &mdash; deliberately placed after a week of evidence.
+  </p>
+</div>
+
+<footer>
+  <p>
+    Status vocabulary: <span class="chip c-todo">to do</span>
+    <span class="chip c-active">active</span> <span class="chip c-done">done</span>
+    <span class="chip c-block">blocked</span> <span class="chip c-fail">failed</span>.
+    The Evidence column fills in as things are observed &mdash; a task is only <b>done</b> when
+    there is something in it. Full reasoning lives in the Windows-native plan; the superseded
+    WSL-first plan is retained as the fallback.
+  </p>
+</footer>
+
+</div>

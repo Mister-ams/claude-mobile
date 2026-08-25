@@ -1,0 +1,417 @@
+<title>claude-mobile Architecture</title>
+<style>
+  :root {
+    --ink:#16191d; --ink-soft:#4a5159; --ink-faint:#79828c;
+    --rule:#e2e6ea; --rule-soft:#eef1f4;
+    --bg:#fff; --bg-soft:#f7f9fa; --bg-tint:#f1f5f7;
+    --accent:#1a5f7a; --good:#1f7a4d; --bad:#a32c28; --warn:#a8600f;
+    --zone-client:#eef4f8; --zone-win:#f4f1ec; --zone-wsl:#eef5f0;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .wrap{max-width:940px;margin:0 auto;padding:0 24px 100px}
+  header.hero{border-bottom:1px solid var(--rule);margin-bottom:44px;padding:54px 0 34px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 12px}
+  h1{font-size:33px;line-height:1.2;margin:0 0 14px;letter-spacing:-.02em;font-weight:650}
+  .standfirst{font-size:17.5px;color:var(--ink-soft);margin:0;max-width:66ch}
+  .stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:28px}
+  .stat{flex:1 1 140px;border:1px solid var(--rule);border-radius:8px;padding:12px 14px;background:var(--bg-soft)}
+  .stat b{display:block;font-size:20px;font-weight:650;letter-spacing:-.01em}
+  .stat span{display:block;font-size:12px;color:var(--ink-faint);margin-top:3px}
+  h2{font-size:13px;font-family:var(--mono);letter-spacing:.09em;text-transform:uppercase;
+    color:var(--accent);margin:54px 0 18px;padding-bottom:8px;border-bottom:1px solid var(--rule)}
+  h3{font-size:18.5px;margin:30px 0 9px;letter-spacing:-.01em;font-weight:625}
+  p{margin:0 0 14px}
+  ul{margin:0 0 14px;padding-left:20px} li{margin-bottom:6px}
+  code{font-family:var(--mono);font-size:.87em;background:var(--bg-tint);padding:1px 5px;border-radius:4px}
+  .callout{border:1px solid var(--rule);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;
+    padding:16px 20px;margin:20px 0;background:var(--bg-soft)}
+  .callout.warn{border-left-color:var(--warn)}
+  .callout p:last-child,.callout ul:last-child{margin-bottom:0}
+  .callout .h{font-weight:650;margin:0 0 7px}
+
+  .zone{border:1px solid var(--rule);border-radius:9px;margin:0 0 10px;overflow:hidden}
+  .zone-h{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    padding:7px 14px;color:var(--ink-soft);border-bottom:1px solid var(--rule);font-weight:600}
+  .z-client .zone-h{background:var(--zone-client)} .z-win .zone-h{background:var(--zone-win)}
+  .z-wsl .zone-h{background:var(--zone-wsl)}
+  .zone-b{padding:12px 14px;background:#fff}
+  .hop{display:flex;align-items:flex-start;gap:11px;padding:7px 0;border-bottom:1px dashed var(--rule-soft)}
+  .hop:last-child{border-bottom:none}
+  .hop .n{flex:0 0 22px;height:22px;border-radius:50%;background:var(--bg-tint);color:var(--accent);
+    font-family:var(--mono);font-size:11px;font-weight:700;display:flex;align-items:center;
+    justify-content:center;margin-top:1px}
+  .hop .t{flex:1 1 auto;min-width:0}
+  .hop .t b{font-family:var(--mono);font-size:13.5px;font-weight:650;display:block}
+  .hop .t span{font-size:13px;color:var(--ink-faint);display:block;margin-top:1px}
+  .cross{text-align:center;font-family:var(--mono);font-size:11px;letter-spacing:.06em;
+    color:var(--bad);padding:5px 0;font-weight:600}
+  .arrow{text-align:center;color:var(--ink-faint);font-size:15px;line-height:1;padding:2px 0}
+
+  .tbl-scroll{overflow-x:auto;margin:20px 0}
+  table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:560px}
+  th{text-align:left;font-size:11.5px;font-family:var(--mono);letter-spacing:.07em;text-transform:uppercase;
+    color:var(--ink-faint);border-bottom:1px solid var(--rule);padding:0 12px 9px 0;font-weight:500}
+  td{padding:11px 12px 11px 0;border-bottom:1px solid var(--rule-soft);vertical-align:top}
+  td.num{font-family:var(--mono);font-size:13px;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;
+    text-transform:uppercase;padding:2px 7px;border-radius:4px;border:1px solid currentColor;white-space:nowrap}
+  .t-good{color:var(--good)} .t-warn{color:var(--warn)} .t-bad{color:var(--bad)} .t-flat{color:var(--ink-faint)}
+  .path{font-family:var(--mono);font-size:12.5px;line-height:1.9;background:var(--bg-tint);
+    border:1px solid var(--rule);border-radius:8px;padding:15px 17px;margin:16px 0;overflow-x:auto;
+    white-space:pre;color:var(--ink-soft)}
+  footer{margin-top:58px;padding-top:20px;border-top:1px solid var(--rule);font-size:13px;color:var(--ink-faint)}
+  @media(max-width:640px){h1{font-size:26px}.wrap{padding:0 16px 70px}}
+</style>
+
+<div class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">claude-mobile v3.4.0 &middot; architecture as built</p>
+  <h1>How a keystroke on the iPad reaches Claude, and how a glyph comes back</h1>
+  <p class="standfirst">
+    A Node server on the Windows desktop bridges a browser to Claude Code sessions that live
+    inside WSL. Every number here was measured on the running system.
+  </p>
+  <div class="stats">
+    <div class="stat"><b>5,820</b><span>lines, 3 files</span></div>
+    <div class="stat"><b>7</b><span>direct dependencies</span></div>
+    <div class="stat"><b>434 B</b><span>per keystroke echo</span></div>
+    <div class="stat"><b>2x</b><span>WSL crossings per byte</span></div>
+  </div>
+</header>
+
+<h2>1. The whole path, end to end</h2>
+
+<p>
+  Nine hops. The unusual part is hops 5 to 9: Claude Code is authenticated on <b>Windows</b>,
+  but session persistence lives in <b>Linux</b> &mdash; so every byte leaves Windows, enters
+  WSL, and comes straight back out again.
+</p>
+
+<div class="zone z-client">
+  <div class="zone-h">Client &mdash; iPad / iPhone, Safari</div>
+  <div class="zone-b">
+    <div class="hop"><div class="n">1</div><div class="t">
+      <b>public/app.js</b>
+      <span>Key event to byte sequence. Virtualised DOM grid paints rows. 2,685 lines, no framework.</span>
+    </div></div>
+    <div class="hop"><div class="n">2</div><div class="t">
+      <b>WebSocket over WSS</b>
+      <span>Optionally wrapped in AES-256-GCM keyed by ECDH P-256. 4ms keyboard coalesce.</span>
+    </div></div>
+  </div>
+</div>
+<div class="arrow">&darr;</div>
+<div class="cross">Tailscale tailnet &mdash; WireGuard, no public internet surface</div>
+<div class="arrow">&darr;</div>
+
+<div class="zone z-win">
+  <div class="zone-h">Windows 11 host</div>
+  <div class="zone-b">
+    <div class="hop"><div class="n">3</div><div class="t">
+      <b>tailscale serve</b>
+      <span>Terminates HTTPS on the ts.net name, proxies to localhost:3456.</span>
+    </div></div>
+    <div class="hop"><div class="n">4</div><div class="t">
+      <b>server.js under PM2</b>
+      <span>Express + ws + node-pty. 2,364 lines. Auth, sessions, audit log, the headless mirror.</span>
+    </div></div>
+    <div class="hop"><div class="n">5</div><div class="t">
+      <b>node-pty spawns wsl.exe</b>
+      <span><code>wsl.exe -d Ubuntu-24.04 -u root --exec dtach -a /tmp/cm-{id}.dtach</code></span>
+    </div></div>
+  </div>
+</div>
+<div class="arrow">&darr;</div>
+<div class="cross">WSL boundary crossing #1</div>
+<div class="arrow">&darr;</div>
+
+<div class="zone z-wsl">
+  <div class="zone-h">WSL &mdash; Ubuntu-24.04, as root</div>
+  <div class="zone-b">
+    <div class="hop"><div class="n">6</div><div class="t">
+      <b>dtach daemon</b>
+      <span>Created as <code>dtach -n /tmp/cm-{id}.dtach -z bash</code>. Owns the PTY and outlives Node.</span>
+    </div></div>
+    <div class="hop"><div class="n">7</div><div class="t">
+      <b>bash</b>
+      <span>The shell the daemon holds. Sessions numbered 0 to 7 (<code>MAX_SESSIONS = 8</code>).</span>
+    </div></div>
+    <div class="hop"><div class="n">8</div><div class="t">
+      <b>cmd.exe /c claude</b>
+      <span>Typed into bash by <code>server.js:1589</code>. Interop, because auth lives on Windows.</span>
+    </div></div>
+  </div>
+</div>
+<div class="arrow">&darr;</div>
+<div class="cross">WSL boundary crossing #2, back into Windows</div>
+<div class="arrow">&darr;</div>
+
+<div class="zone z-win">
+  <div class="zone-h">Windows 11 host</div>
+  <div class="zone-b">
+    <div class="hop"><div class="n">9</div><div class="t">
+      <b>Claude Code</b>
+      <span>Runs natively, reads <code>C:\Users\MRAL-\.claude\</code>, touches Windows repos with no 9P penalty.</span>
+    </div></div>
+  </div>
+</div>
+
+<div class="callout warn">
+  <p class="h">Why the double crossing exists</p>
+  <p>
+    It is the price of a deliberate trade. dtach is a Linux tool and Windows has no equivalent
+    detachable session layer, so persistence must live in WSL. Claude Code is authenticated on
+    Windows and the repos sit on the Windows drive, so the agent must run there or pay a 5-20x
+    9P filesystem penalty. Interop is what reconciles the two.
+  </p>
+  <p>
+    The cost is real but small: it lands inside the <b>21-38ms</b> of added echo latency, not
+    anywhere you would feel while typing.
+  </p>
+</div>
+
+<h2>2. Rendering &mdash; the genuinely unusual part</h2>
+
+<p>
+  Most browser terminals stream raw ANSI to xterm.js and let the client emulate. This one
+  emulates on the <b>server</b> and ships row diffs, so the client never parses an escape sequence.
+</p>
+
+<div class="path">PTY output
+   -> @xterm/headless mirror        exact screen + 5,000 rows of scrollback, server-side
+   -> diff vs last emitted state    0.16-0.25 ms per frame
+   -> CellRun[] run-length encoded  {text, sgr} per run, not per cell
+   -> WebSocket                     'frame' (changed rows) or 'snapshot' (everything)
+   -> gridTerms{} virtual DOM       mounts visible rows + 10 overscan; spacers hold the height</div>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th>Message</th><th>Carries</th><th>Sent when</th><th>Cost</th></tr>
+  <tr>
+    <td><code>frame</code></td>
+    <td>Changed rows only, coalesced per animation frame</td>
+    <td>Continuously while Claude writes</td>
+    <td class="num">434 B / keystroke</td>
+  </tr>
+  <tr>
+    <td><code>snapshot</code></td>
+    <td>Full viewport plus scrollback</td>
+    <td>Connect, tab return, session switch</td>
+    <td class="num">2.5 MB, 67 ms</td>
+  </tr>
+</table>
+</div>
+
+<p>
+  Coalescing keeps the frame path cheap: output batches on a 16ms idle timer
+  (<code>COALESCE_IDLE_MS</code>), flushes early at 4KB, and is forced at 64ms. Frames landing in
+  the same paint window merge latest-wins per row before touching the DOM.
+</p>
+
+<div class="callout">
+  <p class="h">Scroll anchoring, new in 3.4.0</p>
+  <p>
+    A snapshot used to run <code>scrollTop = scrollHeight</code> unconditionally, discarding your
+    reading position on every tab return &mdash; measured at <b>+7,230px</b>. It now anchors on the
+    <b>server row ID</b> at the top of the viewport, because indices shift when scrollback rolls but
+    IDs do not, and only follows output when already within <code>GRID_STICK_PX</code> (8px) of the
+    bottom.
+  </p>
+</div>
+
+<h3>The legacy path</h3>
+<p>
+  A complete xterm.js client still ships behind <code>?renderer=xterm</code>. It has had
+  <b>zero connections since 4 May</b> and costs 490 KB of uncacheable JavaScript on every page load.
+  Retained deliberately as a fallback, but dead weight today.
+</p>
+
+<h2>3. Security &mdash; four layers, not all earning their keep</h2>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th>Layer</th><th>Mechanism</th><th>Honest verdict</th></tr>
+  <tr>
+    <td><b>Network</b></td>
+    <td>Tailscale tailnet, WireGuard, zero public surface; Node binds localhost</td>
+    <td><span class="tag t-good">Load-bearing</span> the real boundary</td>
+  </tr>
+  <tr>
+    <td><b>Identity</b></td>
+    <td>TOTP plus WebAuthn passkey, 5-attempt lockout, inactivity lock</td>
+    <td><span class="tag t-good">Load-bearing</span> second factor if a device is lost</td>
+  </tr>
+  <tr>
+    <td><b>Session</b></td>
+    <td>IP-bound tokens, 10 connections per IP</td>
+    <td><span class="tag t-flat">Decorative</span> the tailnet already fixes identity to a device</td>
+  </tr>
+  <tr>
+    <td><b>Transport</b></td>
+    <td>ECDH P-256, HKDF, AES-256-GCM, TOFU pinning, per-direction IV byte</td>
+    <td><span class="tag t-bad">Net negative</span> duplicates WireGuard and TLS, and once leaked the TOTP</td>
+  </tr>
+</table>
+</div>
+
+<div class="callout warn">
+  <p class="h">The security stack is a fossil of a dead threat model</p>
+  <p>
+    All four layers were built when this was exposed to the <b>public internet through ngrok</b>
+    &mdash; the audit log carries real public IPs until 19 March. It has been tailnet-only ever
+    since. That is why the stack looks disproportionate for a single-user tool: it defends a
+    perimeter that no longer exists.
+  </p>
+  <p>
+    The encryption layer is the clearest case. Both sides derived the same key and built the IV
+    from a counter with <b>no direction bit</b>, so server and client reused a nonce &mdash; and
+    because the server's first message is known plaintext, XOR recovered the client's TOTP. Fixed
+    with <code>IV_DIR_SERVER = 1</code> / <code>IV_DIR_CLIENT = 0</code>, but the layer still sits
+    inside WireGuard and TLS.
+  </p>
+</div>
+
+<p>
+  CSP is <code>script-src 'self'</code> and <code>connect-src 'self'</code>. <code>style-src</code>
+  still needs <code>'unsafe-inline'</code> because the grid renderer sets per-cell inline styles.
+  OSC-8 terminal hyperlinks are scheme-allowlisted through the <code>URL</code> API, which also
+  strips embedded tab and newline characters a regex would miss.
+</p>
+
+<h2>4. Persistence &mdash; what survives what</h2>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th>Event</th><th>Sessions survive</th><th>Mechanism</th></tr>
+  <tr><td>Browser closes, iPad sleeps</td><td><span class="tag t-good">Yes</span></td>
+      <td>Nothing client-side holds state</td></tr>
+  <tr><td>PM2 restart, deploy, crash</td><td><span class="tag t-good">Yes</span></td>
+      <td>dtach daemon outlives Node; <code>recoverDtachSessions()</code> reattaches by socket</td></tr>
+  <tr><td>Host reboot</td><td><span class="tag t-bad">No</span></td>
+      <td>Scheduled task restarts the server, but the dtach daemons are gone</td></tr>
+  <tr><td><code>wsl --shutdown</code></td><td><span class="tag t-warn">Unverified</span></td>
+      <td>Socket FILES survive on ext4 while daemons do not, so liveness is tested with
+          <code>lsof</code>, never <code>test -S</code></td></tr>
+</table>
+</div>
+
+<p>
+  Session names persist in <code>.session-meta.json</code>. Output history is a 400 KB server-side
+  ring buffer per session. The audit log records <b>236 server restarts in five months</b>, which
+  is what justifies the dtach layer existing at all.
+</p>
+
+<h2>5. Layout</h2>
+
+<p>
+  One responsive rule, because the constraint inverts with orientation. In landscape the scarce
+  resource is vertical space; in portrait it is horizontal.
+</p>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th>Viewport</th><th>Layout</th><th>Grid</th><th>Vertical chrome</th></tr>
+  <tr><td>iPad landscape (820px and up)</td><td>CSS Grid, left session rail</td>
+      <td class="num">102 x 38</td><td class="num">33px</td></tr>
+  <tr><td>iPad portrait</td><td>Flex column, single top bar</td>
+      <td class="num">84 x 50</td><td class="num">160px</td></tr>
+  <tr><td>Phone</td><td>Flex column plus quick-action bar</td>
+      <td class="num">48 x 39</td><td class="num">191px</td></tr>
+</table>
+</div>
+
+<div class="callout">
+  <p class="h">A trap worth knowing</p>
+  <p>
+    <code>#app</code> visibility is a <b>class</b> (<code>#app.shown</code>), never an inline style.
+    An inline <code>display</code> outranks every stylesheet rule, so while app.js set it directly
+    the landscape grid could never apply &mdash; and it failed silently, looking exactly like a CSS
+    mistake.
+  </p>
+</div>
+
+<h2>6. Supporting cast</h2>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th>Piece</th><th>Role</th></tr>
+  <tr><td>PM2</td><td>Keeps server.js alive; <code>pm2 restart</code> is the deploy step</td></tr>
+  <tr><td><code>ClaudeMobile-Startup</code></td><td>Windows scheduled task, brings everything back at logon</td></tr>
+  <tr><td>WSL systemd backbone</td><td>Keeps the distro up so dtach sockets stay reachable</td></tr>
+  <tr><td><code>~/.claude-mobile-audit.log</code></td><td>Every auth, session and attention event.
+      Also about 2 MB of raw terminal content</td></tr>
+  <tr><td><code>test/ipad-emulator.py</code></td><td>Drives the real client at four viewports,
+      writes PNGs, measures rows, chrome and scroll behaviour</td></tr>
+  <tr><td>CI</td><td>Two jobs, dependency audit and syntax checks; four required checks on master</td></tr>
+  <tr><td>herdr</td><td>Installed standalone in WSL. <b>Not part of this pipeline</b> &mdash;
+      evaluated, not adopted</td></tr>
+</table>
+</div>
+
+<h2>7. Where it is weak</h2>
+
+<p>Stated plainly, because none of these are visible from the code alone.</p>
+
+<div class="tbl-scroll">
+<table>
+  <tr><th>Weakness</th><th>Impact</th><th>Fix</th></tr>
+  <tr>
+    <td><b>Frames carry no scrollback delta</b></td>
+    <td>Rows scrolling off-viewport vanish from the client until the next snapshot, and force a
+        2.5 MB resend on every tab return</td>
+    <td>Extend the frame protocol</td>
+  </tr>
+  <tr>
+    <td><b>WSL calls are synchronous</b></td>
+    <td>Each <code>execFileSync</code> blocks the event loop 100-143ms; the 60s backbone probe
+        freezes every session's keystrokes once a minute</td>
+    <td>Mechanical: async <code>execFile</code></td>
+  </tr>
+  <tr>
+    <td><b>Attention detection regex-parses ANSI</b></td>
+    <td>Misses are 17.5% of the entire audit log, while a decoded grid already exists server-side</td>
+    <td>Claude Code <code>Stop</code> / <code>Notification</code> hooks</td>
+  </tr>
+  <tr>
+    <td><b>490 KB of dead xterm bundles</b></td>
+    <td>Loaded unconditionally, zero use since 4 May, plus <code>Cache-Control: no-store</code>
+        on all statics</td>
+    <td>Delete; re-enable caching via <code>?v=</code></td>
+  </tr>
+  <tr>
+    <td><b>Dark is the default theme</b></td>
+    <td>Light is opt-in via localStorage, contrary to the standing preference</td>
+    <td>One line</td>
+  </tr>
+</table>
+</div>
+
+<h2>8. The shape in one paragraph</h2>
+
+<div class="callout">
+  <p>
+    A thin, dependency-light Node process owning three hard things: a <b>server-side terminal
+    emulator</b> so the client can stay dumb, a <b>detached session layer in a different operating
+    system</b> so work survives restarts, and an <b>authentication stack built for a perimeter that
+    no longer exists</b>. Two of those three are the right calls. The third is a fossil &mdash; and
+    the roughly 520 lines spent compensating for dtach having no API is the honest price of
+    persisting sessions on Windows.
+  </p>
+</div>
+
+<footer>
+  <p>
+    claude-mobile v3.4.0, master <code>f4ff5ab</code>. Measurements from an independent review of
+    the running system and from <code>test/ipad-emulator.py</code>. Constants read from
+    <code>server.js</code> and <code>public/app.js</code> at this revision.
+  </p>
+</footer>
+
+</div>
