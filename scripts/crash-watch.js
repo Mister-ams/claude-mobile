@@ -97,25 +97,41 @@ function listHerdrSessions() {
   return parsed.sessions;
 }
 
+// A partial line held between polls. herdr writes its log continuously, so a
+// poll lands mid-line often; splitting the bytes as they arrive would cut an
+// abort in half and neither half would match. Bounded, because an unbounded
+// line must not become an unbounded buffer.
+const MAX_CARRY_BYTES = 65536;
+
 // Read only what is NEW since the last tick, so a long log is not rescanned
 // and a rotated (shrunk) log is noticed rather than silently re-read.
-function scanLogTail(file, lastSize) {
+// `carry` is the incomplete tail from the previous read, prepended here.
+function scanLogTail(file, lastSize, carry) {
   let st;
   try { st = fs.statSync(file); }
-  catch (e) { return { size: lastSize, lines: [], state: 'absent' }; }
+  catch (e) { return { size: lastSize, lines: [], carry: carry || '', state: 'absent' }; }
   if (st.size < lastSize) {
     // Truncated or rotated. Re-read from the top: whatever happened, the
-    // bytes we had are gone and pretending otherwise loses events.
+    // bytes we had are gone and pretending otherwise loses events. The carry
+    // belonged to those bytes, so it goes with them.
     lastSize = 0;
+    carry = '';
   }
-  if (st.size === lastSize) return { size: st.size, lines: [], state: 'unchanged' };
+  if (st.size === lastSize) {
+    return { size: st.size, lines: [], carry: carry || '', state: 'unchanged' };
+  }
   const fd = fs.openSync(file, 'r');
   try {
     const len = st.size - lastSize;
     const buf = Buffer.alloc(len);
     fs.readSync(fd, buf, 0, len, lastSize);
-    const lines = buf.toString('utf8').split('\n').filter(Boolean);
-    return { size: st.size, lines, state: 'grew' };
+    const text = (carry || '') + buf.toString('utf8');
+    const parts = text.split('\n');
+    // The last element is whatever followed the final newline: '' if the read
+    // ended cleanly, otherwise the start of a line still being written.
+    let tail = parts.pop();
+    if (tail.length > MAX_CARRY_BYTES) tail = tail.slice(-MAX_CARRY_BYTES);
+    return { size: st.size, lines: parts.filter(Boolean), carry: tail, state: 'grew' };
   } finally {
     fs.closeSync(fd);
   }
@@ -220,9 +236,9 @@ async function tick(state, args) {
     for (const s of sessions) {
       if (s.default) continue;   // the operator's own session, not ours
       const logFile = path.join(s.session_dir, 'herdr-server.log');
-      const prev = state.logs[s.name] || { size: 0 };
-      const scan = scanLogTail(logFile, prev.size);
-      state.logs[s.name] = { size: scan.size };
+      const prev = state.logs[s.name] || { size: 0, carry: '' };
+      const scan = scanLogTail(logFile, prev.size, prev.carry);
+      state.logs[s.name] = { size: scan.size, carry: scan.carry };
       const bad = abortsFrom(scan.lines, rec.t);
       if (bad.length) {
         // Every abort is kept. Beyond the cap the entry keeps its timestamp
@@ -251,6 +267,18 @@ async function tick(state, args) {
       // Reported ONCE: a session that is still gone next tick is not new
       // information, and repeating it would bury the moment it happened.
       if (state.everRunning[s.name] && !s.running) {
+        // A process that aborts mid-write leaves its last line unterminated,
+        // and an unterminated line is never scanned -- it is held as carry
+        // waiting for a newline that is not coming. So when a session goes,
+        // its carry is flushed and judged: that final fragment is exactly
+        // where the reason for the going tends to be.
+        const finalAborts = abortsFrom([prev.carry || ''].filter(Boolean), rec.t);
+        if (finalAborts.length) {
+          crashes.push({
+            session: s.name, count: finalAborts.length, aborts: finalAborts,
+            fromUnterminatedTail: true,
+          });
+        }
         vanished.push(s.name);
         delete state.everRunning[s.name];
       }

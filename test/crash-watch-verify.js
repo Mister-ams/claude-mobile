@@ -107,6 +107,41 @@ check('a rotated (shrunk) log is re-read from the top, not skipped',
 s = scanLogTail(path.join(tmp, 'nope.log'), 0);
 check('an absent log reports absent, not clean', s.state === 'absent');
 
+// ─── a line that arrives in two pieces ───────────────────────────
+console.log('\n=== is a crash line split across two polls still caught? ===');
+const splitLog = path.join(tmp, 'split.log');
+// herdr writes its log continuously, so a poll lands mid-line routinely.
+// Splitting the bytes as they arrive would cut an abort in half and neither
+// half would match -- a miss on the primary detection path, and a silent one.
+fs.writeFileSync(splitLog,
+  '2026-08-17T09:00:00Z  INFO fine\n' +
+  '2026-08-17T09:00:01Z ERROR herdr');
+const p1 = scanLogTail(splitLog, 0, '');
+check('the incomplete line is held back, not judged half-written',
+  crashLines(p1.lines).length === 0 && p1.carry.length > 0,
+  JSON.stringify(p1.carry.slice(0, 34)));
+
+fs.appendFileSync(splitLog, '::server: died mid-write\n');
+const p2 = scanLogTail(splitLog, p1.size, p1.carry);
+check('and once completed it is caught, whole',
+  crashLines(p2.lines).length === 1 &&
+  p2.lines[0] === '2026-08-17T09:00:01Z ERROR herdr::server: died mid-write',
+  JSON.stringify(p2.lines[0] || ''));
+
+// The same two polls WITHOUT the carry lose it entirely. The bug is kept
+// here as a demonstration rather than as a claim that it once existed.
+const naive = scanLogTail(splitLog, p1.size, '');
+check('and without the carry it would have been missed',
+  crashLines(naive.lines).length === 0, JSON.stringify(naive.lines));
+
+// A rotation must drop the carry with the bytes it belonged to, or the next
+// read splices a fragment of the old file onto the head of the new one.
+fs.writeFileSync(splitLog, '2026-08-17T10:00:00Z  INFO fresh start\n');
+const rotated = scanLogTail(splitLog, 9999, 'leftover fragment ');
+check('a rotation drops the carry rather than splicing it onto the new file',
+  rotated.lines.length === 1 && rotated.lines[0].startsWith('2026-08-17T10:00:00Z'),
+  JSON.stringify(rotated.lines[0] || ''));
+
 // ─── the summary refuses to overclaim ────────────────────────────
 console.log('\n=== does the summary refuse to overclaim? ===');
 
