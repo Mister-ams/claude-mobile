@@ -32,6 +32,11 @@ const HERDR_BIN = process.env.HERDR_BIN ||
 // What a herdr abort looks like in its own log. The Linux run on 17 August
 // produced 45 of these in a day; the Windows build has produced none, which
 // is the thing under test. Matched case-insensitively against whole lines.
+// A cap on aborts stored per tick. High enough that it never bites in
+// practice (the Linux run's worst day was 45 in 24h), and when it does the
+// record carries the true count and how many were dropped.
+const MAX_ABORTS_PER_TICK = 200;
+
 const CRASH_PATTERNS = [
   /\bSIGABRT\b/i,
   /\bpanic(ked)?\b/i,
@@ -109,8 +114,59 @@ function scanLogTail(file, lastSize) {
   }
 }
 
+// Watch state outlives the watcher on purpose. A week-long soak spans
+// reboots, and an offset that resets to zero re-reports the whole log as
+// fresh aborts while a lost everRunning set misses the death it existed to
+// catch. Both failures are silent, which is the class this tool is for.
+function statePath(out) { return out + '.state'; }
+
+function loadState(out) {
+  try {
+    const s = JSON.parse(fs.readFileSync(statePath(out), 'utf8'));
+    return {
+      tick: s.tick || 0, lastTickAt: s.lastTickAt || null,
+      logs: s.logs || {}, everRunning: s.everRunning || {},
+      observedMs: 0, gapMs: 0, gaps: 0, crashTicks: 0, verdicts: {},
+      resumed: true,
+    };
+  } catch (e) {
+    return {
+      tick: 0, lastTickAt: null, logs: {}, everRunning: {},
+      observedMs: 0, gapMs: 0, gaps: 0, crashTicks: 0, verdicts: {},
+      resumed: false,
+    };
+  }
+}
+
+function saveState(out, state) {
+  try {
+    fs.writeFileSync(statePath(out), JSON.stringify({
+      tick: state.tick, lastTickAt: state.lastTickAt,
+      logs: state.logs, everRunning: state.everRunning,
+    }));
+  } catch (e) { /* the record itself is the artifact; state is an optimisation */ }
+}
+
 function crashLines(lines) {
   return lines.filter(l => CRASH_PATTERNS.some(p => p.test(l)));
+}
+
+// The objective is "record every abort WITH A TIMESTAMP", so the abort's own
+// stamp is used where the line carries one -- herdr writes ISO-8601 at the
+// head of every line -- and the tick time only stands in when it does not.
+// Which of the two it was is recorded, because a stand-in timestamp is an
+// approximation and a reader should not have to guess that it is.
+const ISO_HEAD = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)/;
+
+function abortsFrom(lines, tickIso) {
+  return crashLines(lines).map((line) => {
+    const m = ISO_HEAD.exec(line);
+    return {
+      at: m ? m[1] : tickIso,
+      atSource: m ? 'log' : 'tick',
+      line: line.length > 400 ? line.slice(0, 400) + '...' : line,
+    };
+  });
 }
 
 async function tick(state, args) {
@@ -159,21 +215,35 @@ async function tick(state, args) {
       const prev = state.logs[s.name] || { size: 0 };
       const scan = scanLogTail(logFile, prev.size);
       state.logs[s.name] = { size: scan.size };
-      const bad = crashLines(scan.lines);
-      if (bad.length) crashes.push({ session: s.name, lines: bad.slice(0, 5) });
+      const bad = abortsFrom(scan.lines, rec.t);
+      if (bad.length) {
+        // Every abort, not a sample. A cap still exists because a pathological
+        // log could otherwise write an unbounded record, but when it bites the
+        // record says so rather than quietly claiming to be complete.
+        const kept = bad.slice(0, MAX_ABORTS_PER_TICK);
+        const entry = { session: s.name, count: bad.length, aborts: kept };
+        if (bad.length > kept.length) entry.truncated = bad.length - kept.length;
+        crashes.push(entry);
+      }
       rec.herdr.sessions[s.name] = {
         running: !!s.running, logBytes: scan.size,
         newLines: scan.lines.length, crashLines: bad.length,
       };
       // A session we have seen running that is no longer running, and that
       // nobody asked us to stop, is the event this watch exists to catch.
+      // Reported ONCE: a session that is still gone next tick is not new
+      // information, and repeating it would bury the moment it happened.
       if (state.everRunning[s.name] && !s.running) {
         vanished.push(s.name);
+        delete state.everRunning[s.name];
       }
       if (s.running) state.everRunning[s.name] = true;
     }
     for (const name of Object.keys(state.everRunning)) {
-      if (!sessions.some(s => s.name === name)) vanished.push(name + ' (record gone)');
+      if (!sessions.some(s => s.name === name)) {
+        vanished.push(name + ' (record gone)');
+        delete state.everRunning[name];
+      }
     }
   }
 
@@ -219,6 +289,16 @@ function summarise(out) {
   }
   const events = recs.filter(r => r.event).length;
   const crashRecs = recs.filter(r => r.verdict === 'crash');
+  // Count ABORTS, not the ticks that carried them: several can land in one
+  // poll, and a tick count would understate the failure it is reporting.
+  let abortCount = 0, truncated = 0, vanishCount = 0;
+  for (const r of crashRecs) {
+    for (const c of r.crashes || []) {
+      abortCount += (c.count !== undefined ? c.count : (c.aborts || []).length);
+      truncated += c.truncated || 0;
+    }
+    vanishCount += (r.vanished || []).length;
+  }
   // A duration printed in the wrong unit reads as zero. Pick the unit from
   // the value so a short window is legible and a week-long one stays compact.
   const dur = (ms) => ms >= 3600000 ? (ms / 3600000).toFixed(1) + 'h'
@@ -234,9 +314,13 @@ function summarise(out) {
   console.log('  COVERAGE   : ' + dur(observedMs) + ' observed of ' + dur(spanMs) +
               ' elapsed  (' + (spanMs ? Math.round(observedMs / spanMs * 100) : 0) + '%)' +
               (gapMs ? '  -- ' + dur(gapMs) + ' UNWATCHED' : ''));
-  console.log('  crashes    : ' + crashRecs.length);
+  console.log('  aborts     : ' + abortCount + ' log abort(s) + ' + vanishCount +
+              ' vanished session(s), across ' + crashRecs.length + ' tick(s)' +
+              (truncated ? '  -- ' + truncated + ' NOT STORED (per-tick cap)' : ''));
   for (const r of crashRecs.slice(-5)) {
-    console.log('    ' + r.t + '  ' + JSON.stringify(r.crashes || r.vanished));
+    const what = (r.crashes || []).map(c =>
+      c.session + ' x' + c.count + ' @ ' + (c.aborts[0] && c.aborts[0].at));
+    console.log('    ' + r.t + '  ' + JSON.stringify(what.length ? what : r.vanished));
   }
   if (counts.unknown) {
     console.log('  NOTE       : ' + counts.unknown +
@@ -258,21 +342,20 @@ async function main() {
   const args = parseArgs(process.argv);
   if (args.summary) return summarise(args.out);
 
-  const state = {
-    tick: 0, lastTickAt: null, observedMs: 0, gapMs: 0, gaps: 0,
-    crashTicks: 0, verdicts: {}, logs: {}, everRunning: {},
-  };
+  const state = loadState(args.out);
 
   // Announce the start in the record itself, so a reader can always tell
   // when observation actually began rather than inferring it.
   fs.appendFileSync(args.out, JSON.stringify({
     t: new Date().toISOString(), event: 'watch-start',
     ports: args.ports, intervalMs: args.intervalMs, pid: process.pid,
+    resumed: state.resumed, fromTick: state.tick,
   }) + '\n');
 
   const run = async () => {
     try {
       const rec = await tick(state, args);
+      saveState(args.out, state);
       if (rec.verdict === 'crash') {
         console.error('[crash-watch] CRASH at ' + rec.t + ' ' +
                       JSON.stringify(rec.crashes || rec.vanished));
@@ -300,4 +383,7 @@ if (require.main === module) {
   main().then(c => { if (typeof c === 'number') process.exit(c); });
 }
 
-module.exports = { CRASH_PATTERNS, crashLines, scanLogTail, summarise };
+module.exports = {
+  CRASH_PATTERNS, crashLines, abortsFrom, scanLogTail, summarise,
+  loadState, saveState, statePath, MAX_ABORTS_PER_TICK,
+};

@@ -11,7 +11,10 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { crashLines, scanLogTail, summarise, CRASH_PATTERNS } = require('../scripts/crash-watch');
+const {
+  crashLines, abortsFrom, scanLogTail, summarise,
+  loadState, saveState, statePath, MAX_ABORTS_PER_TICK,
+} = require('../scripts/crash-watch');
 
 let pass = 0, fail = 0;
 function check(name, cond, detail) {
@@ -53,6 +56,29 @@ check('a mixed log reports only the bad lines',
 // assert it is actually selective.
 check('the patterns are selective, not a catch-all',
   crashLines(['2026-08-29T12:00:00Z  INFO herdr::app: all is well']).length === 0);
+
+// ─── every abort, with its own timestamp ─────────────────────────
+console.log('\n=== does it record EVERY abort, with a timestamp? ===');
+
+const TICK_T = '2026-09-01T12:00:00Z';
+let ab = abortsFrom(bad, TICK_T);
+check('one record per abort line, none dropped', ab.length === bad.length,
+  ab.length + ' of ' + bad.length);
+check('a stamped line keeps its OWN timestamp, not the tick time',
+  ab[0].at === '2026-08-17T09:12:03.1Z' && ab[0].atSource === 'log',
+  ab[0].at + ' (' + ab[0].atSource + ')');
+check('an unstamped line falls back to the tick, and says so',
+  ab[1].atSource === 'tick' && ab[1].at === TICK_T,
+  ab[1].at + ' (' + ab[1].atSource + ')');
+
+// The objective is "record every abort". A sample is not every abort, so a
+// realistic burst must come back whole.
+const burst = [];
+for (let i = 0; i < 50; i++) burst.push('2026-08-17T09:' + String(i).padStart(2, '0') + ':00.0Z ERROR herdr: died');
+check('a 50-abort burst is recorded whole, not sampled',
+  abortsFrom(burst, TICK_T).length === 50, abortsFrom(burst, TICK_T).length + '');
+check('and the per-tick cap is well clear of a realistic burst',
+  MAX_ABORTS_PER_TICK >= 200, 'cap=' + MAX_ABORTS_PER_TICK);
 
 // ─── incremental log reading ─────────────────────────────────────
 console.log('\n=== does it read only what is new? ===');
@@ -129,12 +155,31 @@ check('and it names the unwatched hours',
 // A crash anywhere in the window dominates.
 const withCrash = dense.slice(0, 10).concat([{
   t: iso(t0 + 10 * hour), tick: 11, verdict: 'crash', sinceLastMs: hour,
-  crashes: [{ session: 'cmh-0', lines: ["thread 'main' panicked"] }],
+  crashes: [{ session: 'cmh-0', count: 3, aborts: [
+    { at: iso(t0 + 10 * hour), atSource: 'log', line: "thread 'main' panicked" },
+    { at: iso(t0 + 10 * hour), atSource: 'log', line: 'SIGABRT' },
+    { at: iso(t0 + 10 * hour), atSource: 'log', line: 'fatal' },
+  ] }],
 }]);
 const f3 = path.join(tmp, 'crash.jsonl');
 writeRecs(f3, withCrash);
 text = capture(() => summarise(f3));
 check('a crash in the window dominates the verdict', /CRASHES OBSERVED/.test(text));
+// Counting the ticks that carried aborts would say 1 where the truth is 3.
+check('the summary counts ABORTS, not the ticks that carried them',
+  /3 log abort\(s\)/.test(text), (text.match(/aborts .*/) || [''])[0].trim());
+
+// When the cap does bite, the artifact must not claim to be complete.
+const capped = [{
+  t: iso(t0), tick: 1, verdict: 'crash',
+  crashes: [{ session: 'cmh-0', count: 500, truncated: 300, aborts: [
+    { at: iso(t0), atSource: 'log', line: 'SIGABRT' }] }],
+}];
+const f5 = path.join(tmp, 'capped.jsonl');
+writeRecs(f5, capped);
+text = capture(() => summarise(f5));
+check('a truncated record says how many it could not store',
+  /300 NOT STORED/.test(text), (text.match(/aborts .*/) || [''])[0].trim());
 
 // An unknown tick is not a clean tick.
 const withUnknown = dense.slice(0, 10).concat([
@@ -150,6 +195,33 @@ check('an unknown tick is surfaced, not folded into clean',
 const missing = capture(() => summarise(path.join(tmp, 'does-not-exist.jsonl')));
 check('no data says so, rather than reporting zero crashes',
   /NO WATCH DATA/.test(missing) && /NOT the same as/.test(missing));
+
+// ─── state survives the watcher ──────────────────────────────────
+console.log('\n=== does the watch survive its own restart? ===');
+
+const stOut = path.join(tmp, 'state-test.jsonl');
+let fresh = loadState(stOut);
+check('with no prior state it starts clean, and knows it did',
+  fresh.tick === 0 && fresh.resumed === false);
+
+fresh.tick = 42;
+fresh.lastTickAt = Date.now();
+fresh.logs = { 'cmh-0': { size: 9784 } };
+fresh.everRunning = { 'cmh-0': true };
+saveState(stOut, fresh);
+
+const resumed = loadState(stOut);
+// Without this, a reboot mid-soak re-reads every log from byte 0 and reports
+// the whole history as fresh aborts, while forgetting which sessions were
+// alive -- so a death during the outage is never flagged. Both are silent.
+check('a restart resumes the log offset rather than re-reading from zero',
+  resumed.logs['cmh-0'].size === 9784, JSON.stringify(resumed.logs));
+check('a restart remembers which sessions were running',
+  resumed.everRunning['cmh-0'] === true);
+check('and it reports that it resumed rather than pretending to be fresh',
+  resumed.resumed === true && resumed.tick === 42, 'tick ' + resumed.tick);
+check('the state file sits beside the record, not somewhere else',
+  statePath(stOut) === stOut + '.state');
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
