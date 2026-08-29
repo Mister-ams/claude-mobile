@@ -11,6 +11,7 @@ claude-mobile/                    v3.2.18
 ├── lib/orphan-spawn.js           Spawn something PM2's tree-kill cannot reach
 ├── lib/mouse.js                  Mouse reporting: DEC mode capture + event encoding (T22)
 ├── scripts/update-runner.js      Runs update.sh from outside the server's life
+├── scripts/crash-watch.js        P2 soak watch: crashes AND coverage, so quiet != unwatched
 ├── lib/session-backend/          Session persistence, one module per backend
 │   ├── index.js                  The contract + `sessionBackend` selection (default dtach)
 │   ├── dtach.js                  dtach daemons inside WSL (shipped default)
@@ -151,9 +152,8 @@ python.exe test/herdr-pane-geometry.py --port PORT --totp-secret BASE32
   from the laptop with the process stopped
 - **MSYS bash cannot use an inherited raw fd** for stdout/stderr from a native Windows
   process. `stdio: ['ignore', fd, fd]` makes it exit 1 after ~1.7s having written nothing at
-  all -- no error, an empty log, a bare failure code. Pipe and write the file yourself.
-  Measured: fd -> exit 1 / 0 bytes, pipe -> exit 0 / 2597 bytes
-- `update.sh` restarts `$CM_PM2_NAME` (default `claude-mobile`). It used to hardcode the name
+  all -- no error, an empty log, a bare code. Pipe and write it yourself; measured,
+  fd -> exit 1 / 0 bytes, pipe -> exit 0 / 2597 bytes
   behind a SUBSTRING guard, so an update run from a second instance restarted the LIVE server
 - `sessionPrefix` is what keeps two instances apart. Recovery scans the PREFIX, not the port,
   so a second server sharing a prefix ADOPTS the first one's sessions -- this has happened.
