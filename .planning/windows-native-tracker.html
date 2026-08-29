@@ -95,51 +95,101 @@
 <header class="hero">
   <p class="eyebrow">Live tracker &middot; claude-mobile 4.0.0</p>
   <h1>Windows-native: herdr replaces dtach</h1>
-  <p class="stamp">Last updated 29 August 2026 &middot; <b>P1 + server control shipped</b>
-     &middot; 13 / 23 tasks complete &middot; <b>P2 soak running &mdash; restarted 24 Aug</b></p>
+  <p class="stamp">Last updated 29 August 2026 &middot; <b>resume PROVEN &middot; prune done</b>
+     &middot; 16 / 25 done &middot; <b>#20 and #21 MERGED &mdash; the flip is the only thing left</b></p>
 
   <div class="overall">
-    <div class="bar"><i class="b-done" style="width:57%"></i><i class="b-active" style="width:0%"></i></div>
+    <div class="bar"><i class="b-done" style="width:64%"></i><i class="b-block" style="width:4%"></i></div>
     <div class="legend">
-      <span><i class="dot d-done"></i><b>13</b> done</span>
+      <span><i class="dot d-done"></i><b>16</b> done</span>
       <span><i class="dot d-active"></i><b>0</b> active</span>
-      <span><i class="dot d-todo"></i><b>10</b> to do</span>
-      <span><i class="dot d-block"></i><b>0</b> blocked</span>
+      <span><i class="dot d-todo"></i><b>8</b> to do</span>
+      <span><i class="dot d-block"></i><b>1</b> blocked</span>
     </div>
   </div>
 </header>
 
 <div class="now">
-  <div class="h">Right now &mdash; 29 August</div>
+  <div class="h">Right now &mdash; 29 August, second pass</div>
   <p>
-    <b>P0 and P1 complete. P2 has not formally started</b> &mdash; but four days of
-    <i>incidental</i> soak have accumulated, and the early signal is good:
-    <b>0 crash-shaped lines</b> across both herdr session logs since 25 August, against
-    <b>45 in a single day</b> on Linux. Both sessions survived two restart cycles.
-  </p>
-  <p style="color:var(--warn)">
-    <b>Do not read that as P2 passing.</b> Nothing is watching on purpose: no crash watch is
-    running, the prune was never done, and <code>claude-mobile-ctl</code> plus <code>cmc-0</code>
-    are still up, so any soak is measuring three instances rather than one. Four days of nobody
-    looking is not four days of evidence.
-  </p>
-  <p>
-    <b>3456 moved 3.4.0 -&gt; 3.5.0 on its own, and it was safe by luck rather than design.</b>
-    Not via <code>update.sh</code>: pulling master changed the working tree underneath it, and the
-    8-hour idle auto-shutdown restarted it onto the new code. 3.5.0 changed no dependencies, so the
-    <code>npm ci</code> path never ran. <b>The risky first-update hazard is therefore still
-    unexercised and still live</b> &mdash; laptop only, process stopped, once.
-  </p>
-  <p>
-    All restarts since the 25th are the documented 8-hour idle auto-shutdown, confirmed in the
-    audit log, with <code>unstable_restarts=0</code> throughout. <code>node_modules</code> is
-    intact at 115 packages. Sessions never dropped: all three instances report
+    <b>Two leads closed, and one blocker found that nobody had looked for.</b> The prune is done,
+    both halves, verified: <code>pm2 delete</code> left <code>cmc-0</code> <i>running</i> exactly
+    as predicted, and the explicit <code>session stop</code> + <code>delete</code> is what actually
+    retired it. Two instances remain &mdash; 3456 on dtach, 3457 on herdr, each
     <code>sessions:1</code>.
   </p>
   <p style="color:var(--good)">
-    <b>Next, unchanged:</b> prune to one instance (<b>both halves</b> &mdash;
-    <code>pm2 delete</code> alone strands <code>cmc-0</code>), then chase the ten-minute
-    <code>agent_session</code> UUID lead, then open P2 deliberately with a crash watch running.
+    <b>Resume works. Proven end to end, not inferred.</b> The hook fires after all:
+    <code>agent_session.source</code> is <code>herdr:claude</code>, which is literally the
+    <code>--source</code> value our hook passes, and a session UUID cannot be scraped off a screen.
+    A marker prompt into a pane produced a transcript at that exact UUID within a second, and
+    <code>claude --resume &lt;uuid&gt;</code> in a second pane handed the marker back.
+    <b>P3 needs no resume machinery built.</b> dtach cannot do this at all &mdash; it preserves the
+    process, not the conversation.
+  </p>
+  <p style="color:var(--bad)">
+    <b>The four-day soak signal is void.</b> Not weak &mdash; void. The herdr instance&apos;s last
+    authenticated activity was <b>25 August 16:19</b>, and every auth in its log is from
+    <code>::1</code>, the local harness. The iPad has never touched it. <code>cmh-0</code>&apos;s
+    herdr log is <b>70 lines over six days, all INFO</b>. Zero crash-shaped lines is what an unused
+    process looks like. This tracker called it a good early signal; it was measuring an idle
+    process, which is the house failure mode &mdash; absent data read as a confirmed answer.
+  </p>
+  <p style="color:var(--bad)">
+    <b>And the reason it is unused is structural: you cannot reach it.</b>
+    <code>tailscale serve</code> fronts <b>3456 only</b>. The herdr instance on 3457 binds
+    <code>[::1]</code> and is not on the tailnet at all. Whatever the iPad opens today is dtach.
+    <b>P2.2 as written was never executable</b> &mdash; it asks for a week of real iPad use of a
+    backend the iPad has no route to.
+  </p>
+</div>
+
+<div class="gate">
+  <div class="h">Your path onto it &mdash; two builds, one flip, then the week</div>
+  <p style="margin-bottom:10px">
+    Shorter than it first looked. The instinct was to expose 3457 to the tailnet, which buys a
+    second surface, a second TOTP enrolment and no Face ID (<code>.credentials.json</code> is
+    absent there). <b>Flipping the instance you already use is strictly simpler.</b> 3456 already
+    runs 3.5.0 with the seam, already carries the right <code>tailscaleHostname</code>, already
+    holds your TOTP and passkeys, already fronts the tailnet, and is the only entry in
+    <code>~/.pm2/dump.pm2</code> &mdash; so reboot survival comes free rather than being a fourth
+    task.
+  </p>
+  <ol style="margin:0;padding-left:22px;font-size:14.5px">
+    <li style="margin-bottom:5px"><b style="color:var(--good)">P4.2 &mdash; T22 mouse tracking &mdash; MERGED</b>
+      <span class="who-me">me</span> &nbsp;<b>#20 (f65a491)</b>. Re-verified against merged
+      master: a tap in a real browser moved a herdr pane, 12/12 at iPad-11 landscape.</li>
+    <li style="margin-bottom:5px"><b style="color:var(--good)">P2.1 &mdash; crash watch &mdash; MERGED</b>
+      <span class="who-me">me</span> &nbsp;<b>#21 (5fa0cc5)</b>. Re-verified against merged
+      master: 41 synthetic + 12 live, watched firing on a real session.</li>
+    <li style="margin-bottom:5px"><b>P3.1 &mdash; deploy 3.6.0 to 3456, then flip it</b>
+      <span class="who-you">you</span> &nbsp;<b>The only thing left.</b> 3456 still runs 3.5.0 --
+      pulling master in the live checkout IS the deploy, so it is deliberately not done. Then one
+      line in <code>config.json</code> plus <code>pm2 restart</code>. Rollback is deleting that
+      line and restarting; the dtach session survives in WSL meanwhile.</li>
+    <li><b>P2.2 &mdash; the week</b> <span class="who-you">you</span> &nbsp;Start the watch with
+      it: <code>npm run watch:start</code>, then <code>pm2 save</code>.</li>
+  </ol>
+  <p style="margin:11px 0 0">
+    <b>The plan had P3.1 <i>after</i> P2.2.</b> That ordering cannot work: the flip is what makes
+    the week possible, so it moves ahead of the soak instead of following it. The evidence P3.1
+    was waiting for is the evidence P2.2 produces.
+  </p>
+</div>
+
+<div class="callout">
+  <p class="h">Two things to accept before you start, rather than discover on day three</p>
+  <p>
+    <b>No scrollback above the viewport.</b> herdr panes are alt-screen, so the grid snapshot
+    carries the viewport and nothing above it. Scrolling back on the iPad gets you nothing. This is
+    structural to herdr rather than something we left unfinished, and it is a real regression
+    against dtach.
+  </p>
+  <p>
+    <b>Every restart signs you out.</b> Tokens live in an in-memory <code>Map</code>
+    (<code>server.js:377</code>), and the 8-hour idle auto-shutdown means a TOTP re-auth roughly
+    daily. Whether to persist tokens across restarts is a security-posture decision, not an
+    oversight.
   </p>
 </div>
 
@@ -176,7 +226,7 @@
         <span><code>herdr agent list</code> non-empty, status not <code>unknown</code></span></td>
       <td class="who"><span class="who-me">me</span></td>
       <td class="st"><span class="chip c-done">done</span></td>
-      <td class="ev"><b>DETECTED in 6s</b> &mdash; agent=claude, status=blocked, pane w1:p1. <em>Via screen manifest, not the hook; status accuracy unverified.</em></td>
+      <td class="ev"><b>DETECTED in 6s</b> &mdash; agent=claude, status=blocked, pane w1:p1. <b style="color:var(--bad)">CORRECTED 29 Aug:</b> the hook <b>does</b> fire. <code>source=herdr:claude</code> is the hook&apos;s own <code>--source</code> value, and a UUID cannot be scraped off a screen. Status accuracy still unverified.</td>
     </tr>
     <tr style="background:#fdf8f0">
       <td class="tid">P0.4</td>
@@ -221,7 +271,7 @@
   <div class="phase-h">
     <span class="pid">P1</span><h3>dtach stays the default throughout</h3>
     <span class="minibar"><i style="width:100%"></i></span>
-    <span class="prog">4 / 4</span>
+    <span class="prog">5 / 5</span>
   </div>
   <div class="tbl-scroll">
   <table>
@@ -259,6 +309,14 @@
       <td class="st"><span class="chip c-done">done</span></td>
       <td class="ev"><b>OBSERVED, and it failed first.</b> PM2 tree-kill took herdr&apos;s server (it spawns as our child; <code>detached:true</code> does NOT fix this on Windows). Fixed via orphaning. Evidence: identical <code>terminal_id</code> across restart. Automated, and asserts id+name+dir, not a count.</td>
     </tr>
+    <tr>
+      <td class="tid">P1.5</td>
+      <td class="task"><b>Session identity and resume</b>
+        <span>Does the reported <code>agent_session</code> UUID redeem, or is it decoration?</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev"><b>PROVEN, end to end.</b> Marker prompt &rarr; transcript appeared at the reported UUID in under a second &rarr; <code>claude --resume &lt;uuid&gt;</code> in a fresh pane returned the marker. Chain: hook fires &rarr; real session id reaches herdr &rarr; that id redeems. <b>P3 needs no resume work.</b> dtach cannot do this &mdash; it keeps the process, not the conversation.</td>
+    </tr>
   </table>
   </div>
 </div>
@@ -268,27 +326,35 @@
 <div class="phase">
   <div class="phase-h">
     <span class="pid">P2</span><h3>The week that decides it</h3>
-    <span class="minibar"><i style="width:0%"></i></span>
-    <span class="prog">0 / 2</span>
+    <span class="minibar"><i style="width:33%"></i></span>
+    <span class="prog">1 / 3</span>
   </div>
   <div class="tbl-scroll">
   <table>
     <tr><th>ID</th><th>Task</th><th>Who</th><th>Status</th><th>Evidence</th></tr>
     <tr>
+      <td class="tid">P2.0</td>
+      <td class="task"><b>Prune to one soak instance</b>
+        <span>Both halves &mdash; <code>pm2 delete</code> alone strands the herdr session</span></td>
+      <td class="who"><span class="who-me">me</span></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev"><b>Done and verified 29 Aug.</b> The warning held: after <code>pm2 delete claude-mobile-ctl</code>, <code>cmc-0</code> was still <code>running</code>; <code>session stop</code> + <code>delete</code> retired it. Left standing: 3456 dtach, 3457 herdr, port 3459 dead. <em>Still disposable: the <code>cm-wt-ctl</code> worktree, which holds a live <code>.totp-secret</code> and <code>.server-identity-key</code>.</em></td>
+    </tr>
+    <tr>
       <td class="tid">P2.1</td>
       <td class="task"><b>Automated crash watch</b>
         <span>Poll herdr log + process state, record every abort with a timestamp</span></td>
       <td class="who"><span class="who-me">me</span></td>
-      <td class="st"><span class="chip c-todo">to do</span></td>
-      <td class="ev"><b>Not running.</b> No crash watch exists yet. Incidental: <b>0 crash-shaped lines</b> in both session logs since 25 Aug (Linux baseline was 45 in one day).</td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev"><b>MERGED &mdash; #21 (5fa0cc5), three judge rounds, re-verified against master.</b> Reports <b>COVERAGE</b> before the crash count, so a quiet week and an unwatched week can never produce the same artifact; a poorly-observed window REFUSES to read as clean. Watched firing against a real herdr session: <code>ok,ok,ok,crash,ok,ok,vanished,ok,ok</code>. A deliberate stop is filed as <code>vanished</code>, not <code>crash</code> &mdash; condemning a soak because the operator restarted something would be worse than saying plainly what was seen.</td>
     </tr>
     <tr>
       <td class="tid">P2.2</td>
       <td class="task"><b>A week of real use from the iPad</b>
         <span>Does it stay up, is agent status useful, is the cursor acceptable</span></td>
       <td class="who"><span class="who-you">you</span></td>
-      <td class="st"><span class="chip c-todo">to do</span></td>
-      <td class="ev"><b>Not started.</b> Blocked on the prune -- three instances are up, so a soak would measure the wrong thing.</td>
+      <td class="st"><span class="chip c-block">blocked</span></td>
+      <td class="ev"><b>Not executable as written.</b> <code>tailscale serve</code> fronts 3456 only; 3457 binds <code>[::1]</code> and has no route to the iPad. P4.2 and P2.1 are MERGED; <b>the only remaining gate is P3.1 &mdash; deploy 3.6.0 to 3456 and flip it &mdash; which is yours.</b></td>
     </tr>
   </table>
   </div>
@@ -315,11 +381,11 @@
     <tr><th>ID</th><th>Task</th><th>Who</th><th>Status</th><th>Evidence</th></tr>
     <tr>
       <td class="tid">P3.1</td>
-      <td class="task"><b>Flip the default to herdr</b>
-        <span>dtach stays selectable for a fortnight as rollback</span></td>
+      <td class="task"><b>Flip 3456 to herdr</b>
+        <span>dtach stays selectable as rollback &mdash; <b>moved ahead of P2.2</b>, it is what makes the week possible</span></td>
       <td class="who"><span class="who-you">you</span></td>
       <td class="st"><span class="chip c-todo">to do</span></td>
-      <td class="ev"><em>explicit sign-off</em></td>
+      <td class="ev"><b>Mechanically trivial, and that is the point.</b> One line in 3456&apos;s <code>config.json</code> (<code>sessionBackend</code> set to <code>herdr</code>) plus <code>pm2 restart</code>. Verified 29 Aug that 3456 runs 3.5.0 with the seam, carries the right <code>tailscaleHostname</code>, and is the sole <code>dump.pm2</code> entry &mdash; so reboot survival comes free. <em>Needs your go: it puts your daily driver on the unproven backend.</em></td>
     </tr>
     <tr>
       <td class="tid">P3.2</td>
@@ -370,8 +436,8 @@
 <div class="phase">
   <div class="phase-h">
     <span class="pid">P4</span><h3>Independent of how the above lands</h3>
-    <span class="minibar"><i style="width:60%"></i></span>
-    <span class="prog">3 / 5</span>
+    <span class="minibar"><i style="width:40%"></i></span>
+    <span class="prog">2 / 5</span>
   </div>
   <div class="tbl-scroll">
   <table>
@@ -389,8 +455,8 @@
       <td class="task"><b>T22 mouse tracking</b>
         <span>herdr is mouse-first; every click is currently inert in our client</span></td>
       <td class="who"><span class="who-me">me</span></td>
-      <td class="st"><span class="chip c-todo">to do</span></td>
-      <td class="ev"><em>likely why herdr felt bad on the iPad</em></td>
+      <td class="st"><span class="chip c-done">done</span></td>
+      <td class="ev"><b>MERGED &mdash; #20 (f65a491), re-verified against master.</b> herdr asks for <code>CSI ?1003;1006h</code> (measured, and it sends them COMBINED &mdash; a handler reading one parameter captures the encoding as default and spells SGR in byte form). Verified where it counts: a tap in a real browser at iPad-11 landscape moved a herdr pane, 12/12. That found a real bug the pty-level test could not &mdash; <code>touch-action</code> landed on <code>.grid-term</code> while the rule named <code>.term-wrap</code>.</td>
     </tr>
     <tr>
       <td class="tid">P4.3</td>
@@ -426,6 +492,31 @@
   </div>
 </div>
 
+<div class="callout bad">
+  <p class="h">Incident, 29 August &mdash; a junction turned a cleanup into a deletion</p>
+  <p>
+    Tearing down the build worktrees, <code>Remove-Item -Recurse -Force</code> <b>followed a
+    <code>node_modules</code> junction</b> into the live checkout and deleted through it. 115
+    entries went to 48 and <code>node-pty</code> stopped loading &mdash; while
+    <code>/health</code> on both instances kept answering <code>ok</code> with live sessions,
+    because a running process holds its modules in memory.
+  </p>
+  <p>
+    <b>This is the same signature as the 24 August <code>npm ci</code> incident</b>, from a
+    different direction: invisible in operation, and it would have surfaced only when the 8-hour
+    idle shutdown next restarted 3456 &mdash; overnight, with nobody watching. Repaired by the
+    documented procedure (stop, <code>npm ci</code>, verify <code>node-pty</code> loads, start);
+    3456 came back with <code>Recovered: "LOOMI OS" (cm-0)</code>, the same session. 3457 was
+    never affected &mdash; it has its own <code>node_modules</code>.
+  </p>
+  <p>
+    The lesson is narrow and worth keeping: <b>a junction is not a copy, and a recursive delete
+    does not know that.</b> Unlink it first &mdash; <code>rmdir</code>, or
+    <code>Directory.Delete(path, false)</code> &mdash; and only then remove the directory.
+    Better still, do not junction into a live tree at all; give the throwaway its own install.
+  </p>
+</div>
+
 <h2>Standing risks</h2>
 
 <div class="callout bad">
@@ -434,6 +525,11 @@
     45 crash-shaped lines and repeated SIGABRT on Linux, 17 August. Windows is a different build so
     the number transfers nothing either way. <b>Only P2 answers this</b>, and it takes a week.
     We are replacing the one component in this system that has never failed.
+  </p>
+  <p>
+    <b>The six days since 23 August bought nothing against this risk.</b> The herdr instance sat
+    idle and unreachable, so its clean log is evidence of disuse, not of stability. The clock on
+    the week has not started.
   </p>
 </div>
 
@@ -458,8 +554,10 @@
   <p class="h">Reversibility, at a glance</p>
   <p>
     P0 undoes by deleting a folder. P1 ships with the flag defaulting to dtach, so nothing changes
-    until P3.1 flips it. P3.1 undoes by flipping it back. <b>P3.2 and P3.3 are the real point of no
-    easy return</b> &mdash; deliberately placed after a week of evidence.
+    until P3.1 flips it. <b>P3.1 undoes by deleting one line from 3456&apos;s <code>config.json</code>
+    and restarting</b> &mdash; and the dtach session survives in WSL throughout, so flipping back
+    restores the running session rather than starting a fresh one. <b>P3.2 and P3.3 are the real
+    point of no easy return</b> &mdash; deliberately placed after a week of evidence.
   </p>
 </div>
 
