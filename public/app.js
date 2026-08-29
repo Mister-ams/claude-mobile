@@ -730,6 +730,12 @@ function handle(m) {
     case 'frame':
       if (gridTerms[m.session]) queueGridFrame(gridTerms[m.session], m);
       break;
+    case 'mouse-mode':
+      if (gridTerms[m.session] && m.mouse) {
+        gridTerms[m.session].mouse = m.mouse;
+        applyGridMouseMode(gridTerms[m.session]);
+      }
+      break;
     case 'scrollback':
       if (terms[m.session] && m.data) {
         const term = terms[m.session];
@@ -1007,6 +1013,9 @@ function makeGridTerm() {
     charWidth: 0,
     cols: 0, rows: 0,
     cursor: { row: 0, col: 0, visible: true },
+    // T22: what the application has asked to hear, as told by the server.
+    // Starts at none so a pane reports nothing until it says otherwise.
+    mouse: { tracking: 'none', encoding: 'default' },
     scrollScheduled: false,
     // T30 substitute: rAF-coalesced frame queue. Multiple frames arriving
     // within one paint window merge to a single applyGridFrame call.
@@ -1044,6 +1053,8 @@ function makeGridTerm() {
     grid.resizeObserver = ro;
   }
 
+  attachGridMouse(grid);
+
   return grid;
 }
 
@@ -1077,6 +1088,148 @@ function ensureRowHeight(grid) {
   grid.wrap.removeChild(probe);
   grid.rowHeight = h;
   return h;
+}
+
+// ─── T22: mouse reporting ────────────────────────────────────────
+//
+// herdr asks for any-event tracking with SGR encoding the moment it starts,
+// so until now every tap inside a pane went nowhere -- the recorded reason
+// herdr felt bad on the iPad. Events are forwarded ONLY while the app has
+// actually asked for them; otherwise the pane keeps its ordinary scrolling
+// and text selection, which is what a shell session wants.
+//
+// The server decides how to spell an event. The client's job is to say where
+// it happened, in cells, and to not say it too often.
+
+const GRID_MOUSE_BUTTONS = ['left', 'middle', 'right'];
+
+// A pointer position as a 1-based pty cell, or null if it is not over an
+// addressable one.
+//
+// Resolved from geometry rather than from the element under the pointer.
+// setPointerCapture retargets every subsequent event to the wrap, so
+// `e.target.closest('.grid-row')` is null for the whole of a drag -- which is
+// exactly the gesture herdr uses to resize a split, so the element-based
+// version dropped the events that matter most. The row stack is a flat run of
+// equal-height rows and `.grid-term` carries no padding, so index * rowHeight
+// is the same model the renderer's own scroll anchoring already uses.
+//
+// Scrollback rows carry a negative server row and are deliberately excluded:
+// the application owns the viewport only, and telling it about a click on a
+// row it has already forgotten would name the wrong cell rather than none.
+function gridCellFromEvent(grid, e) {
+  const charW = measureCharWidth(grid);
+  const rowH = ensureRowHeight(grid);
+  if (!charW || !rowH || !grid.allRows.length) return null;
+  const r = grid.wrap.getBoundingClientRect();
+  const idx = Math.floor((e.clientY - r.top + grid.wrap.scrollTop) / rowH);
+  if (idx < 0 || idx >= grid.allRows.length) return null;
+  const serverRow = grid.allRows[idx].row;
+  if (serverRow < 0) return null;
+  let col = Math.floor((e.clientX - r.left + grid.wrap.scrollLeft) / charW) + 1;
+  if (col < 1) col = 1;
+  if (grid.cols && col > grid.cols) col = grid.cols;
+  return { col, row: serverRow + 1 };
+}
+
+function gridMouseWants(grid) {
+  return !!(grid.mouse && grid.mouse.tracking && grid.mouse.tracking !== 'none');
+}
+
+// touch-action must be surrendered before the gesture starts, not during it:
+// once Safari has claimed a touch for scrolling, preventDefault on a later
+// move cannot take it back.
+function applyGridMouseMode(grid) {
+  if (!grid.wrap) return;
+  grid.wrap.classList.toggle('mouse-active', gridMouseWants(grid));
+}
+
+function attachGridMouse(grid) {
+  const wrap = grid.wrap;
+  let heldButton = null;
+  let lastCell = null;
+  let pendingMove = null;
+  let moveRaf = 0;
+
+  function emit(action, e, cell, extra) {
+    const msg = {
+      type: 'mouse', action,
+      button: action === 'wheel' ? null
+        : (heldButton !== null ? heldButton : (GRID_MOUSE_BUTTONS[e.button] || 'left')),
+      col: cell.col, row: cell.row,
+      shift: !!e.shiftKey, alt: !!e.altKey, ctrl: !!e.ctrlKey,
+    };
+    if (extra) Object.assign(msg, extra);
+    queueSend(msg);
+  }
+
+  wrap.addEventListener('pointerdown', (e) => {
+    if (!gridMouseWants(grid)) return;
+    const cell = gridCellFromEvent(grid, e);
+    if (!cell) return;
+    e.preventDefault();
+    heldButton = GRID_MOUSE_BUTTONS[e.button] || 'left';
+    lastCell = cell;
+    emit('down', e, cell);
+    // Capture keeps a drag that leaves the element reporting to us rather
+    // than stopping dead at the edge, which is what a pane resize needs.
+    try { wrap.setPointerCapture(e.pointerId); } catch (err) { /* not fatal */ }
+  }, { passive: false });
+
+  wrap.addEventListener('pointermove', (e) => {
+    if (!gridMouseWants(grid)) return;
+    // Which motion the app wants is decided by the mode it asked for. Asking
+    // the server per pixel would be a round trip per pixel.
+    const t = grid.mouse.tracking;
+    if (t === 'x10' || t === 'vt200') return;
+    if (t === 'drag' && heldButton === null) return;
+    pendingMove = e;
+    if (moveRaf) return;
+    // Any-event tracking fires on every pixel of a drag. One message per
+    // frame, and only when the CELL changed, is all the application can
+    // distinguish -- and the difference matters over a VPN.
+    moveRaf = requestAnimationFrame(() => {
+      moveRaf = 0;
+      const ev = pendingMove;
+      pendingMove = null;
+      if (!ev || !gridMouseWants(grid)) return;
+      const cell = gridCellFromEvent(grid, ev);
+      if (!cell) return;
+      if (lastCell && cell.col === lastCell.col && cell.row === lastCell.row) return;
+      lastCell = cell;
+      emit('move', ev, cell);
+    });
+  }, { passive: true });
+
+  function endPointer(e, send) {
+    if (moveRaf) { cancelAnimationFrame(moveRaf); moveRaf = 0; pendingMove = null; }
+    if (send && gridMouseWants(grid)) {
+      const cell = gridCellFromEvent(grid, e) || lastCell;
+      if (cell) { e.preventDefault(); emit('up', e, cell); }
+    }
+    heldButton = null;
+    lastCell = null;
+    try { wrap.releasePointerCapture(e.pointerId); } catch (err) { /* already gone */ }
+  }
+
+  wrap.addEventListener('pointerup', (e) => endPointer(e, true), { passive: false });
+  // A cancelled pointer (a system gesture, a call arriving) never produces a
+  // pointerup. Releasing the button locally without reporting one would leave
+  // the app holding a drag forever, so the release is sent here too.
+  wrap.addEventListener('pointercancel', (e) => endPointer(e, true), { passive: false });
+
+  wrap.addEventListener('wheel', (e) => {
+    if (!gridMouseWants(grid)) return;
+    const cell = gridCellFromEvent(grid, e);
+    if (!cell) return;
+    e.preventDefault();
+    emit('wheel', e, cell, { delta: e.deltaY < 0 ? -1 : 1 });
+  }, { passive: false });
+
+  // The context menu on a long press would otherwise interrupt a right-drag.
+  wrap.addEventListener('contextmenu', (e) => {
+    if (gridMouseWants(grid)) e.preventDefault();
+  });
 }
 
 function unmountAllGridRows(grid) {
@@ -1182,6 +1335,9 @@ function applyGridSnapshot(grid, snap) {
   grid.cols = snap.cols;
   grid.rows = snap.rows;
   grid.cursor = snap.cursor;
+  // T22: a snapshot is the full truth about the pane, mouse mode included --
+  // it is how a client that connects mid-session learns the app is listening.
+  if (snap.mouse) { grid.mouse = snap.mouse; applyGridMouseMode(grid); }
   grid.charWidth = 0;  // cols may have changed; remeasure on next cursor update
   grid.rowHeight = 0;  // remeasure too -- font may differ post-resize
   // Snapshots fully reset state; any frames still queued from before this
