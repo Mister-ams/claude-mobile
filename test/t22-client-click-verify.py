@@ -195,6 +195,32 @@ def main():
             print("\nmouse never became active; nothing further can be tested")
             return 1
 
+        # A captured drag is the gesture herdr uses to resize a split, and it
+        # is where the element-based mapping failed: setPointerCapture
+        # retargets every subsequent event to the wrap, so e.target is no
+        # longer a .grid-row and closest() returns null for the whole drag.
+        # This asserts the shipped mapping resolves that case AND that the
+        # element-based one does not -- the failure is demonstrated in place
+        # rather than asserted to have happened once.
+        drag = page.evaluate("""() => {
+          const g = gridTerms[activeSession];
+          const r = g.wrap.getBoundingClientRect();
+          // Exactly what the browser delivers mid-drag under pointer capture.
+          const midDrag = { target: g.wrap, clientX: r.left + 40, clientY: r.top + 40 };
+          const now = gridCellFromEvent(g, midDrag);
+          // The element-based predecessor, for contrast.
+          const beforeFix = (() => {
+            const el = midDrag.target.closest ? midDrag.target.closest('.grid-row') : null;
+            return el ? 'resolved' : null;
+          })();
+          return { now, beforeFix };
+        }""")
+        check("a captured drag resolves a cell", bool(drag["now"]),
+              json.dumps(drag["now"]))
+        check("and the element-based mapping could not have",
+              drag["beforeFix"] is None,
+              "closest('.grid-row') -> %s" % drag["beforeFix"])
+
         # Split behind the client's back, so the pane it renders genuinely
         # has two halves to aim between.
         herdr.cli("pane", "split", "w1:p1", "--direction", "right")

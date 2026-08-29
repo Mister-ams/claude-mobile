@@ -29,7 +29,8 @@ claude-mobile/                    v3.2.18
 │   └── apple-touch-icon.png      PWA icon
 ├── test/live-session-verify.py   E2E against a RUNNING server: real auth, real session, 4 viewports
 ├── test/herdr-pane-geometry.py   herdr-only: does a resize reach the PANE, not just our mirror
-├── test/t22-mouse-verify.js      Mouse encoding + a real click moving herdr's focus
+├── test/t22-mouse-verify.js      Mouse encoding + DEC capture; a pty click moves herdr focus
+├── test/t22-client-click-verify.py  A tap in a real BROWSER moves the pane -- the iPad half
 ├── test/server-control-verify.py Drives the Restart/Update buttons against a live server
 ├── package.json                  Deps: express, ws, node-pty, @simplewebauthn/server, otpauth, qrcode
 └── .gitignore                    node_modules/, config.json, .totp-secret, .credentials.json, .server-identity-key
@@ -142,10 +143,9 @@ python.exe test/herdr-pane-geometry.py --port PORT --totp-secret BASE32
   Anything polling across a restart must ask liveness UNAUTHENTICATED, or it reports "the
   server never came back" about a server that came back fine
 - **npm ci while the server runs half-deletes node_modules, and it looks like success.** npm
-  wipes alphabetically and the live server holds node-pty's native binary open, so the wipe
-  dies partway. Observed 24 Aug 2026: 115 entries down to 3, `require('node-pty')` threw, and
-  /health still answered 200 with a live session. `update.sh` stops PM2 before installing,
-  verifies node-pty loads, and re-installs if it does not; it skips the install entirely if it
+  wipes alphabetically and the live server holds node-pty's native binary open, so it dies
+  partway. Observed 24 Aug 2026: 115 entries to 3, node-pty threw, and /health still said 200.
+  `update.sh` stops PM2 first, verifies node-pty loads, re-installs if not, and skips if it
   cannot stop the process, and a trap restores the process on every exit path. An instance on a
   pre-fix `update.sh` is exposed once more -- the OLD script runs that update -- so do that one
   from the laptop with the process stopped

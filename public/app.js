@@ -955,12 +955,9 @@ function safeHref(raw) {
   } catch (e) { return null; }
 }
 
-function renderRow(runs, serverRow) {
+function renderRow(runs) {
   const div = document.createElement('div');
   div.className = 'grid-row';
-  // T22: the pointer-to-cell mapping reads this back off the element under
-  // the pointer. Stamped here so both mount sites get it by construction.
-  if (serverRow !== undefined) div.dataset.row = serverRow;
   for (const run of runs) {
     // T21: cells inside an OSC 8 link become anchors instead of spans.
     let el;
@@ -1107,19 +1104,29 @@ function ensureRowHeight(grid) {
 const GRID_MOUSE_BUTTONS = ['left', 'middle', 'right'];
 
 // A pointer position as a 1-based pty cell, or null if it is not over an
-// addressable one. Scrollback rows carry a negative server row and are
-// deliberately excluded: the application owns the viewport only, and telling
-// it about a click on a row it has already forgotten would name the wrong
-// cell rather than none.
+// addressable one.
+//
+// Resolved from geometry rather than from the element under the pointer.
+// setPointerCapture retargets every subsequent event to the wrap, so
+// `e.target.closest('.grid-row')` is null for the whole of a drag -- which is
+// exactly the gesture herdr uses to resize a split, so the element-based
+// version dropped the events that matter most. The row stack is a flat run of
+// equal-height rows and `.grid-term` carries no padding, so index * rowHeight
+// is the same model the renderer's own scroll anchoring already uses.
+//
+// Scrollback rows carry a negative server row and are deliberately excluded:
+// the application owns the viewport only, and telling it about a click on a
+// row it has already forgotten would name the wrong cell rather than none.
 function gridCellFromEvent(grid, e) {
-  const rowEl = e.target && e.target.closest ? e.target.closest('.grid-row') : null;
-  if (!rowEl || rowEl.dataset.row === undefined) return null;
-  const serverRow = parseInt(rowEl.dataset.row, 10);
-  if (!Number.isInteger(serverRow) || serverRow < 0) return null;
   const charW = measureCharWidth(grid);
-  if (!charW) return null;
-  const r = rowEl.getBoundingClientRect();
-  let col = Math.floor((e.clientX - r.left) / charW) + 1;
+  const rowH = ensureRowHeight(grid);
+  if (!charW || !rowH || !grid.allRows.length) return null;
+  const r = grid.wrap.getBoundingClientRect();
+  const idx = Math.floor((e.clientY - r.top + grid.wrap.scrollTop) / rowH);
+  if (idx < 0 || idx >= grid.allRows.length) return null;
+  const serverRow = grid.allRows[idx].row;
+  if (serverRow < 0) return null;
+  let col = Math.floor((e.clientX - r.left + grid.wrap.scrollLeft) / charW) + 1;
   if (col < 1) col = 1;
   if (grid.cols && col > grid.cols) col = grid.cols;
   return { col, row: serverRow + 1 };
@@ -1264,7 +1271,7 @@ function renderGridWindow(grid) {
   const fragment = document.createDocumentFragment();
   for (let i = mountStart; i < mountEnd; i++) {
     const rc = grid.allRows[i];
-    const el = renderRow(rc.runs, rc.row);
+    const el = renderRow(rc.runs);
     fragment.appendChild(el);
     grid.mountedEls.push(el);
     grid.rowEls.set(rc.row, el);
@@ -1375,7 +1382,7 @@ function applyGridFrame(grid, frame) {
     if (idx === undefined) continue;
     grid.allRows[idx] = rc;
     if (idx >= grid.mountedStart && idx < grid.mountedStart + grid.mountedCount) {
-      const newEl = renderRow(rc.runs, rc.row);
+      const newEl = renderRow(rc.runs);
       const existing = grid.rowEls.get(rc.row);
       if (existing) {
         existing.replaceWith(newEl);
