@@ -9,6 +9,7 @@ claude-mobile/                    v3.2.18
 ├── server.js                     Node.js: Express + WebSocket + node-pty + session backend + E2E crypto
 ├── lib/server-control.js         Restart + update this process, from the client
 ├── lib/orphan-spawn.js           Spawn something PM2's tree-kill cannot reach
+├── lib/mouse.js                  Mouse reporting: DEC mode capture + event encoding (T22)
 ├── scripts/update-runner.js      Runs update.sh from outside the server's life
 ├── lib/session-backend/          Session persistence, one module per backend
 │   ├── index.js                  The contract + `sessionBackend` selection (default dtach)
@@ -28,6 +29,7 @@ claude-mobile/                    v3.2.18
 │   └── apple-touch-icon.png      PWA icon
 ├── test/live-session-verify.py   E2E against a RUNNING server: real auth, real session, 4 viewports
 ├── test/herdr-pane-geometry.py   herdr-only: does a resize reach the PANE, not just our mirror
+├── test/t22-mouse-verify.js      Mouse encoding + a real click moving herdr's focus
 ├── test/server-control-verify.py Drives the Restart/Update buttons against a live server
 ├── package.json                  Deps: express, ws, node-pty, @simplewebauthn/server, otpauth, qrcode
 └── .gitignore                    node_modules/, config.json, .totp-secret, .credentials.json, .server-identity-key
@@ -51,6 +53,7 @@ claude-mobile/                    v3.2.18
   so a stop is a one-way door and a start could never work. Both are auth-gated exactly like
   every other write route, and confirm with a two-step tap rather than `confirm()`
 - Attention detection (5s debounce) triggers Web Notifications + vibration on permission prompts, questions, idle prompt
+- Mouse events forward only while the app asks for them: the server reads tracking off the headless mirror and encoding off the DEC modes (herdr sends `CSI ?1003;1006h`), pushes each transition to the client, and encodes every event itself
 - GPU-accelerated rendering: WebGL -> Canvas -> DOM fallback chain (v3.0.2)
 - Slash command discovery: scans skills/ + commands/ directories (v3.0.1)
 
@@ -119,14 +122,11 @@ paint, restarts the process, and requires the SAME session back: id, name and di
 not a count. It also rotates each iPad viewport and requires the server's dimensions to
 catch up with the client's (`--no-rotate` skips it).
 
-`test/ipad-emulator.py` cannot do any of that: it drives a static server with synthetic
-frames and never reaches a backend. Use it for pure-client regressions, this for anything
-below them.
+`test/ipad-emulator.py` cannot do any of that -- it drives a static server with synthetic
+frames and never reaches a backend. Use it for pure-client regressions only.
 
-Rotation converging proves the client and the server agree. It does NOT prove the backend's
-pane followed -- the server resizes its own mirror when asked, either way, so a backend that
-ignored resize entirely would still converge. For herdr, confirm the far end separately,
-through herdr's own API:
+Rotation converging proves client and server agree, NOT that the backend's pane followed --
+the server resizes its own mirror either way. Confirm herdr's far end through its own API:
 
 ```bash
 python.exe test/herdr-pane-geometry.py --port PORT --totp-secret BASE32
@@ -137,10 +137,10 @@ python.exe test/herdr-pane-geometry.py --port PORT --totp-secret BASE32
 - No JS should change `appEl.style.height` or call `scrollToBottom` on resize events
 - `doResize()` must check `proposeDimensions()` before `fit()` -- skip if cols/rows unchanged
 - WSL Ubuntu-24.04 must be running for dtach sessions to work
-- **A restart signs every client out.** Claude sessions survive -- that is the backend's whole
-  job -- but session TOKENS live in an in-memory Map. The Restart button says so before the tap.
-  Anything polling across a restart must ask liveness UNAUTHENTICATED, or it reports "the server
-  never came back" about a server that came back fine
+- **A restart signs every client out.** Claude sessions survive -- the backend's whole job --
+  but session TOKENS live in an in-memory Map, and the Restart button says so before the tap.
+  Anything polling across a restart must ask liveness UNAUTHENTICATED, or it reports "the
+  server never came back" about a server that came back fine
 - **npm ci while the server runs half-deletes node_modules, and it looks like success.** npm
   wipes alphabetically and the live server holds node-pty's native binary open, so the wipe
   dies partway. Observed 24 Aug 2026: 115 entries down to 3, `require('node-pty')` threw, and

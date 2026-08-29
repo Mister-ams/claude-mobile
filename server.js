@@ -109,6 +109,11 @@ function setLastError(message) {
 // to capture here; AUDIT_PATH is already initialised above, which is the trap
 // the audit-log comment warns about.
 const backend = createSessionBackend({ config, audit, getSafeEnv, pty, setLastError });
+// T22: mouse reporting. Encoding lives in lib/ so it can be exercised without
+// booting a server -- test/t22-mouse-verify.js.
+const {
+  MOUSE_BUTTONS, MOUSE_ACTIONS, mouseState, encodeMouse, trackMouseModes,
+} = require('./lib/mouse');
 
 // Lifecycle control for this process: restart, and update-then-restart.
 const serverControl = createServerControl({ config, audit, installDir: __dirname });
@@ -1148,6 +1153,10 @@ function ensureHeadlessTerminal(session) {
       }
       return false;  // let xterm continue normal handling
     });
+    // T22: mouse mode capture. The registration lives in lib/mouse.js so
+    // test/t22-mouse-verify.js exercises the real handler rather than a
+    // reimplementation of it.
+    trackMouseModes(session);
   } catch (e) {
     audit('WARN', `headless init failed for cm-${session.id}: ${e.message}`);
   }
@@ -1251,7 +1260,7 @@ function buildSnapshot(session) {
     viewport, scrollback,
     cursor: { row: buf.cursorY, col: buf.cursorX, visible: true },
     altScreen: buf.type === 'alternate',
-    mouseTracking: false,  // populated by T22
+    mouse: mouseState(session),  // T22: { tracking, encoding }
     seq: ++session.frameSeq,
   };
 }
@@ -1341,6 +1350,26 @@ function wireSessionProc(session) {
       try { session.headless.write(data); }
       catch (e) { audit('WARN', `headless write cm-${id}: ${e.message}`); }
     }
+    // T22: the app turns mouse reporting on and off at will -- herdr does it
+    // on startup, and any full-screen app does it on entry and exit. The
+    // client must never send mouse bytes to something that is not listening,
+    // so every transition is pushed the moment the mirror observes it rather
+    // than polled or inferred client-side.
+    if (session.headless) {
+      const nowMouse = mouseState(session);
+      const prevMouse = session.lastMouse;
+      if (!prevMouse || prevMouse.tracking !== nowMouse.tracking ||
+          prevMouse.encoding !== nowMouse.encoding) {
+        session.lastMouse = nowMouse;
+        audit('MOUSE', `cm-${id} tracking=${nowMouse.tracking} encoding=${nowMouse.encoding}`);
+        for (const mws of session.clients) {
+          if (mws.readyState === 1 && mws.gridRenderer) {
+            secureSend(mws, { type: 'mouse-mode', session: id, mouse: nowMouse });
+          }
+        }
+      }
+    }
+
     if (session.scrollback.length > SCROLLBACK_SIZE) {
       let start = session.scrollback.length - SCROLLBACK_SIZE;
       // Skip forward past a broken surrogate pair or partial ANSI escape
@@ -1791,6 +1820,44 @@ wss.on('connection', (ws, req) => {
         try { activeSession.proc.write(msg.data); } catch (e) {
           audit('ERROR', `pty write: ${e.message}`);
         }
+        if (activeSession.attention) { activeSession.attention = null; broadcastSessions(); }
+        break;
+      }
+
+      case 'mouse': {
+        if (!activeSession) break;
+        const mstate = mouseState(activeSession);
+        if (mstate.tracking === 'none') {
+          // Not an error, and not silent: an app can turn reporting off
+          // between the tap and its arrival. Counted so that "my taps do
+          // nothing" is answerable from the session rather than by guesswork.
+          activeSession.mouseDropped = (activeSession.mouseDropped || 0) + 1;
+          break;
+        }
+        if (!MOUSE_ACTIONS.includes(msg.action)) break;
+        const col = Math.round(Number(msg.col));
+        const row = Math.round(Number(msg.row));
+        if (!Number.isInteger(col) || !Number.isInteger(row)) break;
+        if (col < 1 || row < 1) break;
+        // The pty is the authority on its own size. A client that has not yet
+        // caught up with a resize must not be able to address a cell that is
+        // not there.
+        if (col > (activeSession.lastCols || 80)) break;
+        if (row > (activeSession.lastRows || 24)) break;
+        const button = (msg.button === null || msg.button === undefined)
+          ? null : String(msg.button);
+        if (button !== null && MOUSE_BUTTONS[button] === undefined) break;
+        const seq = encodeMouse({
+          action: msg.action, button, col, row,
+          delta: Number(msg.delta) || 0,
+          shift: !!msg.shift, alt: !!msg.alt, ctrl: !!msg.ctrl,
+        }, mstate);
+        if (!seq || !activeSession.proc) break;
+        // Deliberately not audited per event: any-event tracking produces
+        // hundreds of these a second during a drag, and burying the keystroke
+        // trail under them would cost more than it records.
+        try { activeSession.proc.write(seq); }
+        catch (e) { audit('ERROR', `pty mouse write: ${e.message}`); }
         if (activeSession.attention) { activeSession.attention = null; broadcastSessions(); }
         break;
       }

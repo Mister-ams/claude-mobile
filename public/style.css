@@ -343,6 +343,13 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   display: none; overflow: hidden;
   will-change: transform;
 }
+/* T22: while the application is reporting mouse, the pane's touches belong
+   to it, not to the scroller. This has to be surrendered before the gesture
+   begins -- once Safari has claimed a touch for scrolling, preventDefault on
+   a later move cannot take it back. herdr panes are alt-screen and have
+   nothing to scroll anyway; a dtach app that asks for mouse wants the wheel
+   events for itself. */
+.grid-term.mouse-active { touch-action: none; }
 .term-wrap.active { display: block; }
 .term-wrap.swipe-visible { display: block; }
 .term-wrap.swipe-animate {
