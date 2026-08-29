@@ -95,7 +95,7 @@
 <header class="hero">
   <p class="eyebrow">Live tracker &middot; claude-mobile 4.0.0</p>
   <h1>Windows-native: herdr replaces dtach</h1>
-  <p class="stamp">Last updated 25 August 2026 &middot; <b>P1 + server control shipped</b>
+  <p class="stamp">Last updated 29 August 2026 &middot; <b>P1 + server control shipped</b>
      &middot; 13 / 23 tasks complete &middot; <b>P2 soak running &mdash; restarted 24 Aug</b></p>
 
   <div class="overall">
@@ -110,40 +110,36 @@
 </header>
 
 <div class="now">
-  <div class="h">Right now &mdash; 25 August, P1 complete</div>
+  <div class="h">Right now &mdash; 29 August</div>
   <p>
-    <b>P0 and P1 are both done.</b> PRs #14-#17 merged, v3.5.0. The seam landed with dtach still
-    the default, and 3457 has been serving a herdr-backed session for 72 minutes. P1.4 was
-    <i>observed</i> rather than inferred &mdash; and it failed first: PM2 tree-kill was taking
-    herdr&apos;s server, because <code>herdr --session</code> spawns it as our child and
-    <code>detached:true</code> does not fix that on Windows.
-  </p>
-  <p>
-    <b>Next is P2, the soak</b> &mdash; the phase no amount of testing shortens. Before it starts,
-    prune to one instance: 3459 (<code>claude-mobile-ctl</code>) and the <code>cm-wt-fix</code>
-    worktree are disposable, and leaving them running means the soak measures the wrong thing.
-  </p>
-  <p style="color:var(--bad)">
-    <b>Correction to my own earlier entry.</b> I recorded that PR #15 closed the
-    <code>HERDR_ENV</code>/<code>HERDR_PANE_ID</code> gotcha. <b>It did not.</b> #15 runs the
-    opposite direction &mdash; it stops the server&apos;s environment leaking INTO the pane, where
-    a stray <code>CLAUDE_CODE_CHILD_SESSION</code> was silently disabling transcript saving.
-    <b>Session identity and resume remain UNVERIFIED.</b>
+    <b>P0 and P1 complete. P2 has not formally started</b> &mdash; but four days of
+    <i>incidental</i> soak have accumulated, and the early signal is good:
+    <b>0 crash-shaped lines</b> across both herdr session logs since 25 August, against
+    <b>45 in a single day</b> on Linux. Both sessions survived two restart cycles.
   </p>
   <p style="color:var(--warn)">
-    <b>A lead worth ten minutes.</b> <code>herdr api snapshot</code> reports
-    <code>agent_session {kind:"id", source:"herdr:claude", value:&lt;uuid&gt;}</code> on our pane.
-    <code>pane report-agent-session</code> is exactly what the SessionStart hook calls &mdash; so
-    the hook may be firing after all, which would contradict the P0 finding that detection is
-    screen-scraping only. Unchased.
+    <b>Do not read that as P2 passing.</b> Nothing is watching on purpose: no crash watch is
+    running, the prune was never done, and <code>claude-mobile-ctl</code> plus <code>cmc-0</code>
+    are still up, so any soak is measuring three instances rather than one. Four days of nobody
+    looking is not four days of evidence.
+  </p>
+  <p>
+    <b>3456 moved 3.4.0 -&gt; 3.5.0 on its own, and it was safe by luck rather than design.</b>
+    Not via <code>update.sh</code>: pulling master changed the working tree underneath it, and the
+    8-hour idle auto-shutdown restarted it onto the new code. 3.5.0 changed no dependencies, so the
+    <code>npm ci</code> path never ran. <b>The risky first-update hazard is therefore still
+    unexercised and still live</b> &mdash; laptop only, process stopped, once.
+  </p>
+  <p>
+    All restarts since the 25th are the documented 8-hour idle auto-shutdown, confirmed in the
+    audit log, with <code>unstable_restarts=0</code> throughout. <code>node_modules</code> is
+    intact at 115 packages. Sessions never dropped: all three instances report
+    <code>sessions:1</code>.
   </p>
   <p style="color:var(--good)">
-    <b>The pattern to carry into P2, in OTG-P1&apos;s words:</b> <i>this system fails by reporting
-    success.</i> An <code>npm ci</code> exited 0 while deleting 112 of 115 packages, with
-    <code>/health</code> still answering 200 and a live session attached. A guard that could not
-    fire. A poll that could never succeed. Green CI, <code>ok:true</code> and a written state file
-    all agreeing while the update had failed. <b>Watch the soak for outcomes, not for absence of
-    errors.</b>
+    <b>Next, unchanged:</b> prune to one instance (<b>both halves</b> &mdash;
+    <code>pm2 delete</code> alone strands <code>cmc-0</code>), then chase the ten-minute
+    <code>agent_session</code> UUID lead, then open P2 deliberately with a crash watch running.
   </p>
 </div>
 
@@ -284,7 +280,7 @@
         <span>Poll herdr log + process state, record every abort with a timestamp</span></td>
       <td class="who"><span class="who-me">me</span></td>
       <td class="st"><span class="chip c-todo">to do</span></td>
-      <td class="ev"><em>Linux baseline: 45 crash lines in one day</em></td>
+      <td class="ev"><b>Not running.</b> No crash watch exists yet. Incidental: <b>0 crash-shaped lines</b> in both session logs since 25 Aug (Linux baseline was 45 in one day).</td>
     </tr>
     <tr>
       <td class="tid">P2.2</td>
@@ -292,7 +288,7 @@
         <span>Does it stay up, is agent status useful, is the cursor acceptable</span></td>
       <td class="who"><span class="who-you">you</span></td>
       <td class="st"><span class="chip c-todo">to do</span></td>
-      <td class="ev"><em>go / no-go</em></td>
+      <td class="ev"><b>Not started.</b> Blocked on the prune -- three instances are up, so a soak would measure the wrong thing.</td>
     </tr>
   </table>
   </div>
