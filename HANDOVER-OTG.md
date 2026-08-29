@@ -10,6 +10,18 @@ This is the ORCHESTRATOR handover -- planning, decisions, and what to do next.
 
 `claude-mobile` v3.5.0. **P0 and P1 complete, 10 of 21 tasks. P2 (soak) is next.**
 
+**Status at 29 August.** P2 has NOT formally started. Four days of *incidental* soak
+have accumulated and the early signal is good -- **0 crash-shaped lines** in both
+herdr session logs since 25 August, against **45 in a single day** on Linux, with
+both sessions surviving two restart cycles. Do not read that as P2 passing: no
+crash watch is running, the prune was never done, and three instances are up, so
+anything measured is measuring the wrong thing. Four days of nobody looking is
+not four days of evidence.
+
+All restarts since the 25th are the documented 8-hour idle auto-shutdown,
+confirmed in the audit log, `unstable_restarts=0` throughout. `node_modules`
+intact at 115 packages. All instances report `sessions:1` -- nothing dropped.
+
 We are replacing `dtach`-in-WSL with **herdr running natively on Windows**, which
 takes WSL off the critical path entirely. herdr is behind a config flag with
 dtach still the default; nothing is deleted until a week of soak says so.
@@ -95,6 +107,17 @@ restart then persisted the loss.
 - **3456's FIRST update runs the OLD `update.sh`** -- the buggy one -- and that
   update changes the manifest, so it takes the `npm ci` path. **Do it from the
   laptop with the process stopped, once.** Do not tap Update on 3456 from the iPad.
+  **Still unexercised as of 29 August** -- see the next item for why that warning
+  has not been consumed despite 3456 having changed version.
+
+- **A `git pull` in the live checkout silently deploys to production.** Found
+  29 August. 3456 moved 3.4.0 -> 3.5.0 with nobody updating it: pulling master
+  changed the working tree the PM2 process runs from, and the 8-hour idle
+  auto-shutdown then restarted it onto the new code. It was safe only because
+  3.5.0 changed no dependencies, so the `npm ci` path never ran. The mechanism
+  will recur and will not always be harmless -- any restart after a pull ships
+  whatever is in that tree. Either run the live instance from its own worktree,
+  or treat `git pull` there as a deploy.
 - **Restart signs every client out** (tokens are an in-memory Map). Whether to
   persist tokens across restarts is a security-posture decision.
 - **`MAX_SESSIONS = 8` is unmeasured under herdr.** Eight sessions means eight
