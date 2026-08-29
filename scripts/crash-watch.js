@@ -13,8 +13,12 @@
 // was actually observed -- beside the crash count. A crash count of zero
 // means nothing without the coverage number next to it.
 //
-//   node scripts/crash-watch.js --port 3457                 # watch
-//   node scripts/crash-watch.js --summary                   # read the verdict
+//   npm run watch:start        # under PM2, survives a reboot with the rest
+//   npm run watch              # in the foreground
+//   npm run watch:summary      # read the verdict
+//
+// Starting it belongs with the flip to herdr: watching an idle instance
+// reproduces exactly the measurement this replaces.
 //
 // Writes JSONL to ~/.claude-mobile-crashwatch.jsonl (override with --out).
 
@@ -32,10 +36,13 @@ const HERDR_BIN = process.env.HERDR_BIN ||
 // What a herdr abort looks like in its own log. The Linux run on 17 August
 // produced 45 of these in a day; the Windows build has produced none, which
 // is the thing under test. Matched case-insensitively against whole lines.
-// A cap on aborts stored per tick. High enough that it never bites in
-// practice (the Linux run's worst day was 45 in 24h), and when it does the
-// record carries the true count and how many were dropped.
-const MAX_ABORTS_PER_TICK = 200;
+// Every abort keeps its timestamp, always -- that is what the objective
+// names, and a dropped abort loses it entirely. Only the LINE TEXT is capped,
+// because the text is the unbounded part; past this many lines in a single
+// poll the entries remain, carrying `at` and `atSource` without `line`.
+// The worst day on record was 45 aborts in 24h, so this is headroom, not a
+// working limit.
+const MAX_ABORT_LINES = 200;
 
 const CRASH_PATTERNS = [
   /\bSIGABRT\b/i,
@@ -208,6 +215,7 @@ async function tick(state, args) {
 
   let crashes = [];
   let vanished = [];
+  let logAbsent = [];
   if (sessions) {
     for (const s of sessions) {
       if (s.default) continue;   // the operator's own session, not ours
@@ -217,16 +225,25 @@ async function tick(state, args) {
       state.logs[s.name] = { size: scan.size };
       const bad = abortsFrom(scan.lines, rec.t);
       if (bad.length) {
-        // Every abort, not a sample. A cap still exists because a pathological
-        // log could otherwise write an unbounded record, but when it bites the
-        // record says so rather than quietly claiming to be complete.
-        const kept = bad.slice(0, MAX_ABORTS_PER_TICK);
-        const entry = { session: s.name, count: bad.length, aborts: kept };
-        if (bad.length > kept.length) entry.truncated = bad.length - kept.length;
+        // Every abort is kept. Beyond the cap the entry keeps its timestamp
+        // and loses only its text, so the count is never a sample and the
+        // record never claims a completeness it does not have.
+        let dropped = 0;
+        const aborts = bad.map((a, i) => {
+          if (i < MAX_ABORT_LINES) return a;
+          dropped++;
+          return { at: a.at, atSource: a.atSource, lineOmitted: true };
+        });
+        const entry = { session: s.name, count: bad.length, aborts };
+        if (dropped) entry.textOmitted = dropped;
         crashes.push(entry);
       }
+      // A log that is not there is not a log with nothing in it. A session can
+      // be running while its log is missing, and calling that 'ok' would be
+      // the collapse this whole file exists to prevent.
+      if (scan.state === 'absent') logAbsent.push(s.name);
       rec.herdr.sessions[s.name] = {
-        running: !!s.running, logBytes: scan.size,
+        running: !!s.running, logBytes: scan.size, logState: scan.state,
         newLines: scan.lines.length, crashLines: bad.length,
       };
       // A session we have seen running that is no longer running, and that
@@ -249,11 +266,23 @@ async function tick(state, args) {
 
   if (crashes.length) rec.crashes = crashes;
   if (vanished.length) rec.vanished = vanished;
+  if (logAbsent.length) rec.logAbsent = logAbsent;
 
-  // Verdict, four-valued on purpose. "unknown" is never folded into "ok":
-  // a tick where herdr could not be asked is not a tick where herdr was fine.
-  if (crashes.length || vanished.length) rec.verdict = 'crash';
-  else if (!sessions) rec.verdict = 'unknown';
+  // Verdicts are deliberately not collapsed.
+  //
+  // 'crash' means herdr's own log said so, which is evidence. 'vanished'
+  // means a session that was running is not -- which an ABORT produces, and
+  // so does the operator stopping it on purpose. Nothing at this layer can
+  // tell those apart, so it gets its own verdict rather than borrowing
+  // 'crash': condemning a week-long soak because the operator restarted
+  // something would be worse than saying plainly what was seen.
+  //
+  // 'unknown' is never folded into 'ok' either: a tick where herdr could not
+  // be asked, or where a running session's log was missing, is not a tick
+  // where herdr was fine.
+  if (crashes.length) rec.verdict = 'crash';
+  else if (vanished.length) rec.verdict = 'vanished';
+  else if (!sessions || logAbsent.length) rec.verdict = 'unknown';
   else if (args.ports.some(p => !rec.servers[p].up)) rec.verdict = 'degraded';
   else rec.verdict = 'ok';
 
@@ -289,16 +318,17 @@ function summarise(out) {
   }
   const events = recs.filter(r => r.event).length;
   const crashRecs = recs.filter(r => r.verdict === 'crash');
+  const vanishRecs = recs.filter(r => r.verdict === 'vanished');
   // Count ABORTS, not the ticks that carried them: several can land in one
   // poll, and a tick count would understate the failure it is reporting.
   let abortCount = 0, truncated = 0, vanishCount = 0;
   for (const r of crashRecs) {
     for (const c of r.crashes || []) {
       abortCount += (c.count !== undefined ? c.count : (c.aborts || []).length);
-      truncated += c.truncated || 0;
+      truncated += c.textOmitted || 0;   // the writer's field name
     }
-    vanishCount += (r.vanished || []).length;
   }
+  for (const r of vanishRecs) vanishCount += (r.vanished || []).length;
   // A duration printed in the wrong unit reads as zero. Pick the unit from
   // the value so a short window is legible and a week-long one stays compact.
   const dur = (ms) => ms >= 3600000 ? (ms / 3600000).toFixed(1) + 'h'
@@ -314,10 +344,13 @@ function summarise(out) {
   console.log('  COVERAGE   : ' + dur(observedMs) + ' observed of ' + dur(spanMs) +
               ' elapsed  (' + (spanMs ? Math.round(observedMs / spanMs * 100) : 0) + '%)' +
               (gapMs ? '  -- ' + dur(gapMs) + ' UNWATCHED' : ''));
-  console.log('  aborts     : ' + abortCount + ' log abort(s) + ' + vanishCount +
-              ' vanished session(s), across ' + crashRecs.length + ' tick(s)' +
-              (truncated ? '  -- ' + truncated + ' NOT STORED (per-tick cap)' : ''));
-  for (const r of crashRecs.slice(-5)) {
+  console.log('  aborts     : ' + abortCount + ' in herdr\'s log, across ' +
+              crashRecs.length + ' tick(s)' +
+              (truncated ? '  -- ' + truncated + ' stored without their text' : ''));
+  console.log('  vanished   : ' + vanishCount +
+              ' session(s) that were running and stopped being' +
+              (vanishCount ? '  -- a deliberate stop looks identical; confirm' : ''));
+  for (const r of crashRecs.concat(vanishRecs).slice(-5)) {
     const what = (r.crashes || []).map(c =>
       c.session + ' x' + c.count + ' @ ' + (c.aborts[0] && c.aborts[0].at));
     console.log('    ' + r.t + '  ' + JSON.stringify(what.length ? what : r.vanished));
@@ -329,6 +362,10 @@ function summarise(out) {
   console.log('');
   if (crashRecs.length) {
     console.log('VERDICT: CRASHES OBSERVED -- P2 has its answer, and it is no.');
+  } else if (vanishRecs.length) {
+    console.log('VERDICT: ' + vanishCount + ' SESSION DISAPPEARANCE(S), no log abort.');
+    console.log('         An abort and a deliberate stop are indistinguishable from');
+    console.log('         here. Confirm which before reading this either way.');
   } else if (spanMs && observedMs / spanMs < 0.9) {
     console.log('VERDICT: INSUFFICIENT COVERAGE -- too much of the window was unwatched');
     console.log('         to call it clean. Zero crashes here is not evidence yet.');
@@ -358,7 +395,11 @@ async function main() {
       saveState(args.out, state);
       if (rec.verdict === 'crash') {
         console.error('[crash-watch] CRASH at ' + rec.t + ' ' +
-                      JSON.stringify(rec.crashes || rec.vanished));
+                      JSON.stringify(rec.crashes));
+      } else if (rec.verdict === 'vanished') {
+        console.error('[crash-watch] SESSION VANISHED at ' + rec.t + ' ' +
+                      JSON.stringify(rec.vanished) +
+                      ' -- an abort and a deliberate stop look identical here');
       }
     } catch (e) {
       // The watch failing silently would reproduce the exact problem it was
@@ -385,5 +426,5 @@ if (require.main === module) {
 
 module.exports = {
   CRASH_PATTERNS, crashLines, abortsFrom, scanLogTail, summarise,
-  loadState, saveState, statePath, MAX_ABORTS_PER_TICK,
+  loadState, saveState, statePath, MAX_ABORT_LINES,
 };

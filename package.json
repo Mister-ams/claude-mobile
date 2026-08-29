@@ -6,7 +6,12 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "verify:asset-version": "node verify-asset-version.js"
+    "verify:asset-version": "node verify-asset-version.js",
+    "watch": "node scripts/crash-watch.js --port 3456 --interval 60",
+    "watch:start": "pm2 start ecosystem.crash-watch.config.js",
+    "watch:summary": "node scripts/crash-watch.js --summary",
+    "test:watch": "node test/crash-watch-verify.js",
+    "test:watch:live": "node test/crash-watch-live-verify.js"
   },
   "dependencies": {
     "@simplewebauthn/server": "^10.0.1",

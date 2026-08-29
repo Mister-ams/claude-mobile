@@ -50,11 +50,21 @@ function readRecs(f) {
   } catch (e) { return []; }
 }
 
+// A check that can quietly not run is worse than one that is absent: an
+// absent check is a known gap, an inert one is a false belief. This project
+// has already shipped that exact failure -- the ORM-drift gate reported
+// SKIPPED for months and had never executed. So a skip here is LOUD and
+// non-zero unless the caller explicitly accepts it with --allow-skip.
+const ALLOW_SKIP = process.argv.includes('--allow-skip');
 let pty;
 try { pty = require('node-pty'); }
 catch (e) {
-  console.log('  SKIP  node-pty not resolvable -- run from an installed tree');
-  process.exit(0);
+  console.error('');
+  console.error('  NOT RUN  node-pty is not resolvable here, so the live guard');
+  console.error('           did NOT execute. This is not a pass. Run it from an');
+  console.error('           installed tree, or pass --allow-skip to accept the');
+  console.error('           gap deliberately.');
+  process.exit(ALLOW_SKIP ? 0 : 2);
 }
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cwlive-'));
@@ -90,30 +100,60 @@ const OUT = path.join(tmp, 'watch.jsonl');
       recs.some(r => r.herdr && r.herdr.sessions && r.herdr.sessions[SESSION] &&
         r.herdr.sessions[SESSION].running === true));
 
-    // The event P2 exists to catch: a session that was alive and is not.
+    // The path the objective actually names: a crash-shaped line appearing in
+    // herdr's own log. Written into the THROWAWAY session's log, so a real
+    // file is really tailed -- no fixture, no stub, and the operator's own
+    // sessions are untouched.
+    const dir = (function () {
+      try {
+        const list = JSON.parse(cli('session', 'list', '--json')).sessions || [];
+        const me = list.find(x => x.name === SESSION);
+        return me ? me.session_dir : null;
+      } catch (e) { return null; }
+    })();
+    check('the throwaway session has a log to tail', !!dir, dir || '');
+    if (dir) {
+      const logFile = path.join(dir, 'herdr-server.log');
+      const stamp = new Date().toISOString();
+      fs.appendFileSync(logFile,
+        stamp + " ERROR herdr::server: synthetic abort for T-P2.1 live verification\n" +
+        stamp + " thread 'main' panicked at src/live-verify.rs:1:1\n");
+      await sleep(13000);
+      const withAborts = readRecs(OUT).filter(r => r.verdict === 'crash');
+      check('THE WATCH FIRED on crash-shaped lines in a real log',
+        withAborts.length >= 1,
+        readRecs(OUT).filter(r => r.verdict).map(r => r.verdict).join(','));
+      const entry = withAborts[0] && (withAborts[0].crashes || [])[0];
+      check('it recorded BOTH abort lines, not a sample',
+        !!entry && entry.count === 2, entry ? 'count=' + entry.count : '');
+      check('and each abort carries its own timestamp from the log',
+        !!entry && entry.aborts.length === 2 &&
+        entry.aborts.every(a => a.atSource === 'log'),
+        entry ? entry.aborts.map(a => a.atSource).join(',') : '');
+    }
+
+    // The other shape: a session that was alive and is not.
     cli('session', 'stop', SESSION);
     await sleep(14000);
 
     recs = readRecs(OUT).filter(r => r.verdict);
-    const crashes = recs.filter(r => r.verdict === 'crash');
-    check('THE WATCH FIRED on a session dying under it', crashes.length >= 1,
+    const gone = recs.filter(r => r.verdict === 'vanished');
+    check('THE WATCH FIRED on a session disappearing under it', gone.length >= 1,
       recs.map(r => r.verdict).join(','));
-    check('and it named the session that died',
-      crashes.length > 0 && (crashes[0].vanished || []).some(v => v.startsWith(SESSION)),
-      crashes.length ? JSON.stringify(crashes[0].vanished) : '');
+    check('and it named the session that went',
+      gone.length > 0 && (gone[0].vanished || []).some(v => v.startsWith(SESSION)),
+      gone.length ? JSON.stringify(gone[0].vanished) : '');
     // Reported once. A session that is still gone next tick is not news, and
     // repeating it would bury the moment it happened under its own echo.
-    check('and it reported the death once, not every tick after it',
-      crashes.length === 1, crashes.length + ' crash tick(s)');
+    check('and it reported it once, not every tick after',
+      gone.length === 1, gone.length + ' vanished tick(s)');
+    // A stop we performed deliberately must NOT be filed as an abort -- an
+    // operator restarting something mid-soak would otherwise condemn the week.
+    check('a deliberate stop is NOT filed as a log abort',
+      !gone.some(r => (r.crashes || []).length),
+      'verdict=' + (gone[0] && gone[0].verdict));
     check('the failure reached stderr, not just the file',
-      /CRASH/.test(werr), werr.trim().split('\n')[0] || '(nothing on stderr)');
-
-    // Having watched it fail, watch it recover: the ticks after the one-shot
-    // report must go back to clean rather than latching red forever.
-    const afterCrash = recs.slice(recs.indexOf(crashes[0]) + 1);
-    check('it returns to clean afterwards rather than latching',
-      afterCrash.length > 0 && afterCrash.every(r => r.verdict !== 'crash'),
-      afterCrash.map(r => r.verdict).join(',') || '(no ticks after)');
+      /VANISHED/.test(werr), werr.trim().split('\n').slice(-1)[0] || '(nothing on stderr)');
   } finally {
     w.kill();
     cleanup();

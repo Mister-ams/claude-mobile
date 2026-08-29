@@ -13,7 +13,7 @@ const os = require('os');
 const path = require('path');
 const {
   crashLines, abortsFrom, scanLogTail, summarise,
-  loadState, saveState, statePath, MAX_ABORTS_PER_TICK,
+  loadState, saveState, statePath, MAX_ABORT_LINES,
 } = require('../scripts/crash-watch');
 
 let pass = 0, fail = 0;
@@ -77,8 +77,8 @@ const burst = [];
 for (let i = 0; i < 50; i++) burst.push('2026-08-17T09:' + String(i).padStart(2, '0') + ':00.0Z ERROR herdr: died');
 check('a 50-abort burst is recorded whole, not sampled',
   abortsFrom(burst, TICK_T).length === 50, abortsFrom(burst, TICK_T).length + '');
-check('and the per-tick cap is well clear of a realistic burst',
-  MAX_ABORTS_PER_TICK >= 200, 'cap=' + MAX_ABORTS_PER_TICK);
+check('the line-text cap is well clear of a realistic burst',
+  MAX_ABORT_LINES >= 200, 'cap=' + MAX_ABORT_LINES);
 
 // ─── incremental log reading ─────────────────────────────────────
 console.log('\n=== does it read only what is new? ===');
@@ -167,19 +167,22 @@ text = capture(() => summarise(f3));
 check('a crash in the window dominates the verdict', /CRASHES OBSERVED/.test(text));
 // Counting the ticks that carried aborts would say 1 where the truth is 3.
 check('the summary counts ABORTS, not the ticks that carried them',
-  /3 log abort\(s\)/.test(text), (text.match(/aborts .*/) || [''])[0].trim());
+  /aborts\s+: 3 in herdr's log/.test(text), (text.match(/aborts .*/) || [''])[0].trim());
 
 // When the cap does bite, the artifact must not claim to be complete.
 const capped = [{
   t: iso(t0), tick: 1, verdict: 'crash',
-  crashes: [{ session: 'cmh-0', count: 500, truncated: 300, aborts: [
+  crashes: [{ session: 'cmh-0', count: 500, textOmitted: 300, aborts: [
     { at: iso(t0), atSource: 'log', line: 'SIGABRT' }] }],
 }];
 const f5 = path.join(tmp, 'capped.jsonl');
 writeRecs(f5, capped);
 text = capture(() => summarise(f5));
-check('a truncated record says how many it could not store',
-  /300 NOT STORED/.test(text), (text.match(/aborts .*/) || [''])[0].trim());
+// Past the cap an abort keeps its timestamp and loses only its text, so the
+// COUNT stays truthful and the summary says what was given up.
+check('past the cap it keeps the count and says the text went',
+  /500 in herdr's log/.test(text) && /300 stored without their text/.test(text),
+  (text.match(/aborts .*/) || [''])[0].trim());
 
 // An unknown tick is not a clean tick.
 const withUnknown = dense.slice(0, 10).concat([
@@ -195,6 +198,38 @@ check('an unknown tick is surfaced, not folded into clean',
 const missing = capture(() => summarise(path.join(tmp, 'does-not-exist.jsonl')));
 check('no data says so, rather than reporting zero crashes',
   /NO WATCH DATA/.test(missing) && /NOT the same as/.test(missing));
+
+// ─── a stop is not an abort, and a missing log is not a clean one ─
+console.log('\n=== does it keep the two kinds of bad news apart? ===');
+
+const vanished = dense.slice(0, 5).concat([
+  { t: iso(t0 + 5 * hour), tick: 6, verdict: 'vanished', sinceLastMs: hour,
+    vanished: ['cmh-0'] },
+]);
+const f6 = path.join(tmp, 'vanished.jsonl');
+writeRecs(f6, vanished);
+text = capture(() => summarise(f6));
+// The operator restarting a session mid-soak must not be reported as herdr
+// aborting. Nothing at this layer can tell the two apart, so the verdict says
+// what was seen and asks rather than concluding.
+check('a disappearance is NOT reported as a crash',
+  !/CRASHES OBSERVED/.test(text) && /SESSION DISAPPEARANCE/.test(text));
+check('and it says the two are indistinguishable from here',
+  /indistinguishable/.test(text));
+check('while the abort count stays honestly zero',
+  /aborts\s+: 0 in herdr's log/.test(text), (text.match(/aborts .*/) || [''])[0].trim());
+
+// A running session whose log is missing is not a healthy one; it is one we
+// cannot speak for.
+const absent = dense.slice(0, 5).concat([
+  { t: iso(t0 + 5 * hour), tick: 6, verdict: 'unknown', sinceLastMs: hour,
+    logAbsent: ['cmh-0'] },
+]);
+const f7 = path.join(tmp, 'absent.jsonl');
+writeRecs(f7, absent);
+text = capture(() => summarise(f7));
+check('a missing log reads as unknown, never as clean',
+  /unknown, not clean/.test(text));
 
 // ─── state survives the watcher ──────────────────────────────────
 console.log('\n=== does the watch survive its own restart? ===');
