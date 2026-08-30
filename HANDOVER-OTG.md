@@ -1,193 +1,76 @@
 # HANDOVER -- OTG orchestrator thread
 
-Written 2026-08-25 by session CLAUDE-OTG. Read this first, then
-`.planning/windows-native-tracker.html` for live task status.
+Generated: 2026-08-30
 
-This is the ORCHESTRATOR handover -- planning, decisions, and what to do next.
-`HANDOVER-P1.md` was the executor brief for P1 and is now history.
+Read this, then `.planning/windows-native-tracker.html` -- **open items are at the
+top of it now, the record below**. `HANDOVER-P1.md` is the retired P1 executor brief.
 
 ## Where we are
 
-`claude-mobile` v3.5.0. **P0 and P1 complete, 10 of 21 tasks. P2 (soak) is next.**
+`claude-mobile` v3.6.0. **3456 runs herdr natively on Windows. WSL is off the
+session path.** 17 of 26 tasks done; the P2.2 soak week started 29 Aug 18:55 and
+is the only open item that needs the operator.
 
-**Status at 29 August.** P2 has NOT formally started. Four days of *incidental* soak
-have accumulated and the early signal is good -- **0 crash-shaped lines** in both
-herdr session logs since 25 August, against **45 in a single day** on Linux, with
-both sessions surviving two restart cycles. Do not read that as P2 passing: no
-crash watch is running, the prune was never done, and three instances are up, so
-anything measured is measuring the wrong thing. Four days of nobody looking is
-not four days of evidence.
+## Decisions
 
-All restarts since the 25th are the documented 8-hour idle auto-shutdown,
-confirmed in the audit log, `unstable_restarts=0` throughout. `node_modules`
-intact at 115 packages. All instances report `sessions:1` -- nothing dropped.
+- **Flip the instance the operator already uses, rather than expose the second
+  one.** 3457 needed a tailnet route, a second TOTP enrolment and had no
+  passkeys; 3456 already had all of it plus the only `dump.pm2` entry, so
+  reboot survival came free. Collapsed a four-item plan to one. [verified]
+- **P3.1 moved AHEAD of P2.2.** The plan had the flip after the soak, which
+  cannot work: the flip is what makes the week possible. [verified]
+- **P3.1 was mis-scoped as "flip the flag".** 3456 ran 3.5.0, so it was really
+  deploy-then-flip -- and a `git pull` in the live checkout IS the deploy. [verified]
+- **A deliberate stop is not an abort.** The crash watch reports `vanished`
+  separately from `crash`; nothing at that layer can tell them apart, and
+  condemning a week because the operator restarted something is worse than
+  saying plainly what was seen. It still blocks a "clean" verdict. [verified]
+- **Coverage is reported before the crash count.** A crash count of zero means
+  nothing without it -- that misreading is what voided the previous four days. [verified]
 
-We are replacing `dtach`-in-WSL with **herdr running natively on Windows**, which
-takes WSL off the critical path entirely. herdr is behind a config flag with
-dtach still the default; nothing is deleted until a week of soak says so.
+## State Changes
 
-## How we got here (the short version)
+- #20 (f65a491) T22 mouse reporting; #21 (5fa0cc5) P2.1 crash watch; #22
+  (ad63470) tracker. All re-verified against master, not their branches. [verified]
+- 3456: v3.6.0, `sessionBackend: herdr`, session `cm-0`, tailnet serving
+  `app.js?v=3.6.0`, `MOUSE: cm-0 tracking=any encoding=sgr` in the audit log. [verified]
+- Crash watch running under PM2; `pm2 save` now carries bridge + watch. [verified]
+- 3457 retired (both halves), `cm-wt-p1`/`cm-wt-ctl`/`cm-wt-fix` worktrees and
+  their live TOTP secrets removed. One instance, one session, one worktree. [verified]
 
-The original 2026-08-16 spike said NO-GO on herdr, partly because "v0.8.0 ships
-no Windows binary". **That fact expired.** v0.8.2 ships one, the server runs
-natively on Windows with ConPTY panes, and it detects Claude Code there. That
-single release note obsoleted a WSL migration plan we had almost committed to.
+## Discovered Constraints
 
-Lesson worth keeping: **when a decision rests on a version-pinned fact, the
-decision expires with the version.** Re-check release assets before building on
-a vendor limitation.
+- **herdr sends `CSI ?1003;1006h` COMBINED.** A handler reading one parameter
+  captures the encoding as default and spells SGR in byte form -- wrong cells
+  past column 95, nothing past 223. [verified]
+- **`setPointerCapture` retargets to the wrap**, so `closest('.grid-row')` is
+  null for a whole drag -- the gesture herdr uses to resize a split. Clicks were
+  unaffected, which is why every test passed. Resolve cells geometrically. [verified]
+- **A junction is not a copy, and a recursive delete does not know that.**
+  `Remove-Item -Recurse` followed `node_modules` into the live checkout: 115
+  entries to 48, node-pty gone, `/health` still `ok`. Unlink first (`rmdir`, or
+  `Directory.Delete(path,false)`), or give a throwaway its own install. [verified]
+- **`pm2 delete` strands the herdr session.** Held twice now (`cmc-0`, `cmh-0`).
+  Always `session stop` + `session delete` after. [verified]
+- Resume works: hook fires -> real session id -> `claude --resume <uuid>`
+  returns the conversation. dtach cannot do this. [verified]
 
-Superseded routes, kept for reasoning: `.planning/wsl-architecture-decision.html`
-(four architectures compared, with the measurements) and
-`.planning/windows-native-plan.html` (the phase plan).
+## Next Action
 
-## The measurements that decided it
+Nothing is blocked. **Use it from the iPad** -- that is P2.2, and the only
+unverified link is the operator's first tap (the browser-to-pane path is proven
+12/12 on identical code but never on 3456, which needs their TOTP). Read the
+soak any time with `npm run watch:summary`; a window with poor coverage refuses
+to read as clean. At week's end, the go/no-go clears P3.2 and P3.3.
 
-| Measured | Result |
-|---|---|
-| Linux reading Windows files over `/mnt/c` | **373x** slower on metadata, 48x on content |
-| Windows reading Linux files over `\\wsl$` | **7.5x** -- the penalty is NOT symmetric |
-| Point reads over `/mnt/c` | ~13ms each; fine for configs and secrets |
-| Claude reading NTFS natively from Windows | 119ms/2,016 files |
+Rollback stays one line: delete `sessionBackend`, restart. `dtach pid 678`
+still holds `/tmp/cm-0.dtach`, so flipping back reattaches the ORIGINAL session.
 
-The asymmetry is the whole finding: it vindicates keeping Claude on Windows, and
-it means `.loomi-config` never needs copying anywhere -- it is a point read.
+## Context Pointers
 
-## What P0 and P1 proved
-
-- node-pty CAN host `herdr.exe` under ConPTY; alt-screen, box drawing, input all fine.
-- herdr detects Claude on Windows in **6 seconds**.
-- herdr's server persists after its client dies.
-- Cursor is stable through our renderer: 60 idle samples, 0 moves, 0 oscillations, DOM cursor 0.7px from the snapshot column.
-- herdr panes are **alt-screen**, so `baseY=0` -- no scrollback, snapshots are viewport-only.
-- Session survives `pm2 restart` -- **observed**, identical `terminal_id` across it.
-
-P1 also fixed two real bugs found by extracting the seam: a transient WSL hiccup
-could delete a live session, and a non-default prefix lost every session name on
-restart then persisted the loss.
-
-## Do this before P2 opens
-
-1. **Prune to one instance -- BOTH halves, or you strand a session.**
-   `pm2 delete` does NOT stop the herdr session. The herdr server is
-   deliberately not a child of the node process -- that orphaning is exactly
-   what makes sessions survive `pm2 restart` -- so deleting the PM2 process
-   leaves an orphaned herdr server and its Claude session running forever with
-   nothing supervising it. Verified: `herdr session list` currently shows
-   `cmc-0` and `cmh-0` both `running`, each on its own socket.
-
-   ```
-   pm2 delete claude-mobile-ctl
-   herdr session stop cmc-0 && herdr session delete cmc-0
-   herdr session list          # confirm; a stopped-but-not-deleted record
-                               # persists and blocks reusing the name
-   ```
-
-   The same applies whenever 3457 is retired -- stop `cmh-0` explicitly.
-   Disposable alongside it: the `cm-wt-ctl` and `cm-wt-fix` worktrees, and the
-   dead `.claude-mobile-ctl-audit.log` / `-dtach-audit.log` in the home
-   directory (the `auditPath` knob exists so a second instance cannot interleave
-   writes into the live server's trail).
-
-   **Secret hygiene:** each test instance minted its OWN TOTP secret via its
-   localhost `/setup` -- the operator's was never copied -- but
-   `.totp-secret` and `.server-identity-key` in `cm-wt-p1` and `cm-wt-ctl` are
-   real credentials with a lifetime. They should die with the worktrees. Both
-   instances bind localhost only and `tailscale serve` fronts 3456 alone, so
-   nothing was tailnet-reachable.
-2. **Chase the resume lead -- about ten minutes.** `herdr api snapshot` reports
-   `agent_session {kind:"id", source:"herdr:claude", value:<uuid>}` on our pane.
-   `pane report-agent-session` is exactly what the SessionStart hook calls, so
-   the hook may be firing after all -- which would contradict the P0 conclusion
-   that detection is screen-scraping only, and would mean resume already works.
-   `herdr pane get` plus the hook log settles it.
-
-## Open, and needing the operator
-
-- **3456's FIRST update runs the OLD `update.sh`** -- the buggy one -- and that
-  update changes the manifest, so it takes the `npm ci` path. **Do it from the
-  laptop with the process stopped, once.** Do not tap Update on 3456 from the iPad.
-  **Still unexercised as of 29 August** -- see the next item for why that warning
-  has not been consumed despite 3456 having changed version.
-
-- **A `git pull` in the live checkout silently deploys to production.** Found
-  29 August. 3456 moved 3.4.0 -> 3.5.0 with nobody updating it: pulling master
-  changed the working tree the PM2 process runs from, and the 8-hour idle
-  auto-shutdown then restarted it onto the new code. It was safe only because
-  3.5.0 changed no dependencies, so the `npm ci` path never ran. The mechanism
-  will recur and will not always be harmless -- any restart after a pull ships
-  whatever is in that tree. Either run the live instance from its own worktree,
-  or treat `git pull` there as a deploy.
-- **Restart signs every client out** (tokens are an in-memory Map). Whether to
-  persist tokens across restarts is a security-posture decision.
-- **`MAX_SESSIONS = 8` is unmeasured under herdr.** Eight sessions means eight
-  herdr servers plus eight node-pty clients, uncounted in our footprint.
-
-## Known unresolved
-
-- **Session identity / resume: UNVERIFIED.** PR #15's env whitelist runs the
-  opposite direction -- it stops the server's env leaking INTO the pane (a stray
-  `CLAUDE_CODE_CHILD_SESSION` was disabling transcript saving). It says nothing
-  about herdr injecting `HERDR_ENV` / `HERDR_PANE_ID`. See the lead above.
-- **herdr stability is the real risk and P0/P1 did not retire it.** 45
-  crash-shaped lines and repeated SIGABRT on Linux, 17 August. Windows is a
-  different build so the number transfers nothing either way. Only P2 answers it.
-  dtach is the incumbent: 236 restarts over five months, zero aborts.
-- **The `npm ci` path has no automated coverage.** Both arms measured by hand.
-- **Three guards in `update.sh` are verified as primitives, not in situ** --
-  self-flagged by OTG-P1 against the "have I watched it fail?" standard, and
-  worth honouring rather than filing away. The `CM_SERVER_PID` guard (refuses to
-  install while the server that asked is still alive) has **never fired in a
-  real update**, because `pm2 stop` has always succeeded. The primitive was
-  proven both ways in isolation -- and that mattered: `kill -0` could not see a
-  Windows pid at all and would have made the guard silently inert, so it uses
-  `tasklist`. The `pm2 start` fallback in the trap, and the restart block, are
-  likewise unexercised. The sibling paths WERE exercised for real: the trap, by
-  killing a script mid-update and watching the server return with its session;
-  and the broken-tree refusal, against a tree with no `node_modules`. Closing
-  the remaining three needs the same local-origin harness as the `npm ci` gap.
-- `newSession()` sends `rows=200` on create, so every pty is briefly 200 rows.
-  Harmless under dtach; it made a sizing guard inert once.
-
-## Structural mismatches between herdr's model and ours
-
-1. Panes are alt-screen -- rows scrolling off never reach host scrollback, so our
-   400KB ring has nothing to capture beyond the viewport.
-2. herdr is mouse-first and requests mouse tracking; our client sends no mouse
-   events, so every click in a pane is inert. This is almost certainly why herdr
-   felt bad on the iPad. T22 is now a prerequisite, not a nice-to-have.
-3. The pty hosts the herdr CLIENT, so the phone renders herdr's whole TUI
-   including chrome. Suppressed via our own `herdr-config.toml` through
-   `HERDR_CONFIG_PATH` -- worth 27 columns at iPad width.
-4. At phone width herdr shows a compact top rail the `[ui]` settings do not
-   suppress. Left alone; phone is deprioritised.
-
-## The pattern to carry into P2
-
-From OTG-P1, and it cost most of P1's time:
-
-> This system fails by reporting success.
-
-An `npm ci` exited 0 while deleting 112 of 115 packages, with `/health` still
-answering 200 and a live session attached. A guard that could not fire. A poll
-that could never succeed. Green CI, `ok:true` and a written state file all
-agreeing while the update had failed. None of it was found by reading code.
-
-**Watch the soak for outcomes, not for absence of errors.**
-
-## Environment
-
-- herdr v0.8.2 at `C:\Users\MRAL-\tools\herdr\herdr.exe` -- keep `conpty\` beside it.
-- Integration hook v8 at `C:\Users\MRAL-\.claude\hooks\herdr-agent-state.ps1`,
-  one `SessionStart` entry in `~/.claude/settings.json`. No-ops outside herdr.
-- Instances: **3456** live (dtach, v3.4.0, do not touch) | **3457** soak
-  (herdr, worktree `cm-wt-p1`) | **3459** disposable.
-- Harnesses: `test/live-session-verify.py` (real login, real session, asserts
-  which backend answered) and `test/ipad-emulator.py` (static client only --
-  it cannot test a backend).
-
-## House rules
-
-PR-only to `master`, 4 required checks, rebase never merge. Only the operator
-merges. Never dark mode. ASCII in docs. A fix is done when the original artifact
-is re-exercised and observed passing -- green CI is not done.
+- `.planning/windows-native-tracker.html` -- open items first, then the record.
+- `scripts/crash-watch.js` + `ecosystem.crash-watch.config.js` -- the soak watch.
+- `lib/mouse.js` -- DEC mode capture + event encoding, testable without a server.
+- `test/t22-client-click-verify.py` -- the browser-to-pane proof; needs a TOTP.
+- `test/crash-watch-live-verify.js` -- watches the detector fire; skips LOUD
+  (exit 2) rather than green if node-pty is missing.
