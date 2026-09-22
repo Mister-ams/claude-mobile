@@ -124,11 +124,33 @@
     rgba(255, 255, 255, 0.2) 75%, rgba(255, 255, 255, 0.9) 100%);
   --mask-solid: linear-gradient(#000 0 0);
 
-  /* Terminal content layer (D3). T05 owns the ANSI palette. */
-  --term-bg:       #FBFBFD;
-  --term-fg:       #1D1D1F;
-  --term-cursor:   var(--system-blue);
+  /* Terminal content layer (D3, T05). THE single source of the terminal's
+     colours: app.js termPalette() reads these once and feeds both the grid
+     renderer and the xterm theme, so JS holds no colour literals of its own.
+     Light terminal: every ANSI colour is >= 4.5:1 on --term-bg (WCAG AA),
+     asserted by test/ipad-webkit.py. "White" (7, 15) map to readable greys,
+     yellows/cyans are darkened. Reverse video swaps fg/bg, so each pair
+     keeps the same ratio. Ratios below are against #FBFBFD. */
+  --term-bg:        #FBFBFD;
+  --term-fg:        #1D1D1F;  /* 16.3 */
+  --term-cursor:    var(--system-blue);
   --term-selection: rgba(0, 122, 255, 0.2);
+  --ansi-0:  #1D1D1F;  /* black           16.3 */
+  --ansi-1:  #C62828;  /* red              5.4 */
+  --ansi-2:  #1A7F37;  /* green            4.9 */
+  --ansi-3:  #8A6100;  /* yellow           5.4 */
+  --ansi-4:  #0055BF;  /* blue             6.7 */
+  --ansi-5:  #A626A4;  /* magenta          5.9 */
+  --ansi-6:  #0E7490;  /* cyan             5.2 */
+  --ansi-7:  #5F6368;  /* white -> grey    5.9 */
+  --ansi-8:  #6E6E73;  /* bright black     4.9 */
+  --ansi-9:  #D70015;  /* bright red       5.2 */
+  --ansi-10: #3A7D00;  /* bright green     4.9 */
+  --ansi-11: #A05A00;  /* bright yellow    5.1 */
+  --ansi-12: #0066CC;  /* bright blue      5.4 */
+  --ansi-13: #9A3FC4;  /* bright magenta   5.2 */
+  --ansi-14: #007A7A;  /* bright cyan      5.0 */
+  --ansi-15: #3A3A3C;  /* bright white -> dark grey 11.0 */
   --font-mono:     ui-monospace, 'SF Mono', Menlo, monospace;
   /* T14: terminal font size. Set from localStorage by applyFontSize() --
      13px is the phone default, tablets start at 16px. The cell grid reads

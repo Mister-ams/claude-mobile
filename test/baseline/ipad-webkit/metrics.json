@@ -281,6 +281,97 @@
         "w": 656
       }
     },
+    "palette": {
+      "bg": "#FBFBFD",
+      "colors": [
+        {
+          "color": "#1D1D1F",
+          "name": "ansi-0",
+          "ratio": 16.28
+        },
+        {
+          "color": "#C62828",
+          "name": "ansi-1",
+          "ratio": 5.44
+        },
+        {
+          "color": "#1A7F37",
+          "name": "ansi-2",
+          "ratio": 4.91
+        },
+        {
+          "color": "#8A6100",
+          "name": "ansi-3",
+          "ratio": 5.36
+        },
+        {
+          "color": "#0055BF",
+          "name": "ansi-4",
+          "ratio": 6.66
+        },
+        {
+          "color": "#A626A4",
+          "name": "ansi-5",
+          "ratio": 5.92
+        },
+        {
+          "color": "#0E7490",
+          "name": "ansi-6",
+          "ratio": 5.18
+        },
+        {
+          "color": "#5F6368",
+          "name": "ansi-7",
+          "ratio": 5.85
+        },
+        {
+          "color": "#6E6E73",
+          "name": "ansi-8",
+          "ratio": 4.91
+        },
+        {
+          "color": "#D70015",
+          "name": "ansi-9",
+          "ratio": 5.21
+        },
+        {
+          "color": "#3A7D00",
+          "name": "ansi-10",
+          "ratio": 4.94
+        },
+        {
+          "color": "#A05A00",
+          "name": "ansi-11",
+          "ratio": 5.13
+        },
+        {
+          "color": "#0066CC",
+          "name": "ansi-12",
+          "ratio": 5.39
+        },
+        {
+          "color": "#9A3FC4",
+          "name": "ansi-13",
+          "ratio": 5.23
+        },
+        {
+          "color": "#007A7A",
+          "name": "ansi-14",
+          "ratio": 5.0
+        },
+        {
+          "color": "#3A3A3C",
+          "name": "ansi-15",
+          "ratio": 10.98
+        },
+        {
+          "color": "#1D1D1F",
+          "name": "fg",
+          "ratio": 16.28
+        }
+      ],
+      "min": 4.91
+    },
     "settings": {
       "controlFonts": {
         "#<button:submit> \"Arrow down\"": {
@@ -702,6 +793,97 @@
         "w": 944
       }
     },
+    "palette": {
+      "bg": "#FBFBFD",
+      "colors": [
+        {
+          "color": "#1D1D1F",
+          "name": "ansi-0",
+          "ratio": 16.28
+        },
+        {
+          "color": "#C62828",
+          "name": "ansi-1",
+          "ratio": 5.44
+        },
+        {
+          "color": "#1A7F37",
+          "name": "ansi-2",
+          "ratio": 4.91
+        },
+        {
+          "color": "#8A6100",
+          "name": "ansi-3",
+          "ratio": 5.36
+        },
+        {
+          "color": "#0055BF",
+          "name": "ansi-4",
+          "ratio": 6.66
+        },
+        {
+          "color": "#A626A4",
+          "name": "ansi-5",
+          "ratio": 5.92
+        },
+        {
+          "color": "#0E7490",
+          "name": "ansi-6",
+          "ratio": 5.18
+        },
+        {
+          "color": "#5F6368",
+          "name": "ansi-7",
+          "ratio": 5.85
+        },
+        {
+          "color": "#6E6E73",
+          "name": "ansi-8",
+          "ratio": 4.91
+        },
+        {
+          "color": "#D70015",
+          "name": "ansi-9",
+          "ratio": 5.21
+        },
+        {
+          "color": "#3A7D00",
+          "name": "ansi-10",
+          "ratio": 4.94
+        },
+        {
+          "color": "#A05A00",
+          "name": "ansi-11",
+          "ratio": 5.13
+        },
+        {
+          "color": "#0066CC",
+          "name": "ansi-12",
+          "ratio": 5.39
+        },
+        {
+          "color": "#9A3FC4",
+          "name": "ansi-13",
+          "ratio": 5.23
+        },
+        {
+          "color": "#007A7A",
+          "name": "ansi-14",
+          "ratio": 5.0
+        },
+        {
+          "color": "#3A3A3C",
+          "name": "ansi-15",
+          "ratio": 10.98
+        },
+        {
+          "color": "#1D1D1F",
+          "name": "fg",
+          "ratio": 16.28
+        }
+      ],
+      "min": 4.91
+    },
     "settings": {
       "controlFonts": {
         "#<button:submit> \"Arrow down\"": {
@@ -1117,6 +1299,97 @@
         "w": 834
       }
     },
+    "palette": {
+      "bg": "#FBFBFD",
+      "colors": [
+        {
+          "color": "#1D1D1F",
+          "name": "ansi-0",
+          "ratio": 16.28
+        },
+        {
+          "color": "#C62828",
+          "name": "ansi-1",
+          "ratio": 5.44
+        },
+        {
+          "color": "#1A7F37",
+          "name": "ansi-2",
+          "ratio": 4.91
+        },
+        {
+          "color": "#8A6100",
+          "name": "ansi-3",
+          "ratio": 5.36
+        },
+        {
+          "color": "#0055BF",
+          "name": "ansi-4",
+          "ratio": 6.66
+        },
+        {
+          "color": "#A626A4",
+          "name": "ansi-5",
+          "ratio": 5.92
+        },
+        {
+          "color": "#0E7490",
+          "name": "ansi-6",
+          "ratio": 5.18
+        },
+        {
+          "color": "#5F6368",
+          "name": "ansi-7",
+          "ratio": 5.85
+        },
+        {
+          "color": "#6E6E73",
+          "name": "ansi-8",
+          "ratio": 4.91
+        },
+        {
+          "color": "#D70015",
+          "name": "ansi-9",
+          "ratio": 5.21
+        },
+        {
+          "color": "#3A7D00",
+          "name": "ansi-10",
+          "ratio": 4.94
+        },
+        {
+          "color": "#A05A00",
+          "name": "ansi-11",
+          "ratio": 5.13
+        },
+        {
+          "color": "#0066CC",
+          "name": "ansi-12",
+          "ratio": 5.39
+        },
+        {
+          "color": "#9A3FC4",
+          "name": "ansi-13",
+          "ratio": 5.23
+        },
+        {
+          "color": "#007A7A",
+          "name": "ansi-14",
+          "ratio": 5.0
+        },
+        {
+          "color": "#3A3A3C",
+          "name": "ansi-15",
+          "ratio": 10.98
+        },
+        {
+          "color": "#1D1D1F",
+          "name": "fg",
+          "ratio": 16.28
+        }
+      ],
+      "min": 4.91
+    },
     "settings": {
       "controlFonts": {
         "#<button:submit> \"Arrow down\"": {
@@ -1531,6 +1804,97 @@
         "h": 834,
         "w": 1194
       }
+    },
+    "palette": {
+      "bg": "#FBFBFD",
+      "colors": [
+        {
+          "color": "#1D1D1F",
+          "name": "ansi-0",
+          "ratio": 16.28
+        },
+        {
+          "color": "#C62828",
+          "name": "ansi-1",
+          "ratio": 5.44
+        },
+        {
+          "color": "#1A7F37",
+          "name": "ansi-2",
+          "ratio": 4.91
+        },
+        {
+          "color": "#8A6100",
+          "name": "ansi-3",
+          "ratio": 5.36
+        },
+        {
+          "color": "#0055BF",
+          "name": "ansi-4",
+          "ratio": 6.66
+        },
+        {
+          "color": "#A626A4",
+          "name": "ansi-5",
+          "ratio": 5.92
+        },
+        {
+          "color": "#0E7490",
+          "name": "ansi-6",
+          "ratio": 5.18
+        },
+        {
+          "color": "#5F6368",
+          "name": "ansi-7",
+          "ratio": 5.85
+        },
+        {
+          "color": "#6E6E73",
+          "name": "ansi-8",
+          "ratio": 4.91
+        },
+        {
+          "color": "#D70015",
+          "name": "ansi-9",
+          "ratio": 5.21
+        },
+        {
+          "color": "#3A7D00",
+          "name": "ansi-10",
+          "ratio": 4.94
+        },
+        {
+          "color": "#A05A00",
+          "name": "ansi-11",
+          "ratio": 5.13
+        },
+        {
+          "color": "#0066CC",
+          "name": "ansi-12",
+          "ratio": 5.39
+        },
+        {
+          "color": "#9A3FC4",
+          "name": "ansi-13",
+          "ratio": 5.23
+        },
+        {
+          "color": "#007A7A",
+          "name": "ansi-14",
+          "ratio": 5.0
+        },
+        {
+          "color": "#3A3A3C",
+          "name": "ansi-15",
+          "ratio": 10.98
+        },
+        {
+          "color": "#1D1D1F",
+          "name": "fg",
+          "ratio": 16.28
+        }
+      ],
+      "min": 4.91
     },
     "settings": {
       "controlFonts": {

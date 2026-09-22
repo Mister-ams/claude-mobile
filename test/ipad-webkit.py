@@ -13,7 +13,10 @@ and writes <profile>-<screen>.png plus metrics.json to --out.
 
 GATE: exits non-zero on any console error, uncaught page error, CSP
 violation (securitypolicyviolation), or a CSP that no longer matches
-server.js. The only tolerated console error is listed by EXACT text in
+server.js. T05 adds the terminal palette: every ANSI colour (and the
+default fg) must be >= 4.5:1 (WCAG AA) on the terminal background read from
+the running client, the xterm theme must equal termPalette() (one source),
+and the grid must be opaque on that background and monospace. The only tolerated console error is listed by EXACT text in
 BENIGN_CONSOLE below -- never add a pattern there, and never add a message
 that describes a real defect.
 
@@ -23,8 +26,8 @@ deltas; deltas never fail the run, because later tasks change the UI on
 purpose.
 
 SELF-TEST: --self-test injects one fault of each gated kind (an inline script
-the CSP must refuse, a console.error, an uncaught exception) into the first
-profile. Expected exit: 1 with all three caught. Exit 2 means the gate missed
+the CSP must refuse, a console.error, an uncaught exception, a stock-yellow
+ANSI 3 below AA) into the first profile. Expected exit: 1 with all three caught. Exit 2 means the gate missed
 an injected fault -- the gate itself is broken.
 
 Windows note (D5): WebKit on Windows reports navigator.maxTouchPoints = 0 even
@@ -257,6 +260,91 @@ TERMINAL = """() => {
 }"""
 
 
+# T05: the terminal palette as the running client resolves it. termPalette()
+# is the one source both renderers use; the grid's computed styles and the
+# xterm theme are read back to prove they agree with it.
+PALETTE = """() => {
+  const p = termPalette();
+  const t = getTermTheme();
+  const g = document.querySelector('.term-wrap.active .grid-term');
+  const cs = g ? getComputedStyle(g) : null;
+  const area = getComputedStyle(document.getElementById('term-area'));
+  return {
+    bg: p.bg, fg: p.fg, ansi: p.ansi,
+    xtermAnsi: XTERM_ANSI_NAMES.map(n => t[n]),
+    xtermBg: t.background, xtermFg: t.foreground,
+    gridBg: cs ? cs.backgroundColor : null,
+    gridFg: cs ? cs.color : null,
+    gridFont: cs ? cs.fontFamily : null,
+    areaBg: area.backgroundColor,
+  };
+}"""
+
+AA = 4.5  # WCAG AA, normal text
+
+
+def parse_color(s):
+    """'#rrggbb' / '#rgb' / 'rgb(r, g, b)' / 'rgba(r, g, b, a)' -> (r, g, b, a)."""
+    s = (s or "").strip()
+    m = re.fullmatch(r"#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})", s)
+    if m:
+        h = m.group(1)
+        if len(h) == 3:
+            h = "".join(c * 2 for c in h)
+        return (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16), 1.0)
+    m = re.fullmatch(r"rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+))?\s*\)", s)
+    if m:
+        a = float(m.group(4)) if m.group(4) is not None else 1.0
+        return (round(float(m.group(1))), round(float(m.group(2))), round(float(m.group(3))), a)
+    return None
+
+
+def contrast(c1, c2):
+    def lum(c):
+        ch = []
+        for v in c[:3]:
+            v = v / 255.0
+            ch.append(v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4)
+        return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]
+    a, b = lum(c1), lum(c2)
+    return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+
+
+def check_palette(slug, pal, findings):
+    """Contrast + single-source + opacity + monospace gate. Returns a record."""
+    bg = parse_color(pal["bg"])
+    if bg is None:
+        findings.append((slug, "palette", "terminal background unreadable: %r" % pal["bg"]))
+        return {"error": "no bg"}
+    rows = []
+    for i, c in enumerate(pal["ansi"] + [pal["fg"]]):
+        name = "ansi-%d" % i if i < 16 else "fg"
+        col = parse_color(c)
+        if col is None:
+            findings.append((slug, "palette", "%s unreadable: %r" % (name, c)))
+            continue
+        # Reverse video swaps fg and bg, so the pair's ratio is the same.
+        r = round(contrast(col, bg), 2)
+        rows.append({"name": name, "color": c, "ratio": r})
+        if r < AA:
+            findings.append((slug, "contrast", "%s %s is %.2f:1 on %s (< %.1f)"
+                             % (name, c, r, pal["bg"], AA)))
+    if [parse_color(x) for x in pal["xtermAnsi"]] != [parse_color(x) for x in pal["ansi"]] \
+            or parse_color(pal["xtermBg"]) != bg or parse_color(pal["xtermFg"]) != parse_color(pal["fg"]):
+        findings.append((slug, "palette", "xterm theme does not match termPalette()"))
+    for key in ("gridBg", "areaBg"):
+        c = parse_color(pal[key])
+        if c is None or c[:3] != bg[:3] or c[3] < 1.0:
+            findings.append((slug, "palette", "%s %r is not the opaque terminal background %s"
+                             % (key, pal[key], pal["bg"])))
+    gfg = parse_color(pal["gridFg"])
+    if gfg is None or gfg[:3] != parse_color(pal["fg"])[:3]:
+        findings.append((slug, "palette", "grid fg %r != terminal fg %s" % (pal["gridFg"], pal["fg"])))
+    if "monospace" not in (pal["gridFont"] or ""):
+        findings.append((slug, "palette", "grid font is not monospace: %r" % pal["gridFont"]))
+    return {"bg": pal["bg"], "min": min((r["ratio"] for r in rows), default=None), "colors": rows}
+
+
 def flatten(d, prefix=""):
     out = {}
     if isinstance(d, dict):
@@ -369,6 +457,16 @@ def main():
                 pngs.append(shot)
                 entry["app"] = app
 
+                # -- terminal palette (T05): contrast, one source, opaque ------
+                if self_test and idx == 0:
+                    # A stock-yellow ANSI 3 (1.6:1 on the pale terminal) must fail.
+                    page.evaluate("""() => { termPaletteCache = null;
+                      document.documentElement.style.setProperty('--ansi-3', '#FFCC00'); }""")
+                entry["palette"] = check_palette(slug, page.evaluate(PALETTE), findings)
+                if self_test and idx == 0:
+                    page.evaluate("""() => { termPaletteCache = null;
+                      document.documentElement.style.removeProperty('--ansi-3'); }""")
+
                 # -- settings (opened by a click: mouse on Windows WebKit) -------
                 page.click("#settings-btn")
                 page.wait_for_timeout(400)
@@ -440,6 +538,12 @@ def main():
     print("control font-family (visible buttons/inputs/textareas, all profiles):")
     for fam, els in sorted(fams.items()):
         print("   %-60s %s" % (fam, ", ".join(sorted(els))))
+    pal = metrics[PROFILES[-1][0]].get("palette", {})
+    print("\nterminal palette on %s (WCAG AA >= %.1f; reverse video has the same ratio):"
+          % (pal.get("bg"), AA))
+    for r in pal.get("colors", []):
+        print("   %-8s %-9s %5.2f:1%s" % (r["name"], r["color"], r["ratio"],
+                                          "" if r["ratio"] >= AA else "  < AA"))
     print("\nauth screen text (%s): %s"
           % (PROFILES[0][0], " | ".join(metrics[PROFILES[0][0]]["auth"]["visibleText"])))
 
@@ -461,12 +565,14 @@ def main():
         for s, kind, text in findings:
             print("  [%s] %s: %s" % (s, kind, text))
     else:
-        print("GATE PASSED: no console errors, page errors or CSP violations; CSP matches server.js")
+        print("GATE PASSED: no console errors, page errors or CSP violations; CSP matches server.js;"
+              " terminal palette AA, single-source, opaque, monospace")
 
     if self_test:
         kinds = {k for _, k, t in findings
-                 if SELF_TEST_MARK in t or (k == "csp-violation" and "script-src" in t)}
-        want = {"csp-violation", "console-error", "pageerror"}
+                 if SELF_TEST_MARK in t or (k == "csp-violation" and "script-src" in t)
+                 or (k == "contrast" and "#FFCC00" in t)}
+        want = {"csp-violation", "console-error", "pageerror", "contrast"}
         missed = want - kinds
         if missed:
             print("SELF-TEST BROKEN: gate did not catch %s" % sorted(missed))

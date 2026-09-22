@@ -782,18 +782,42 @@ async function loadProjects() {
   }
 }
 
-// D1: light only -- the dark palette and the theme toggle are gone.
-// T05 replaces this with the one shared ANSI palette.
-function getTermTheme() {
-  return {
-    background: '#f6f7f9', foreground: '#1c2127', cursor: '#2d72d2',
-    selectionBackground: '#d6e4f7',
-    black: '#1c2127', red: '#cd4246', green: '#238551', yellow: '#c87619',
-    blue: '#2d72d2', magenta: '#9d3f9d', cyan: '#147eb3', white: '#8a9ba8',
-    brightBlack: '#5c7080', brightRed: '#e76a6e', brightGreen: '#32a467',
-    brightYellow: '#ec9a3c', brightBlue: '#4c90f0', brightMagenta: '#bd6bbd',
-    brightCyan: '#3fa6da', brightWhite: '#1c2127'
+// T05: ONE terminal palette. The colours live in style.css's :root token
+// block (--term-*, --ansi-0..15, --font-mono) and nowhere else; this reads
+// them once and both renderers -- the grid (sgrColorToHex/applySgr) and the
+// xterm fallback (getTermTheme) -- take them from here, so JS and CSS cannot
+// drift. The stylesheet is render-blocking in <head> and app.js loads at the
+// end of <body>, so the computed values exist on first call.
+let termPaletteCache = null;
+function termPalette() {
+  if (termPaletteCache) return termPaletteCache;
+  const cs = getComputedStyle(document.documentElement);
+  const v = name => cs.getPropertyValue(name).trim();
+  const ansi = [];
+  for (let i = 0; i < 16; i++) ansi.push(v('--ansi-' + i));
+  termPaletteCache = {
+    bg: v('--term-bg'), fg: v('--term-fg'),
+    cursor: v('--term-cursor'), selection: v('--term-selection'),
+    fontMono: v('--font-mono'),
+    ansi,
   };
+  return termPaletteCache;
+}
+
+const XTERM_ANSI_NAMES = [
+  'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
+  'brightBlack', 'brightRed', 'brightGreen', 'brightYellow',
+  'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite'
+];
+
+function getTermTheme() {
+  const p = termPalette();
+  const theme = {
+    background: p.bg, foreground: p.fg, cursor: p.cursor,
+    selectionBackground: p.selection,
+  };
+  XTERM_ANSI_NAMES.forEach((name, i) => { theme[name] = p.ansi[i]; });
+  return theme;
 }
 
 // T08 of W3 (render-pipeline): shared rAF scheduler. scheduleOnce(fn) runs
@@ -877,15 +901,9 @@ function scheduleTerminalFlush() {
 // produces the cell grid; this side only renders styled cells.
 //
 // Colour encoding mirrors server cellToSgr:
-//   0..15            = ANSI palette (matches xterm dark theme)
-//   16..255          = extended palette, deferred to W7 polish
+//   0..15            = ANSI palette: termPalette().ansi (style.css --ansi-N)
+//   16..255          = xterm cube + grayscale, computed (not themed)
 //   0x1000000+rrggbb = 24-bit RGB
-const ANSI_PALETTE = [
-  '#111418', '#cd4246', '#238551', '#c87619',
-  '#2d72d2', '#9d3f9d', '#147eb3', '#abb3bf',
-  '#5f6b7c', '#e76a6e', '#32a467', '#ec9a3c',
-  '#4c90f0', '#bd6bbd', '#3fa6da', '#f6f7f9'
-];
 // Standard xterm 256-color cube levels for indexes 16..231 (6x6x6).
 const XTERM_CUBE_LEVELS = [0, 95, 135, 175, 215, 255];
 const SGR_RGB_FLAG = 0x1000000;
@@ -896,7 +914,7 @@ function hex2(n) { return n.toString(16).padStart(2, '0'); }
 
 function sgrColorToHex(value) {
   if (value >= SGR_RGB_FLAG) return '#' + (value & 0xFFFFFF).toString(16).padStart(6, '0');
-  if (value >= 0 && value < 16) return ANSI_PALETTE[value];
+  if (value >= 0 && value < 16) return termPalette().ansi[value];
   if (value >= 16 && value < 232) {
     // 6x6x6 color cube: index = 16 + 36*r + 6*g + b
     const i = value - 16;
@@ -920,8 +938,8 @@ function applySgr(span, sgr) {
   // SGR 7: reverse swaps fg/bg, defaults filled from theme so the swap is
   // visible even when both sides were "default".
   if (sgr.reverse) {
-    const newFg = bg !== null ? bg : 'var(--bg, #111418)';
-    const newBg = fg !== null ? fg : 'var(--text, #f6f7f9)';
+    const newFg = bg !== null ? bg : termPalette().bg;
+    const newBg = fg !== null ? fg : termPalette().fg;
     fg = newFg;
     bg = newBg;
   }
@@ -1424,7 +1442,7 @@ function mergeFrames(frames) {
 function makeTerm() {
   const term = new Terminal({
     fontSize: 13,
-    fontFamily: "'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace",
+    fontFamily: termPalette().fontMono,
     lineHeight: 1.286,
     theme: getTermTheme(),
     scrollback: 10000,
