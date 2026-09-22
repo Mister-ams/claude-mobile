@@ -1095,8 +1095,68 @@ function detectAttention(sessionId) {
 function getSessionList() {
   return Array.from(sessions.values()).map(s => ({
     id: s.id, name: s.name, dir: s.dir, attention: s.attention,
-    viewers: s.clients.size
+    viewers: s.clients.size,
+    // D7 (T06): herdr's view of the agent -- null on a backend without a feed.
+    agent: s.agent || null,
   }));
+}
+
+// --- Agent status from the backend (D7, T06) ---------------------
+// On herdr, attention is DERIVED from herdr's agent status and the regex
+// detector above does not run: blocked -> 'permission', a finish nobody has
+// looked at yet ('done') -> 'ready', anything else -> none. dtach has no feed
+// and keeps the detector.
+const AGENT_STATUS_FROM_BACKEND = typeof backend.agentFeed === 'function';
+const AGENT_BROADCAST_DEBOUNCE_MS = 50;
+const AGENT_FEED_RETRY_MS = 5000;
+let agentBroadcastTimer = null;
+
+function scheduleSessionsBroadcast() {
+  if (agentBroadcastTimer) return;
+  agentBroadcastTimer = setTimeout(() => { agentBroadcastTimer = null; broadcastSessions(); },
+    AGENT_BROADCAST_DEBOUNCE_MS);
+}
+
+function attentionFromAgent(agent) {
+  if (!agent) return null;
+  if (agent.status === 'blocked') return 'permission';
+  if (agent.status === 'done') return 'ready';
+  return null;
+}
+
+function startAgentFeed(session) {
+  if (!AGENT_STATUS_FROM_BACKEND || session.agentFeed) return;
+  try {
+    session.agentFeed = backend.agentFeed(session.id, (view) => {
+      if (sessions.get(session.id) !== session) return;
+      session.agent = view;
+      const reason = attentionFromAgent(view);
+      if (reason !== session.attention) {
+        session.attention = reason;
+        if (reason) broadcastAttention(session.id, reason);
+      }
+      scheduleSessionsBroadcast();
+    });
+    session.agentFeed.start();
+    session.agentFeedRetry = null;
+  } catch (e) {
+    // herdr could not be asked for the socket: retry while the session lives.
+    audit('WARN', `agent feed for ${backend.label(session.id)} not started: ${e.message}`);
+    session.agentFeedRetry = setTimeout(() => {
+      session.agentFeedRetry = null;
+      if (sessions.get(session.id) === session) startAgentFeed(session);
+    }, AGENT_FEED_RETRY_MS);
+  }
+}
+
+function stopAgentFeed(session) {
+  if (session.agentFeedRetry) { clearTimeout(session.agentFeedRetry); session.agentFeedRetry = null; }
+  if (session.agentFeed) { session.agentFeed.stop(); session.agentFeed = null; }
+}
+
+// The operator looked at / touched the session: a finish is no longer news.
+function markAgentSeen(session) {
+  if (session && session.agentFeed) session.agentFeed.markSeen();
 }
 
 function broadcastAll(obj) {
@@ -1377,10 +1437,14 @@ function wireSessionProc(session) {
       if (code >= 0xDC00 && code <= 0xDFFF) start++; // low surrogate without high
       session.scrollback = session.scrollback.slice(start);
     }
-    updateRecentOutput(id, data);
-
-    // Clear attention when new output arrives (Claude is responding)
-    if (session.attention) { session.attention = null; broadcastSessions(); }
+    // On herdr, attention is herdr's agent status (D7): output -- which the
+    // herdr client produces constantly, redraws included -- neither clears it
+    // nor feeds the regex detector.
+    if (!AGENT_STATUS_FROM_BACKEND) {
+      updateRecentOutput(id, data);
+      // Clear attention when new output arrives (Claude is responding)
+      if (session.attention) { session.attention = null; broadcastSessions(); }
+    }
 
     // Coalesce outbound output (D1, T02). Flush on idle, byte cap, or
     // max-age -- whichever fires first.
@@ -1400,6 +1464,8 @@ function wireSessionProc(session) {
 
     // Debounce: wait for output to settle, then check accumulated buffer.
     // 5s avoids false triggers during Claude's mid-response pauses.
+    // dtach only -- on herdr the regex never decides attention (D7).
+    if (AGENT_STATUS_FROM_BACKEND) return;
     if (session.attentionTimer) clearTimeout(session.attentionTimer);
     session.attentionTimer = setTimeout(() => {
       const reason = detectAttention(id);
@@ -1434,6 +1500,7 @@ function wireSessionProc(session) {
           audit('SESSION', `Reattached: ${backend.label(id)}`);
         } catch (e) {
           audit('ERROR', `Reattach failed: ${e.message}`);
+          stopAgentFeed(session);
           sessions.delete(id);
           recentOutput.delete(id);
           broadcastSessions();
@@ -1445,6 +1512,7 @@ function wireSessionProc(session) {
       if (session.outIdleTimer) clearTimeout(session.outIdleTimer);
       if (session.outMaxAgeTimer) clearTimeout(session.outMaxAgeTimer);
       disposeHeadlessTerminal(session);
+      stopAgentFeed(session);
       recentOutput.delete(id);
       sessions.delete(id);
       broadcastSessions();
@@ -1483,6 +1551,7 @@ async function createSession(name, dir, cols, rows) {
 
   wireSessionProc(session);
   sessions.set(id, session);
+  startAgentFeed(session);
   audit('SESSION', `Created: "${name}" in ${dir} (${backend.kind}: ${backend.label(id)})`);
   saveSessionMeta();
   return session;
@@ -1523,6 +1592,7 @@ function recoverSessions() {
 
       wireSessionProc(session);
       sessions.set(idNum, session);
+      startAgentFeed(session);
       if (idNum >= nextId) nextId = idNum + 1;
       console.log(`  Recovered: "${name}" (${metaKey})`);
     } catch (e) {
@@ -1795,6 +1865,9 @@ wss.on('connection', (ws, req) => {
           audit('SCROLLBACK', `sending ${targetSession.scrollback.length} bytes from buffer`);
           secureSend(ws, { type: 'scrollback', session: targetSession.id, data: targetSession.scrollback });
         }
+        // Viewing a session is what clears 'done' (D7). A blocked session
+        // stays blocked -- looking at a question does not answer it.
+        markAgentSeen(targetSession);
         if (targetSession.attention) {
           secureSend(ws, { type: 'attention', session: targetSession.id, reason: targetSession.attention });
         }
@@ -1820,7 +1893,10 @@ wss.on('connection', (ws, req) => {
         try { activeSession.proc.write(msg.data); } catch (e) {
           audit('ERROR', `pty write: ${e.message}`);
         }
-        if (activeSession.attention) { activeSession.attention = null; broadcastSessions(); }
+        // herdr: typing marks the session seen; blocked clears only when herdr
+        // says so. dtach: the old rule, any input clears attention.
+        if (AGENT_STATUS_FROM_BACKEND) markAgentSeen(activeSession);
+        else if (activeSession.attention) { activeSession.attention = null; broadcastSessions(); }
         break;
       }
 
@@ -1858,7 +1934,8 @@ wss.on('connection', (ws, req) => {
         // trail under them would cost more than it records.
         try { activeSession.proc.write(seq); }
         catch (e) { audit('ERROR', `pty mouse write: ${e.message}`); }
-        if (activeSession.attention) { activeSession.attention = null; broadcastSessions(); }
+        if (AGENT_STATUS_FROM_BACKEND) markAgentSeen(activeSession);
+        else if (activeSession.attention) { activeSession.attention = null; broadcastSessions(); }
         break;
       }
 
@@ -1913,6 +1990,7 @@ wss.on('connection', (ws, req) => {
         targetSession.proc = null; // prevent onExit from double-broadcasting
         backend.closeProc(proc);
         if (targetSession.attentionTimer) clearTimeout(targetSession.attentionTimer);
+        stopAgentFeed(targetSession);
         recentOutput.delete(msg.session);
         sessions.delete(msg.session);
         if (ws.currentSession === msg.session) ws.currentSession = null;

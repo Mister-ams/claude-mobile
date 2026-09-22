@@ -42,6 +42,7 @@ import secrets
 import struct
 import subprocess
 import sys
+import threading
 import time
 import traceback
 import urllib.request
@@ -166,6 +167,67 @@ class Herdr:
         return focused, (layouts[0]["panes"] if layouts else [])
 
 
+class HerdrEventTap:
+    """The harness's OWN events.subscribe on one throwaway session (T06).
+
+    It exists to timestamp when herdr REPORTED a status change, so the client's
+    receipt can be measured against it rather than against when the harness
+    happened to ask. Same wire shape as lib/herdr-events.js: newline-delimited
+    JSON over the named pipe \\\\.\\pipe\\<socket_path>. The reader is a daemon
+    thread that ends when herdr closes the pipe; it is never closed from here,
+    because closing a synchronous Windows handle under a blocked ReadFile can
+    hang the closer.
+    """
+
+    def __init__(self, session, prefix, pane_ids):
+        if not re.match(r"^%s-\d+$" % re.escape(prefix), session) or LIVE_SESSION_RE.match(session):
+            raise RuntimeError("refusing herdr session %r (not a %s-N throwaway)" % (session, prefix))
+        rec = next((s for s in herdr_sessions() if s.get("name") == session and s.get("running")), None)
+        if not rec:
+            raise RuntimeError("herdr session %s not running" % session)
+        self.f = open("\\\\.\\pipe\\" + rec["socket_path"], "r+b", buffering=0)
+        req = {"id": "harness:subscribe", "method": "events.subscribe", "params": {"subscriptions": [
+            {"type": "pane.agent_status_changed", "pane_id": p} for p in pane_ids]}}
+        self.f.write((json.dumps(req) + "\n").encode("utf-8"))
+        self.events = []        # (time.time(), status, pane_id)
+        self.started = False
+        self.closed = False
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        buf = b""
+        while True:
+            try:
+                chunk = self.f.read(65536)
+            except OSError:
+                break
+            if not chunk:
+                break
+            buf += chunk
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                t = time.time()
+                try:
+                    msg = json.loads(line.decode("utf-8"))
+                except ValueError:
+                    continue
+                if (msg.get("result") or {}).get("type") == "subscription_started":
+                    self.started = True
+                elif msg.get("event") == "pane.agent_status_changed":
+                    d = msg.get("data") or {}
+                    self.events.append((t, d.get("agent_status"), d.get("pane_id")))
+        self.closed = True
+
+    def wait_for(self, status, start=0, timeout_s=60):
+        end = time.time() + timeout_s
+        while time.time() < end:
+            for i in range(start, len(self.events)):
+                if self.events[i][1] == status:
+                    return i
+            time.sleep(0.05)
+        return None
+
+
 # ── page probes (client globals: gridTerms, activeSession, sessionList, ws) ──
 
 GRID_STATE = """(sel) => {
@@ -205,6 +267,30 @@ GRID_DIMS = """() => {
     converged: !!want && want.cols === g.cols && want.rows === g.rows,
     viewport: innerWidth + 'x' + innerHeight,
   };
+}"""
+
+# T06: record every change to one session's agent status AS THE PAGE SEES IT,
+# stamped with the page clock (same machine clock as the harness). A 20ms poll
+# of the client's own sessionList, so the stamp is at most 20ms late.
+AGENT_RECORDER = """(sid) => {
+  if (window.__agentRec) clearInterval(window.__agentRec);
+  window.__agentLog = window.__agentLog || [];
+  let last = null;
+  window.__agentRec = setInterval(() => {
+    const s = (typeof sessionList !== 'undefined' && sessionList) ? sessionList.find(x => x.id === sid) : null;
+    const a = s ? s.agent : null;
+    const e = { status: a ? a.status : null, herdr: a ? a.herdrStatus : null, feed: a ? a.feed : null,
+                attention: s ? s.attention : null, reconnects: a ? a.reconnects : null,
+                agent: a ? a.agent : null, present: !!s };
+    const key = JSON.stringify(e);
+    if (key !== last) { last = key; e.t = Date.now() / 1000; window.__agentLog.push(e); }
+  }, 20);
+  return true;
+}"""
+
+AGENT_OF = """(sid) => {
+  const s = (typeof sessionList !== 'undefined' && sessionList) ? sessionList.find(x => x.id === sid) : null;
+  return s ? { attention: s.attention, agent: s.agent } : null;
 }"""
 
 # herdr cell (0-based col/row of the pane rect) -> page pixel, from the page's
@@ -270,10 +356,14 @@ def main():
     ap.add_argument("--out", default=os.path.join(os.environ.get("TEMP", "/tmp"),
                                                   "cm-ipad-live-%d" % int(time.time())))
     ap.add_argument("--headed", action="store_true")
+    ap.add_argument("--audit-log", default=None,
+                    help="throwaway audit log (default: %%TEMP%%/cm-sim-<port>/audit.log, as sim:up writes it)")
     ap.add_argument("--known-defects", default="",
                     help="comma-separated step names failing on a tracked defect (e.g. send-pointer)")
     args = ap.parse_args()
     known = {s.strip() for s in args.known_defects.split(",") if s.strip()}
+    if not args.audit_log:
+        args.audit_log = os.path.join(os.environ.get("TEMP", "/tmp"), "cm-sim-%d" % args.port, "audit.log")
 
     if args.port == args.live_port:
         print("refusing: --port %d is the live instance (D6)" % args.port)
@@ -367,6 +457,8 @@ def main():
             st["live_before"] = get_health(args.live_port, timeout=10)
             st["live_sessions_before"] = live_session_view(herdr_sessions())
             st["t_before"] = time.time()
+            # Only audit lines THIS run writes count (the log outlives sim:down).
+            st["audit_offset"] = os.path.getsize(args.audit_log) if os.path.exists(args.audit_log) else 0
             h = get_health(args.port)
             st["throwaway_health"] = h
             ctx, pg = new_page()
@@ -424,6 +516,132 @@ def main():
                 "active=%s sessions=%s rows painted=%d" % (
                     sid, created, marker, g2["active"], g2["sessions"], g2["nonEmptyRows"]))
         run.step("existing-screen", s_existing, needs=("sign-in",))
+
+        # -- 3b. herdr agent status reaches the client (T06, D7) -----------
+        # A REAL transition, provoked deterministically: Claude is asked to use
+        # its AskUserQuestion tool, which herdr classifies as `blocked`
+        # (working -> blocked); the harness answers it through herdr
+        # (blocked -> working -> idle). A permission prompt would be the more
+        # obvious choice but is not deterministic here -- Claude may run in auto
+        # mode and never ask. herdr's own report is timestamped by the
+        # harness's own subscription (HerdrEventTap); the client's receipt by
+        # the page recorder. Every transition the page shows must land within
+        # 2s of herdr reporting it.
+        def page_log():
+            return run.page.evaluate("() => window.__agentLog || []")
+
+        def wait_page(pred, start=0, timeout_s=10):
+            end = time.time() + timeout_s
+            while time.time() < end:
+                log = page_log()
+                for i in range(start, len(log)):
+                    if pred(log[i]):
+                        return i, log[i]
+                run.page.wait_for_timeout(50)
+            return None, None
+
+        def latencies(tap, first_event, page_start):
+            """Pair each herdr event with the first later page entry showing it."""
+            out, j = [], page_start
+            log = page_log()
+            for (t_h, status, pane) in tap.events[first_event:]:
+                k = next((i for i in range(j, len(log))
+                          if log[i]["herdr"] == status and log[i]["t"] >= t_h - 0.1), None)
+                if k is None:
+                    out.append((status, None))
+                    continue
+                out.append((status, round(log[k]["t"] - t_h, 3)))
+                j = k
+            return out
+
+        def claude_agent(h):
+            agents = json.loads(h.cli("agent", "list"))["result"]["agents"]
+            return next((a for a in agents if a.get("agent") == "claude"), None)
+
+        def s_agent_status():
+            sid = st["sid"]
+            name = "%s-%s" % (args.prefix, sid)
+            h = Herdr(name, args.prefix, herdr_config)
+            st["herdr_agent"] = h
+            # 1. the fields reach the client
+            a0 = run.page.evaluate(AGENT_OF, sid)
+            agent = (a0 or {}).get("agent") or {}
+            missing = [k for k in ("status", "herdrStatus", "seen", "cwd", "title", "worktree", "feed")
+                       if k not in agent]
+            if missing:
+                return False, "client session %s agent lacks %s: %s" % (sid, missing, a0)
+            if agent.get("feed") != "events":
+                return False, "feed is %r, not events -- the subscription is not live" % agent.get("feed")
+            # 2. Claude settled (not mid-start)
+            end = time.time() + 90
+            ca = claude_agent(h)
+            while time.time() < end and (not ca or ca["agent_status"] in ("working", "unknown")):
+                time.sleep(0.5)
+                ca = claude_agent(h)
+            if not ca:
+                return False, "no claude agent in %s after 90s" % name
+            pane = ca["pane_id"]
+            st["claude_pane"] = pane
+            run.page.evaluate(AGENT_RECORDER, sid)
+            tap = HerdrEventTap(name, args.prefix, [pane])
+            end = time.time() + 5
+            while time.time() < end and not tap.started:
+                time.sleep(0.05)
+            if not tap.started:
+                return False, "harness subscription to %s never started" % name
+            page0 = len(page_log())
+            notes = []
+            if ca["agent_status"] == "blocked":
+                txt = h.cli("pane", "read", pane, "--source", "visible")
+                if not re.search(r"trust this folder", txt, re.I):
+                    return False, "claude already blocked on an unknown prompt; not answering it"
+                # Fresh work dir: the folder-trust prompt IS the blocked state.
+                notes.append("started blocked on folder-trust; accepted it")
+                h.cli("agent", "send-keys", pane, "down", "enter")
+                if tap.wait_for("idle", 0, 60) is None:
+                    return False, "trust accepted but herdr never reported idle: %s" % tap.events
+            ev0 = len(tap.events)
+            h.cli("agent", "prompt", pane,
+                  "Use the AskUserQuestion tool to ask me one question: pick A or B. Do nothing else.")
+            ib = tap.wait_for("blocked", ev0, 90)
+            if ib is None:
+                return False, "herdr never reported blocked: %s" % tap.events[ev0:]
+            _, pb = wait_page(lambda e: e["herdr"] == "blocked", page0, 5)
+            if not pb or pb["attention"] != "permission":
+                return False, "client never showed blocked+permission: %s" % page_log()[page0:]
+            h.cli("agent", "send-keys", pane, "enter")
+            ii = tap.wait_for("idle", ib + 1, 90)
+            if ii is None:
+                return False, "answered, but herdr never reported idle: %s" % tap.events[ib:]
+            k, pd = wait_page(lambda e: e["herdr"] == "idle" and e["status"] == "done", page0, 5)
+            if pd is None:
+                return False, "client never showed the unseen finish as done: %s" % page_log()[page0:]
+            done_attn = pd["attention"]
+            lat = latencies(tap, ev0, page0)
+            # 3. viewing the session clears done (the client re-sends connect)
+            run.page.evaluate("(sid) => switchTo(sid)", sid)
+            _, pv = wait_page(lambda e: e["status"] == "idle" and e["attention"] is None, k + 1, 5)
+            # 4. the regex detector did not run for this herdr session
+            attn_miss = None
+            if os.path.exists(args.audit_log):
+                with open(args.audit_log, "rb") as f:
+                    f.seek(st.get("audit_offset", 0))
+                    attn_miss = f.read().decode("utf-8", "replace").count("[ATTN-MISS]")
+            measured = [l for (_, l) in lat if l is not None]
+            worst = max(measured) if measured else None
+            st["agent_latency"] = lat
+            ok = (worst is not None and worst <= 2.0
+                  and all(l is not None for (s, l) in lat if s in ("blocked", "idle"))
+                  and done_attn == "ready" and pv is not None and attn_miss == 0)
+            return ok, ("%sfields %s; herdr %s -> client latency %s (worst %.3fs); blocked showed "
+                        "attention=permission; finish showed done+attention=%s; after view: %s; "
+                        "ATTN-MISS lines in audit=%s; cwd=%r title=%r worktree=%r" % (
+                            ("; ".join(notes) + "; ") if notes else "",
+                            sorted(agent.keys()), [s for (_, s, _) in tap.events[ev0:]],
+                            lat, worst if worst is not None else -1, done_attn,
+                            "idle/no attention" if pv else "STILL done", attn_miss,
+                            agent.get("cwd"), agent.get("title"), agent.get("worktree")))
+        run.step("agent-status", s_agent_status, needs=("existing-screen",))
 
         # ── 4. split the throwaway pane; a tap moves herdr focus ──────────
         def s_tap():
@@ -580,6 +798,43 @@ def main():
                     ok1, fresh, g1["active"], g1["nonEmptyRows"], g2["active"], g2["sessions"],
                     g2["nonEmptyRows"], len(panes)))
         run.step("reconnect", s_reconnect, needs=("existing-screen",))
+
+        # -- 8b. herdr restart: the status feed resumes (T06) --------------
+        # Runs the REAL lib/herdr-events.js feed against a REAL herdr server
+        # for a separate throwaway session (<prefix>-90), stops and restarts
+        # that server, and requires the feed to go down and come back on a new
+        # subscription -- then starts Claude in the restored pane and requires
+        # that agent to arrive through the resumed subscription.
+        #
+        # Why not restart <prefix>-0 under the client: on herdr 0.8.2/Windows a
+        # server stop kills the pane processes (no live handoff), the attached
+        # pty client exits, and server.js onExit -> backend.state() reads the
+        # stopped record as 'stale' and DELETES it (heal-on-read). Measured on
+        # the first run of this step: audit "Stopped herdr session removed:
+        # cmsim-0", the session left the client, and the relaunch lost the
+        # race. That is session lifecycle, not the feed; see the T06 report.
+        def s_herdr_restart():
+            name = "%s-90" % args.prefix
+            r = subprocess.run(["node", os.path.join(HERE, "herdr-events-live.js"), "--session", name,
+                                "--prefix", args.prefix, "--config", herdr_config,
+                                "--cwd", os.path.join(os.path.dirname(args.audit_log), "work"),
+                                "--start-claude"],
+                               capture_output=True, text=True, timeout=180)
+            out = (r.stdout or "").strip().splitlines()
+            try:
+                ev = json.loads(out[-1])
+            except (ValueError, IndexError):
+                return False, "driver gave no JSON (exit %s): %s" % (r.returncode, (r.stderr or "")[-300:])
+            return r.returncode == 0 and ev.get("ok") is True, (
+                "%s: feed %s -> %s during restart (server down %sms) -> resumed=%s %sms after herdr was "
+                "back, reconnects=%s; claude started after restart reached the feed=%s in %sms %s; "
+                "transitions %s; leftover session=%s%s" % (
+                    name, ev.get("before"), (ev.get("duringRestart") or {}).get("feed"),
+                    ev.get("serverDownMs"), ev.get("resumed"), ev.get("resumeAfterServerUpMs"),
+                    ev.get("reconnects"), ev.get("agentAfterRestart"), ev.get("agentDetectMs"),
+                    ev.get("agentView"), ev.get("transitions"), ev.get("leftover"),
+                    (" ERROR " + ev["error"]) if ev.get("error") else ""))
+        run.step("herdr-restart", s_herdr_restart, needs=("live-before",))
 
         # ── 9. after-snapshot of the LIVE instance ────────────────────────
         def s_after():
