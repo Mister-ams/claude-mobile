@@ -32,8 +32,9 @@
     <button class="auth-primary" id="passkey-btn"
             aria-label="Login with Face ID">Login with Face ID</button>
 
+    <!-- The instruction line is #auth-label alone; app.js sets it per mode.
+         A second static line here duplicated it on TOTP-only / fallback. -->
     <div id="totp-section">
-      <p class="sub">Enter verification code</p>
       <input type="tel" id="totp-input" class="totp-input" maxlength="6" placeholder="000000"
              autocapitalize="off" autocomplete="one-time-code" aria-label="TOTP verification code">
       <button class="auth-btn" id="auth-submit-btn">Verify</button>
