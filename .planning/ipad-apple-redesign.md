@@ -16,6 +16,7 @@ Appetite: L. No-gos: dark app chrome or a theme toggle, native app, phone-layout
 - D8 2026-09-22 Shortcuts mirror herdr's defaults: ctrl+b prefix, n/p/1-9 to switch, a next-needs-attention jump, a filterable ? overlay; plus a Cmd-K switcher for the iPad hardware keyboard.
 - D9 2026-09-22 GPU work starts with a measured probe; the renderer decision follows the numbers.
 - D10 2026-09-22 Any CSP change lands in server.js and test/static-server.js together.
+- D11 2026-09-22 Keep the DOM grid renderer (T10: grid frame p95 33-36ms = xterm+WebGL 33ms at the WebKit floor, snapshots 2x faster; xterm as shipped runs on Canvas at p50 47ms because app.js calls onContextLost, not onContextLoss). T11 makes the grid compositor-friendly and fixes the WebGL fallback; a canvas grid renderer only if a real-iPad run shows paint-bound frames.
 
 ## Tasks
 - [x] T01 WebKit iPad static harness with a screenshot baseline
@@ -49,7 +50,7 @@ Appetite: L. No-gos: dark app chrome or a theme toggle, native app, phone-layout
   risk: high
 - [ ] T07 herdr-style sessions side pane
   files: public/index.html, public/style.css, public/app.js
-  check: one row per session with state, name, cwd, branch and title; priority sort (blocked, done, working, idle); done clears on view; pinned in landscape, slide-over in portrait; targets >= 44pt; terminal area not smaller than today
+  check: one row per session with state, name, cwd, branch and title; rows update by diff, not innerHTML rebuilds; priority sort (blocked, done, working, idle); done clears on view; pinned in landscape, slide-over in portrait; targets >= 44pt; terminal area not smaller than today
   after: T04, T06
   risk: med
 - [ ] T08 Keyboard shortcuts and switcher
@@ -62,15 +63,15 @@ Appetite: L. No-gos: dark app chrome or a theme toggle, native app, phone-layout
   check: settings as a glass sheet with iOS switches; input bar and chips restyled; a pointer click on Send works in hwkb mode (live step send-pointer passes, removed from known defects); setup.html scrolls; test/t04a-inline-handlers-verify.py no longer clicks the deleted theme toggle; no `transition: all`; animations touch only transform/opacity; prefers-reduced-motion disables them (harness asserts)
   after: T07
   risk: med
-- [ ] T10 Probe: renderer cost in WebKit
+- [x] T10 Probe: renderer cost in WebKit
   files: test/render-probe.py
   check: frame time p50/p95, forced layouts per frame, snapshot apply time for DOM grid vs xterm+WebGL on one synthetic stream at iPad Pro 11; chosen path recorded in Decisions
   after: T01
   risk: low
 - [ ] T11 GPU terminal rendering and layout-thrash fixes
   files: public/app.js, public/style.css
-  check: the T10 path ships; cursor by transform; snapshots in rAF; switcher diffs, not innerHTML rebuilds; T10 re-run shows p95 frame time and forced layouts down; tap + drag geometry still passes T02
-  after: T10, T07
+  check: D11 ships; cursor by transform; snapshots in rAF; contain on the grid; xterm WebGL fallback engages (onContextLoss); T10 re-run shows p95 frame time and forced layouts down; tap + drag geometry still passes T02
+  after: T10
   risk: high
 - [ ] T12 Full live run and the review pack
   files: package.json, .planning/ipad-apple-redesign.md
