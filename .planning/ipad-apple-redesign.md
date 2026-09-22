@@ -27,7 +27,7 @@ Appetite: L. No-gos: dark app chrome or a theme toggle, native app, phone-layout
   check: own worktree install (no node_modules junction), own TOTP and herdr prefix; sign-in, existing screen shown, tap moves pane focus, split drag resizes, typed echo, rotate, reconnect; teardown runs herdr session stop+delete; 3456 /health and cm-0 unchanged before vs after
   after: T01
   risk: high
-- [ ] T03 Login screen defects
+- [x] T03 Login screen defects
   files: public/index.html, public/app.js, public/style.css
   check: one instruction line on the TOTP screen; controls render sans-serif in WebKit; screenshot diff reviewed
   after: T01
