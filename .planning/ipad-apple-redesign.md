@@ -18,7 +18,7 @@ Appetite: L. No-gos: dark app chrome or a theme toggle, native app, phone-layout
 - D10 2026-09-22 Any CSP change lands in server.js and test/static-server.js together.
 
 ## Tasks
-- [ ] T01 WebKit iPad static harness with a screenshot baseline
+- [x] T01 WebKit iPad static harness with a screenshot baseline
   files: test/ipad-webkit.py, test/static-server.js
   check: WebKit at iPad Pro 11 portrait+landscape and iPad (gen 11); PNGs + metrics; exits non-zero on a console error or CSP violation; watched failing once
   risk: low
