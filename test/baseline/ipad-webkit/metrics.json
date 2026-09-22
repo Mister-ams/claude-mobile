@@ -1,0 +1,1775 @@
+{
+  "benignConsoleAllowlist": [
+    "Viewport argument key \"interactive-widget\" not recognized and ignored."
+  ],
+  "cspParity": {
+    "match": true,
+    "served": "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    "serverJs": "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+  },
+  "ipad-gen-11": {
+    "app": {
+      "bars": {
+        "header": {
+          "h": 51,
+          "w": 656
+        },
+        "input-bar": {
+          "h": 25,
+          "w": 656
+        },
+        "input-wrap": {
+          "h": 25,
+          "w": 656
+        },
+        "qbar": {
+          "h": 37,
+          "w": 656
+        },
+        "tab-switcher": "hidden",
+        "tabs": {
+          "h": 69,
+          "w": 656
+        }
+      },
+      "controlFonts": {
+        "#<button:submit> \"Arrow down\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#send<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#srv-restart<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#theme-toggle<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#totp-input<input:tel>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        }
+      },
+      "layout": "flex",
+      "tapTargets": {
+        "small": [
+          {
+            "el": "#sname<input:text>",
+            "h": 23,
+            "w": 180
+          },
+          {
+            "el": "#settings-btn<button:submit>",
+            "h": 34,
+            "w": 34
+          },
+          {
+            "el": "#<button:submit> \"Clear prompt\"",
+            "h": 32,
+            "w": 126
+          },
+          {
+            "el": "#<button:submit> \"Edit last message\"",
+            "h": 32,
+            "w": 126
+          },
+          {
+            "el": "#<button:submit> \"Escape\"",
+            "h": 32,
+            "w": 126
+          },
+          {
+            "el": "#<button:submit> \"Arrow up\"",
+            "h": 32,
+            "w": 126
+          },
+          {
+            "el": "#<button:submit> \"Arrow down\"",
+            "h": 32,
+            "w": 126
+          },
+          {
+            "el": "#msg<textarea:textarea>",
+            "h": 22,
+            "w": 636
+          },
+          {
+            "el": "#theme-toggle<button:submit>",
+            "h": 44,
+            "w": 34
+          }
+        ],
+        "under44": 9,
+        "visible": 11
+      },
+      "terminal": {
+        "areaPctOfViewport": 78.5,
+        "areaPx": 486230,
+        "h": 755,
+        "heightPct": 80,
+        "left": 6,
+        "top": 55,
+        "w": 644
+      }
+    },
+    "auth": {
+      "controlFonts": {
+        "#<button:submit> \"Arrow down\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#img-clear<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#send<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#sname<input:text>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#srv-restart<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#theme-toggle<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        }
+      },
+      "tapTargets": {
+        "small": [
+          {
+            "el": "#auth-submit-btn<button:submit>",
+            "h": 36,
+            "w": 250
+          }
+        ],
+        "under44": 1,
+        "visible": 2
+      },
+      "visibleText": [
+        "CLAUDE MOBILE",
+        "Enter verification code",
+        "Enter verification code",
+        "Verify"
+      ]
+    },
+    "consoleErrorsAllowlisted": [
+      "Viewport argument key \"interactive-widget\" not recognized and ignored."
+    ],
+    "consoleOther": [
+      "warning: Wake lock: Permission was denied"
+    ],
+    "device": "iPad (gen 11)",
+    "device_facts": {
+      "dpr": 2.5,
+      "maxTouchPoints": 0,
+      "pointerCoarse": true,
+      "tapsArriveAs": "mouse",
+      "touchEventsSupported": true,
+      "viewport": {
+        "h": 944,
+        "w": 656
+      }
+    },
+    "settings": {
+      "controlFonts": {
+        "#<button:submit> \"Arrow down\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#send<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#settings-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#srv-restart<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#srv-update<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#theme-toggle<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#totp-input<input:tel>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        }
+      },
+      "opened": true,
+      "tapTargets": {
+        "small": [
+          {
+            "el": "#sname<input:text>",
+            "h": 23,
+            "w": 180
+          },
+          {
+            "el": "#settings-btn<button:submit>",
+            "h": 34,
+            "w": 34
+          },
+          {
+            "el": "#set-hwkb<input:checkbox>",
+            "h": 20,
+            "w": 20
+          },
+          {
+            "el": "#set-font<input:range>",
+            "h": 20,
+            "w": 250
+          },
+          {
+            "el": "#srv-restart<button:button>",
+            "h": 32,
+            "w": 122
+          },
+          {
+            "el": "#srv-update<button:button>",
+            "h": 32,
+            "w": 122
+          },
+          {
+            "el": "#<button:submit> \"Clear prompt\"",
+            "h": 32,
+            "w": 126
+          },
+          {
+            "el": "#<button:submit> \"Edit last message\"",
+            "h": 32,
+            "w": 126
+          },
+          {
+            "el": "#<button:submit> \"Escape\"",
+            "h": 32,
+            "w": 126
+          },
+          {
+            "el": "#<button:submit> \"Arrow up\"",
+            "h": 32,
+            "w": 126
+          },
+          {
+            "el": "#<button:submit> \"Arrow down\"",
+            "h": 32,
+            "w": 126
+          },
+          {
+            "el": "#msg<textarea:textarea>",
+            "h": 22,
+            "w": 636
+          },
+          {
+            "el": "#theme-toggle<button:submit>",
+            "h": 44,
+            "w": 34
+          }
+        ],
+        "under44": 13,
+        "visible": 15
+      }
+    }
+  },
+  "ipad-gen-11-landscape": {
+    "app": {
+      "bars": {
+        "header": {
+          "h": 52,
+          "w": 190
+        },
+        "input-bar": {
+          "h": 25,
+          "w": 754
+        },
+        "input-wrap": {
+          "h": 25,
+          "w": 754
+        },
+        "qbar": "hidden",
+        "tab-switcher": {
+          "h": 513,
+          "w": 173
+        },
+        "tabs": {
+          "h": 604,
+          "w": 190
+        }
+      },
+      "controlFonts": {
+        "#<button:submit> \"Arrow down\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"x\"": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#send<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#srv-restart<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#theme-toggle<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#totp-input<input:tel>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        }
+      },
+      "layout": "grid",
+      "tapTargets": {
+        "small": [
+          {
+            "el": "#sname<input:text>",
+            "h": 21,
+            "w": 157
+          },
+          {
+            "el": "#settings-btn<button:submit>",
+            "h": 34,
+            "w": 34
+          },
+          {
+            "el": "#msg<textarea:textarea>",
+            "h": 22,
+            "w": 734
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<div> \"New session\"",
+            "h": 36,
+            "w": 173
+          },
+          {
+            "el": "#theme-toggle<button:submit>",
+            "h": 44,
+            "w": 34
+          }
+        ],
+        "under44": 8,
+        "visible": 8
+      },
+      "terminal": {
+        "areaPctOfViewport": 73.9,
+        "areaPx": 457431,
+        "h": 623,
+        "heightPct": 95,
+        "left": 200,
+        "top": 4,
+        "w": 734
+      }
+    },
+    "auth": {
+      "controlFonts": {
+        "#<button:submit> \"Arrow down\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#img-clear<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#send<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#sname<input:text>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#srv-restart<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#theme-toggle<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        }
+      },
+      "tapTargets": {
+        "small": [
+          {
+            "el": "#auth-submit-btn<button:submit>",
+            "h": 36,
+            "w": 310
+          }
+        ],
+        "under44": 1,
+        "visible": 2
+      },
+      "visibleText": [
+        "CLAUDE MOBILE",
+        "Enter verification code",
+        "Enter verification code",
+        "Verify"
+      ]
+    },
+    "consoleErrorsAllowlisted": [
+      "Viewport argument key \"interactive-widget\" not recognized and ignored."
+    ],
+    "consoleOther": [
+      "warning: Wake lock: Permission was denied"
+    ],
+    "device": "iPad (gen 11) landscape",
+    "device_facts": {
+      "dpr": 2.5,
+      "maxTouchPoints": 0,
+      "pointerCoarse": true,
+      "tapsArriveAs": "mouse",
+      "touchEventsSupported": true,
+      "viewport": {
+        "h": 656,
+        "w": 944
+      }
+    },
+    "settings": {
+      "controlFonts": {
+        "#<button:submit> \"Arrow down\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"x\"": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#send<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#settings-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#srv-restart<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#srv-update<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#theme-toggle<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#totp-input<input:tel>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        }
+      },
+      "opened": true,
+      "tapTargets": {
+        "small": [
+          {
+            "el": "#sname<input:text>",
+            "h": 21,
+            "w": 157
+          },
+          {
+            "el": "#settings-btn<button:submit>",
+            "h": 34,
+            "w": 34
+          },
+          {
+            "el": "#set-hwkb<input:checkbox>",
+            "h": 20,
+            "w": 20
+          },
+          {
+            "el": "#set-font<input:range>",
+            "h": 20,
+            "w": 250
+          },
+          {
+            "el": "#srv-restart<button:button>",
+            "h": 32,
+            "w": 122
+          },
+          {
+            "el": "#srv-update<button:button>",
+            "h": 32,
+            "w": 122
+          },
+          {
+            "el": "#msg<textarea:textarea>",
+            "h": 22,
+            "w": 734
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<div> \"New session\"",
+            "h": 36,
+            "w": 173
+          },
+          {
+            "el": "#theme-toggle<button:submit>",
+            "h": 44,
+            "w": 34
+          }
+        ],
+        "under44": 12,
+        "visible": 12
+      }
+    }
+  },
+  "ipad-pro-11": {
+    "app": {
+      "bars": {
+        "header": {
+          "h": 58,
+          "w": 834
+        },
+        "input-bar": {
+          "h": 25,
+          "w": 834
+        },
+        "input-wrap": {
+          "h": 25,
+          "w": 834
+        },
+        "qbar": "hidden",
+        "tab-switcher": {
+          "h": 46,
+          "w": 762
+        },
+        "tabs": {
+          "h": 67,
+          "w": 834
+        }
+      },
+      "controlFonts": {
+        "#<button:submit> \"Arrow down\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"x\"": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#send<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#srv-restart<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#theme-toggle<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#totp-input<input:tel>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        }
+      },
+      "layout": "flex",
+      "tapTargets": {
+        "small": [
+          {
+            "el": "#sname<input:text>",
+            "h": 25,
+            "w": 225
+          },
+          {
+            "el": "#settings-btn<button:submit>",
+            "h": 34,
+            "w": 34
+          },
+          {
+            "el": "#msg<textarea:textarea>",
+            "h": 22,
+            "w": 814
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#theme-toggle<button:submit>",
+            "h": 44,
+            "w": 34
+          }
+        ],
+        "under44": 7,
+        "visible": 8
+      },
+      "terminal": {
+        "areaPctOfViewport": 84.7,
+        "areaPx": 843304,
+        "h": 1036,
+        "heightPct": 86.8,
+        "left": 10,
+        "top": 62,
+        "w": 814
+      }
+    },
+    "auth": {
+      "controlFonts": {
+        "#<button:submit> \"Arrow down\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#img-clear<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#send<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#sname<input:text>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#srv-restart<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#theme-toggle<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        }
+      },
+      "tapTargets": {
+        "small": [
+          {
+            "el": "#auth-submit-btn<button:submit>",
+            "h": 36,
+            "w": 310
+          }
+        ],
+        "under44": 1,
+        "visible": 2
+      },
+      "visibleText": [
+        "CLAUDE MOBILE",
+        "Enter verification code",
+        "Enter verification code",
+        "Verify"
+      ]
+    },
+    "consoleErrorsAllowlisted": [
+      "Viewport argument key \"interactive-widget\" not recognized and ignored."
+    ],
+    "consoleOther": [
+      "warning: Wake lock: Permission was denied"
+    ],
+    "device": "iPad Pro 11",
+    "device_facts": {
+      "dpr": 2,
+      "maxTouchPoints": 0,
+      "pointerCoarse": true,
+      "tapsArriveAs": "mouse",
+      "touchEventsSupported": true,
+      "viewport": {
+        "h": 1194,
+        "w": 834
+      }
+    },
+    "settings": {
+      "controlFonts": {
+        "#<button:submit> \"Arrow down\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"x\"": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#send<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#settings-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#srv-restart<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#srv-update<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#theme-toggle<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#totp-input<input:tel>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        }
+      },
+      "opened": true,
+      "tapTargets": {
+        "small": [
+          {
+            "el": "#sname<input:text>",
+            "h": 25,
+            "w": 225
+          },
+          {
+            "el": "#settings-btn<button:submit>",
+            "h": 34,
+            "w": 34
+          },
+          {
+            "el": "#set-hwkb<input:checkbox>",
+            "h": 20,
+            "w": 20
+          },
+          {
+            "el": "#set-font<input:range>",
+            "h": 20,
+            "w": 250
+          },
+          {
+            "el": "#srv-restart<button:button>",
+            "h": 32,
+            "w": 122
+          },
+          {
+            "el": "#srv-update<button:button>",
+            "h": 32,
+            "w": 122
+          },
+          {
+            "el": "#msg<textarea:textarea>",
+            "h": 22,
+            "w": 814
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#theme-toggle<button:submit>",
+            "h": 44,
+            "w": 34
+          }
+        ],
+        "under44": 11,
+        "visible": 12
+      }
+    }
+  },
+  "ipad-pro-11-landscape": {
+    "app": {
+      "bars": {
+        "header": {
+          "h": 52,
+          "w": 190
+        },
+        "input-bar": {
+          "h": 25,
+          "w": 1004
+        },
+        "input-wrap": {
+          "h": 25,
+          "w": 1004
+        },
+        "qbar": "hidden",
+        "tab-switcher": {
+          "h": 691,
+          "w": 173
+        },
+        "tabs": {
+          "h": 782,
+          "w": 190
+        }
+      },
+      "controlFonts": {
+        "#<button:submit> \"Arrow down\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"x\"": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#send<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#srv-restart<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#theme-toggle<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#totp-input<input:tel>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        }
+      },
+      "layout": "grid",
+      "tapTargets": {
+        "small": [
+          {
+            "el": "#sname<input:text>",
+            "h": 21,
+            "w": 157
+          },
+          {
+            "el": "#settings-btn<button:submit>",
+            "h": 34,
+            "w": 34
+          },
+          {
+            "el": "#msg<textarea:textarea>",
+            "h": 22,
+            "w": 964
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<div> \"New session\"",
+            "h": 36,
+            "w": 173
+          },
+          {
+            "el": "#theme-toggle<button:submit>",
+            "h": 44,
+            "w": 34
+          }
+        ],
+        "under44": 8,
+        "visible": 8
+      },
+      "terminal": {
+        "areaPctOfViewport": 79.2,
+        "areaPx": 788184,
+        "h": 801,
+        "heightPct": 96,
+        "left": 200,
+        "top": 4,
+        "w": 984
+      }
+    },
+    "auth": {
+      "controlFonts": {
+        "#<button:submit> \"Arrow down\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#img-clear<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#send<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#sname<input:text>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#srv-restart<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#theme-toggle<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        }
+      },
+      "tapTargets": {
+        "small": [
+          {
+            "el": "#auth-submit-btn<button:submit>",
+            "h": 36,
+            "w": 350
+          }
+        ],
+        "under44": 1,
+        "visible": 2
+      },
+      "visibleText": [
+        "CLAUDE MOBILE",
+        "Enter verification code",
+        "Enter verification code",
+        "Verify"
+      ]
+    },
+    "consoleErrorsAllowlisted": [
+      "Viewport argument key \"interactive-widget\" not recognized and ignored."
+    ],
+    "consoleOther": [
+      "warning: Wake lock: Permission was denied"
+    ],
+    "device": "iPad Pro 11 landscape",
+    "device_facts": {
+      "dpr": 2,
+      "maxTouchPoints": 0,
+      "pointerCoarse": true,
+      "tapsArriveAs": "mouse",
+      "touchEventsSupported": true,
+      "viewport": {
+        "h": 834,
+        "w": 1194
+      }
+    },
+    "settings": {
+      "controlFonts": {
+        "#<button:submit> \"Arrow down\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#<button:submit> \"x\"": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#send<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#settings-btn<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#srv-restart<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#srv-update<button:button>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "\"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#theme-toggle<button:submit>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": true
+        },
+        "#totp-input<input:tel>": {
+          "family": "\"MS Shell Dlg\"",
+          "visible": false
+        }
+      },
+      "opened": true,
+      "tapTargets": {
+        "small": [
+          {
+            "el": "#sname<input:text>",
+            "h": 21,
+            "w": 157
+          },
+          {
+            "el": "#settings-btn<button:submit>",
+            "h": 34,
+            "w": 34
+          },
+          {
+            "el": "#set-hwkb<input:checkbox>",
+            "h": 20,
+            "w": 20
+          },
+          {
+            "el": "#set-font<input:range>",
+            "h": 20,
+            "w": 250
+          },
+          {
+            "el": "#srv-restart<button:button>",
+            "h": 32,
+            "w": 122
+          },
+          {
+            "el": "#srv-update<button:button>",
+            "h": 32,
+            "w": 122
+          },
+          {
+            "el": "#msg<textarea:textarea>",
+            "h": 22,
+            "w": 964
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<button:submit> \"x\"",
+            "h": 32,
+            "w": 32
+          },
+          {
+            "el": "#<div> \"New session\"",
+            "h": 36,
+            "w": 173
+          },
+          {
+            "el": "#theme-toggle<button:submit>",
+            "h": 44,
+            "w": 34
+          }
+        ],
+        "under44": 12,
+        "visible": 12
+      }
+    }
+  },
+  "note": "static tier; synthetic session; WebKit on Windows"
+}
