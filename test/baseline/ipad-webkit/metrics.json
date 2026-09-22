@@ -281,6 +281,30 @@
         "w": 656
       }
     },
+    "geometry": {
+      "base": {
+        "bad": [],
+        "charWidth": 7.8125,
+        "checked": 54,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.02,
+          "dTop": 0
+        },
+        "rowHeight": 16.703125
+      },
+      "font+3": {
+        "bad": [],
+        "charWidth": 9.609375,
+        "checked": 81,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.02,
+          "dTop": 0
+        },
+        "rowHeight": 20.5625
+      }
+    },
     "palette": {
       "bg": "#FBFBFD",
       "colors": [
@@ -793,6 +817,30 @@
         "w": 944
       }
     },
+    "geometry": {
+      "base": {
+        "bad": [],
+        "charWidth": 9.609375,
+        "checked": 54,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.02,
+          "dTop": 0
+        },
+        "rowHeight": 20.5625
+      },
+      "font+3": {
+        "bad": [],
+        "charWidth": 11.40625,
+        "checked": 81,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.01,
+          "dTop": 0
+        },
+        "rowHeight": 24.421875
+      }
+    },
     "palette": {
       "bg": "#FBFBFD",
       "colors": [
@@ -1299,6 +1347,30 @@
         "w": 834
       }
     },
+    "geometry": {
+      "base": {
+        "bad": [],
+        "charWidth": 9.609375,
+        "checked": 54,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.02,
+          "dTop": 0
+        },
+        "rowHeight": 20.5625
+      },
+      "font+3": {
+        "bad": [],
+        "charWidth": 11.40625,
+        "checked": 72,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.01,
+          "dTop": 0
+        },
+        "rowHeight": 24.421875
+      }
+    },
     "palette": {
       "bg": "#FBFBFD",
       "colors": [
@@ -1803,6 +1875,30 @@
       "viewport": {
         "h": 834,
         "w": 1194
+      }
+    },
+    "geometry": {
+      "base": {
+        "bad": [],
+        "charWidth": 9.609375,
+        "checked": 81,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.02,
+          "dTop": 0
+        },
+        "rowHeight": 20.5625
+      },
+      "font+3": {
+        "bad": [],
+        "charWidth": 11.40625,
+        "checked": 54,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.01,
+          "dTop": 0
+        },
+        "rowHeight": 24.421875
       }
     },
     "palette": {

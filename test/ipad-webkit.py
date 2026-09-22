@@ -16,7 +16,10 @@ violation (securitypolicyviolation), or a CSP that no longer matches
 server.js. T05 adds the terminal palette: every ANSI colour (and the
 default fg) must be >= 4.5:1 (WCAG AA) on the terminal background read from
 the running client, the xterm theme must equal termPalette() (one source),
-and the grid must be opaque on that background and monospace. The only tolerated console error is listed by EXACT text in
+and the grid must be opaque on that background and monospace. T11 adds cell
+geometry: clicks inside laid-out glyphs must resolve (gridCellFromEvent) to
+that exact cell and the cursor must sit on its cell, before and after a
+font-size change. The only tolerated console error is listed by EXACT text in
 BENIGN_CONSOLE below -- never add a pattern there, and never add a message
 that describes a real defect.
 
@@ -27,7 +30,8 @@ purpose.
 
 SELF-TEST: --self-test injects one fault of each gated kind (an inline script
 the CSP must refuse, a console.error, an uncaught exception, a stock-yellow
-ANSI 3 below AA) into the first profile. Expected exit: 1 with all three caught. Exit 2 means the gate missed
+ANSI 3 below AA, a cell model 10% off the laid-out glyphs) into the first
+profile. Expected exit: 1 with all of them caught. Exit 2 means the gate missed
 an injected fault -- the gate itself is broken.
 
 Windows note (D5): WebKit on Windows reports navigator.maxTouchPoints = 0 even
@@ -280,6 +284,87 @@ PALETTE = """() => {
   };
 }"""
 
+# T11: cell geometry. gridCellFromEvent, the cursor and the row stack all use
+# the renderer's cached cell metrics (row index * rowHeight, col * charWidth).
+# This checks them against what WebKit actually laid out: for sampled
+# characters in fully visible viewport rows, a DOM Range gives the glyph's
+# real box; a click at 20%/50%/80% of that box must resolve to that exact
+# (col, row), and the cursor's rendered box must sit on its cell. Ground truth
+# is the layout, never the model under test.
+GEOMETRY = """() => {
+  const g = gridTerms[activeSession];
+  if (!g) return { error: 'no grid' };
+  const wr = g.wrap.getBoundingClientRect();
+  const out = { checked: 0, bad: [], cursor: null,
+                rowHeight: g.rowHeight, charWidth: g.charWidth };
+  const charBox = (rowEl, i) => {
+    const w = document.createTreeWalker(rowEl, NodeFilter.SHOW_TEXT);
+    let n, k = i;
+    while ((n = w.nextNode())) {
+      if (k < n.data.length) {
+        const r = document.createRange();
+        r.setStart(n, k); r.setEnd(n, k + 1);
+        return r.getBoundingClientRect();
+      }
+      k -= n.data.length;
+    }
+    return null;
+  };
+  const rows = [];
+  for (const [serverRow, el] of g.rowEls) {
+    if (serverRow < 0) continue;
+    const r = el.getBoundingClientRect();
+    if (r.top >= wr.top && r.bottom <= wr.bottom) rows.push([serverRow, el]);
+  }
+  rows.sort((a, b) => a[0] - b[0]);
+  const pick = rows.length ? [rows[0], rows[rows.length >> 1], rows[rows.length - 1]] : [];
+  for (const [serverRow, el] of pick) {
+    const len = el.textContent.length;
+    for (const ci of [...new Set([0, Math.min(9, len - 1), len - 1])]) {
+      if (ci < 0) continue;
+      const b = charBox(el, ci);
+      if (!b || !b.width) continue;
+      for (const fx of [0.2, 0.5, 0.8]) for (const fy of [0.2, 0.5, 0.8]) {
+        const e = { clientX: b.left + b.width * fx, clientY: b.top + b.height * fy };
+        const got = gridCellFromEvent(g, e);
+        const want = { col: ci + 1, row: serverRow + 1 };
+        out.checked++;
+        if (!got || got.col !== want.col || got.row !== want.row)
+          out.bad.push({ want, got, at: [fx, fy] });
+      }
+    }
+  }
+  const c = g.cursor, rowEl = c && g.rowEls.get(c.row);
+  if (rowEl) {
+    const cr = g.cursorEl.getBoundingClientRect(), rr = rowEl.getBoundingClientRect();
+    const cb = charBox(rowEl, c.col);
+    const left = cb ? cb.left : rr.left + c.col * g.charWidth;
+    out.cursor = { dTop: +(cr.top - rr.top).toFixed(2), dLeft: +(cr.left - left).toFixed(2),
+                   dHeight: +(cr.height - rr.height).toFixed(2) };
+  }
+  return out;
+}"""
+
+GEOM_TOL = 1.0  # px: cursor box vs its laid-out cell
+
+
+def check_geometry(slug, label, geo, findings):
+    if geo.get("error"):
+        findings.append((slug, "geometry", "%s: %s" % (label, geo["error"])))
+        return geo
+    if geo["checked"] == 0:
+        findings.append((slug, "geometry", "%s: no visible cells sampled" % label))
+    for b in geo["bad"]:
+        findings.append((slug, "geometry", "%s: click at %s of cell %s resolved to %s"
+                         % (label, b["at"], b["want"], b["got"])))
+    cur = geo.get("cursor")
+    if not cur:
+        findings.append((slug, "geometry", "%s: cursor row not mounted" % label))
+    elif max(abs(cur["dTop"]), abs(cur["dLeft"]), abs(cur["dHeight"])) > GEOM_TOL:
+        findings.append((slug, "geometry", "%s: cursor off its cell %s" % (label, cur)))
+    return geo
+
+
 AA = 4.5  # WCAG AA, normal text
 
 
@@ -481,6 +566,24 @@ def main():
                 pngs.append(shot)
                 entry["settings"] = st
 
+                # -- cell geometry (T11), then again after a font-size change --
+                if self_test and idx == 0:
+                    # A cell model 10% wider than the laid-out glyphs must fail;
+                    # setFontSize below drops the corrupted cache again.
+                    page.evaluate("() => { gridTerms[activeSession].charWidth *= 1.1; }")
+                geo = {"base": check_geometry(slug, "base", page.evaluate(GEOMETRY), findings)}
+                page.evaluate("() => { window.__fs0 = getFontSize(); setFontSize(window.__fs0 + 3); }")
+                page.wait_for_timeout(300)
+                # Taller rows push the viewport below the fold (no server here
+                # to answer the resize); follow it down, as a reader would.
+                page.evaluate("() => { const w = gridTerms[activeSession].wrap;"
+                              " w.scrollTop = w.scrollHeight; }")
+                page.wait_for_timeout(300)
+                geo["font+3"] = check_geometry(slug, "font+3", page.evaluate(GEOMETRY), findings)
+                page.evaluate("() => setFontSize(window.__fs0)")
+                page.wait_for_timeout(300)
+                entry["geometry"] = geo
+
                 # -- gate ----------------------------------------------------------
                 for v in page.evaluate("() => window.__cspv"):
                     findings.append((slug, "csp-violation", v))
@@ -566,13 +669,15 @@ def main():
             print("  [%s] %s: %s" % (s, kind, text))
     else:
         print("GATE PASSED: no console errors, page errors or CSP violations; CSP matches server.js;"
-              " terminal palette AA, single-source, opaque, monospace")
+              " terminal palette AA, single-source, opaque, monospace;"
+              " grid cell geometry + cursor match layout (incl. after a font-size change)")
 
     if self_test:
-        kinds = {k for _, k, t in findings
+        kinds = {k for s, k, t in findings
                  if SELF_TEST_MARK in t or (k == "csp-violation" and "script-src" in t)
-                 or (k == "contrast" and "#FFCC00" in t)}
-        want = {"csp-violation", "console-error", "pageerror", "contrast"}
+                 or (k == "contrast" and "#FFCC00" in t)
+                 or (k == "geometry" and s == PROFILES[0][0] and t.startswith("base:"))}
+        want = {"csp-violation", "console-error", "pageerror", "contrast", "geometry"}
         missed = want - kinds
         if missed:
             print("SELF-TEST BROKEN: gate did not catch %s" % sorted(missed))

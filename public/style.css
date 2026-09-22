@@ -489,12 +489,26 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
      touches pass straight to the document swipe handler. */
   touch-action: pan-y;
   overscroll-behavior-x: none;
+  /* T11: the grid's box never depends on its rows (it is 100% x 100% of
+     .term-wrap), so size containment is free, and with layout + paint
+     containment a row change dirties this subtree only -- never the app
+     shell around it. No will-change here: .term-wrap already carries its own
+     compositor layer (swipe transform) and iOS WebKit composites overflow
+     scrollers natively, so a second layer the size of the pane would cost
+     GPU memory for nothing. */
+  contain: strict;
 }
 .grid-term::-webkit-scrollbar { display: none; }
+/* T11: a fixed row height (was min-height). The renderer places the cursor,
+   sizes the spacers, anchors scroll and resolves mouse cells as
+   row index * rowHeight; a row that grew for a tall fallback glyph would put
+   every one of those out by the difference. contain: content keeps a
+   rebuilt row's layout and paint inside its own box. */
 .grid-row {
   display: block;
   white-space: pre;
-  min-height: 1.286em;
+  height: 1.286em;
+  contain: content;
 }
 /* T31: spacer divs preserve scrollHeight for unmounted rows above/below the
    visible window. Heights are set inline by renderGridWindow. */
@@ -502,8 +516,13 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   display: block;
   width: 100%;
 }
+/* T11: positioned by transform from app.js (updateGridCursor), never by
+   top/left, and blinks by opacity -- both compositor-only on its own small
+   layer, so a moving or blinking cursor repaints no rows. */
 .grid-cursor {
   position: absolute;
+  top: 0; left: 0;
+  will-change: transform, opacity;
   width: 2px;
   background: var(--term-cursor);
   pointer-events: none;

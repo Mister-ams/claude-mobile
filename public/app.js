@@ -725,7 +725,7 @@ function handle(m) {
       }
       break;
     case 'snapshot':
-      if (gridTerms[m.session]) applyGridSnapshot(gridTerms[m.session], m);
+      if (gridTerms[m.session]) queueGridSnapshot(gridTerms[m.session], m);
       break;
     case 'frame':
       if (gridTerms[m.session]) queueGridFrame(gridTerms[m.session], m);
@@ -943,11 +943,14 @@ function applySgr(span, sgr) {
     fg = newFg;
     bg = newBg;
   }
-  if (fg !== null) span.style.color = fg;
-  if (bg !== null) span.style.backgroundColor = bg;
-  if (sgr.bold) span.style.fontWeight = 'bold';
-  if (sgr.italic) span.style.fontStyle = 'italic';
-  if (sgr.underline) span.style.textDecoration = 'underline';
+  // T11: one style write per span, not one per property.
+  let css = '';
+  if (fg !== null) css += 'color:' + fg + ';';
+  if (bg !== null) css += 'background-color:' + bg + ';';
+  if (sgr.bold) css += 'font-weight:bold;';
+  if (sgr.italic) css += 'font-style:italic;';
+  if (sgr.underline) css += 'text-decoration:underline;';
+  if (css) span.style.cssText = css;
   // sgr.hyperlink handled in renderRow (T21).
 }
 
@@ -966,13 +969,27 @@ function safeHref(raw) {
   } catch (e) { return null; }
 }
 
+// T11: true when applySgr would set nothing on the element.
+function sgrIsPlain(sgr) {
+  return !sgr || (sgr.fg === undefined && sgr.bg === undefined && !sgr.reverse &&
+                  !sgr.bold && !sgr.italic && !sgr.underline);
+}
+
+// T11: a run with no visible styling needs no element of its own. The server
+// already merges runs with identical SGR, so what is left to save is the
+// element per unstyled run (usually the whole trailing pad of every row), and
+// adjacent unstyled runs that differed only in a hyperlink safeHref refused.
+// Those become one text node -- fewer boxes to style, lay out and paint.
 function renderRow(runs) {
   const div = document.createElement('div');
   div.className = 'grid-row';
+  let plain = '';
   for (const run of runs) {
     // T21: cells inside an OSC 8 link become anchors instead of spans.
-    let el;
     const href = run.sgr && run.sgr.hyperlink ? safeHref(run.sgr.hyperlink) : null;
+    if (!href && sgrIsPlain(run.sgr)) { plain += run.text; continue; }
+    if (plain) { div.appendChild(document.createTextNode(plain)); plain = ''; }
+    let el;
     if (href) {
       el = document.createElement('a');
       el.href = href;
@@ -985,6 +1002,7 @@ function renderRow(runs) {
     applySgr(el, run.sgr);
     div.appendChild(el);
   }
+  if (plain) div.appendChild(document.createTextNode(plain));
   return div;
 }
 
@@ -1030,8 +1048,13 @@ function makeGridTerm() {
     scrollScheduled: false,
     // T30 substitute: rAF-coalesced frame queue. Multiple frames arriving
     // within one paint window merge to a single applyGridFrame call.
+    // T11: a snapshot rides the same rAF. It supersedes every frame queued
+    // before it; frames queued after it apply after it, in that callback.
     pendingFrames: [],
+    pendingSnapshot: null,
     frameRafScheduled: false,
+    // T11: last cursor style written, so an unmoved cursor costs no write.
+    cursorCss: '',
   };
 
   wrap.addEventListener('scroll', () => {
@@ -1083,22 +1106,80 @@ function probeCell(container) {
   return { w: r.width, h: r.height };
 }
 
+// T11: cell metrics are probed once and cached on the grid. A probe is a
+// forced layout, and it used to run on every snapshot and (via the cursor)
+// every frame. The inputs that can change a cell are the font size (the
+// setting), the font itself (a late-resolving system font) and the device
+// pixel ratio (zoom, display change); each of those invalidates the cache.
+// Both numbers come from one probe, so the renderer, the cursor and
+// gridCellFromEvent always agree. A probe on a hidden wrap measures 0 and is
+// NOT cached -- the next visible call measures for real.
+function probeGridMetrics(grid) {
+  if (grid.charWidth > 0 && grid.rowHeight > 0) return true;
+  const cell = document.createElement('span');
+  cell.style.cssText = 'position:absolute;visibility:hidden;font:inherit;line-height:inherit;white-space:pre';
+  cell.textContent = 'X';
+  const row = document.createElement('div');
+  row.className = 'grid-row';
+  row.style.cssText = 'position:absolute;visibility:hidden';
+  row.appendChild(document.createTextNode('X'));
+  grid.wrap.appendChild(cell);
+  grid.wrap.appendChild(row);
+  const w = cell.getBoundingClientRect().width;
+  const h = row.getBoundingClientRect().height;
+  grid.wrap.removeChild(cell);
+  grid.wrap.removeChild(row);
+  if (w > 0 && h > 0) {
+    grid.charWidth = w;
+    grid.rowHeight = h;
+    return true;
+  }
+  return false;
+}
+
 function measureCharWidth(grid) {
-  if (grid.charWidth > 0) return grid.charWidth;
-  grid.charWidth = probeCell(grid.wrap).w;
+  probeGridMetrics(grid);
   return grid.charWidth;
 }
 
 function ensureRowHeight(grid) {
-  if (grid.rowHeight > 0) return grid.rowHeight;
-  const probe = document.createElement('div');
-  probe.className = 'grid-row';
-  probe.appendChild(document.createTextNode('X'));
-  grid.wrap.appendChild(probe);
-  const h = probe.getBoundingClientRect().height || GRID_ROW_HEIGHT_FALLBACK;
-  grid.wrap.removeChild(probe);
-  grid.rowHeight = h;
-  return h;
+  return probeGridMetrics(grid) ? grid.rowHeight : GRID_ROW_HEIGHT_FALLBACK;
+}
+
+function invalidateGridMetrics() {
+  Object.keys(gridTerms).forEach(id => {
+    gridTerms[id].charWidth = 0;
+    gridTerms[id].rowHeight = 0;
+  });
+}
+
+// Font or pixel grid changed under the grid: drop the cache and re-window
+// (row height may differ), then let doResize tell the server if the cell
+// count moved.
+function remeasureGrids() {
+  invalidateGridMetrics();
+  scheduleOnce(() => {
+    Object.keys(gridTerms).forEach(id => renderGridWindow(gridTerms[id]));
+    doResize();
+  });
+}
+
+// DPR changes (browser zoom, moving to another display) re-rasterise the
+// font on a different pixel grid. The query is pinned to one ratio, so it
+// re-arms itself on each change.
+function watchDevicePixelRatio() {
+  if (!window.matchMedia) return;
+  const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+  if (!mq.addEventListener) return;
+  mq.addEventListener('change', function onChange() {
+    mq.removeEventListener('change', onChange);
+    remeasureGrids();
+    watchDevicePixelRatio();
+  });
+}
+watchDevicePixelRatio();
+if (document.fonts && document.fonts.addEventListener) {
+  document.fonts.addEventListener('loadingdone', remeasureGrids);
 }
 
 // ─── T22: mouse reporting ────────────────────────────────────────
@@ -1259,11 +1340,16 @@ function renderGridWindow(grid) {
     updateGridCursor(grid);
     return;
   }
+  // Reads first: every caller runs this at the top of a frame, before its
+  // own writes, so these come off the layout the browser already has.
   const rowH = ensureRowHeight(grid);
-  const total = grid.allRows.length;
-  const scrollTop = grid.wrap.scrollTop;
-  const clientH = grid.wrap.clientHeight;
+  mountGridWindow(grid, rowH, grid.wrap.scrollTop, grid.wrap.clientHeight);
+}
 
+// T11: writes only. The window is computed from numbers the caller already
+// read, so mounting never reads layout back after mutating it.
+function mountGridWindow(grid, rowH, scrollTop, clientH) {
+  const total = grid.allRows.length;
   const firstVisible = Math.floor(scrollTop / rowH);
   const lastVisible = Math.ceil((scrollTop + clientH) / rowH);
   const mountStart = Math.max(0, firstVisible - GRID_OVERSCAN);
@@ -1293,15 +1379,27 @@ function renderGridWindow(grid) {
   updateGridCursor(grid);
 }
 
+// T11: the cursor is placed by transform from the cached cell metrics, not by
+// reading the row's offsetTop -- that read came straight after replaceWith
+// and forced a synchronous layout on almost every frame. Rows are a flat
+// stack of fixed-height boxes (.grid-row height is 1.286em, the probed
+// rowHeight), so row index * rowHeight IS the row's offsetTop; the same model
+// the spacers, scroll anchoring and gridCellFromEvent use. Unmoved cursor, no
+// write. The blink is an opacity animation in style.css, so neither the move
+// nor the blink needs layout or paint.
 function updateGridCursor(grid) {
   const c = grid.cursor;
-  if (!c || !c.visible) { grid.cursorEl.style.display = 'none'; return; }
-  const rowEl = grid.rowEls.get(c.row);
-  if (!rowEl) { grid.cursorEl.style.display = 'none'; return; }
-  const charW = measureCharWidth(grid);
-  if (!charW) { grid.cursorEl.style.display = 'none'; return; }
-  grid.cursorEl.style.cssText =
-    `display:block;top:${rowEl.offsetTop}px;left:${c.col * charW}px;height:${rowEl.offsetHeight}px;`;
+  const rowH = grid.rowHeight, charW = grid.charWidth;
+  let css = 'display:none';
+  if (c && c.visible && rowH > 0 && charW > 0) {
+    const idx = grid.rowIndexByServerRow.get(c.row);
+    if (idx !== undefined && idx >= grid.mountedStart && idx < grid.mountedStart + grid.mountedCount) {
+      css = `display:block;height:${rowH}px;transform:translate3d(${c.col * charW}px,${idx * rowH}px,0)`;
+    }
+  }
+  if (css === grid.cursorCss) return;
+  grid.cursorCss = css;
+  grid.cursorEl.style.cssText = css;
 }
 
 // The useful part of a working directory is its tail, but CSS left-truncation
@@ -1320,28 +1418,37 @@ function shortDir(dir) {
 // reader is looking at something and must not be moved.
 const GRID_STICK_PX = 8;
 
-function gridAtBottom(grid) {
-  const w = grid.wrap;
-  if (!w || !w.scrollHeight) return true;
-  return (w.scrollHeight - w.scrollTop - w.clientHeight) <= GRID_STICK_PX;
-}
-
 function applyGridSnapshot(grid, snap) {
   // A snapshot must not move the reader. Snapshots arrive on every tab return
   // and every session switch, so unconditionally scrolling to the bottom threw
   // the scroll position away several times an hour -- measured at +7,230px on
-  // an 11" iPad. Capture the anchor BEFORE anything is reset (rowHeight is
-  // zeroed below), and restore it by server row ID: row indices shift when
-  // scrollback rolls, IDs do not.
-  const wasAtBottom = gridAtBottom(grid);
+  // an 11" iPad. Capture the anchor BEFORE anything is reset, and restore it
+  // by server row ID: row indices shift when scrollback rolls, IDs do not.
+  //
+  // T11: every layout read happens here, before the first write. Snapshots are
+  // applied at the top of a frame (queueGridSnapshot), so these reads come off
+  // the layout the browser already has. The bottom and the anchor are then
+  // COMPUTED from row count * rowHeight rather than read back from
+  // scrollHeight after mutating -- that read-after-write, plus the per-snapshot
+  // cell probes, cost ~4 forced layouts per snapshot.
+  grid.pendingSnapshot = null;
+  // Snapshots fully reset state; any frames still queued from before this
+  // snapshot are stale and would re-apply changes already covered.
+  grid.pendingFrames.length = 0;
+  const w = grid.wrap;
+  const scrollTop = w.scrollTop, clientH = w.clientHeight, scrollH = w.scrollHeight;
+  const wasAtBottom = !scrollH || (scrollH - scrollTop - clientH) <= GRID_STICK_PX;
   const oldRowH = grid.rowHeight || 0;
   let anchorRow = null, anchorOffset = 0;
   if (!wasAtBottom && oldRowH > 0 && grid.allRows.length) {
     const topIdx = Math.min(grid.allRows.length - 1,
-      Math.max(0, Math.floor(grid.wrap.scrollTop / oldRowH)));
+      Math.max(0, Math.floor(scrollTop / oldRowH)));
     anchorRow = grid.allRows[topIdx].row;
-    anchorOffset = grid.wrap.scrollTop - topIdx * oldRowH;
+    anchorOffset = scrollTop - topIdx * oldRowH;
   }
+  // Cached: re-probes only after a font, font-size or DPR change, or when the
+  // last probe ran on a hidden wrap. Still ahead of every write below.
+  const rowH = ensureRowHeight(grid);
 
   grid.cols = snap.cols;
   grid.rows = snap.rows;
@@ -1349,11 +1456,6 @@ function applyGridSnapshot(grid, snap) {
   // T22: a snapshot is the full truth about the pane, mouse mode included --
   // it is how a client that connects mid-session learns the app is listening.
   if (snap.mouse) { grid.mouse = snap.mouse; applyGridMouseMode(grid); }
-  grid.charWidth = 0;  // cols may have changed; remeasure on next cursor update
-  grid.rowHeight = 0;  // remeasure too -- font may differ post-resize
-  // Snapshots fully reset state; any frames still queued from before this
-  // snapshot are stale and would re-apply changes already covered.
-  grid.pendingFrames.length = 0;
 
   // Build full row list. Server row indices: scrollback < 0, viewport 0..rows-1.
   const sb = snap.scrollback.slice(-GRID_MAX_ROWS);
@@ -1363,30 +1465,29 @@ function applyGridSnapshot(grid, snap) {
     grid.rowIndexByServerRow.set(grid.allRows[i].row, i);
   }
 
-  unmountAllGridRows(grid);
-  // Pre-set scrollHeight so we can scroll to bottom before computing the
-  // window. Park all virtual height in topSpacer; renderGridWindow rewrites
-  // both spacers once it knows the mounted range.
-  ensureRowHeight(grid);
-  const totalH = grid.allRows.length * grid.rowHeight;
-  grid.topSpacer.style.height = totalH + 'px';
-  grid.bottomSpacer.style.height = '0px';
-  grid.mountedStart = 0;
-  grid.mountedCount = 0;
-  if (anchorRow === null) {
-    grid.wrap.scrollTop = grid.wrap.scrollHeight;
-  } else {
+  // Rows are fixed-height, so the content height is exact and the bottom is
+  // totalH - clientH -- no scrollHeight read needed.
+  const maxTop = Math.max(0, grid.allRows.length * rowH - clientH);
+  let top = maxTop;
+  if (anchorRow !== null) {
     const idx = grid.rowIndexByServerRow.get(anchorRow);
     // undefined means the anchored row has aged out of scrollback entirely --
     // there is no position left to hold, so following the output is correct.
-    grid.wrap.scrollTop = idx === undefined
-      ? grid.wrap.scrollHeight
-      : (idx * grid.rowHeight) + anchorOffset;
+    if (idx !== undefined) top = Math.min(maxTop, Math.max(0, idx * rowH + anchorOffset));
   }
-  renderGridWindow(grid);
+
+  unmountAllGridRows(grid);
+  grid.mountedStart = 0;
+  grid.mountedCount = 0;
+  mountGridWindow(grid, rowH, top, clientH);
+  // Last, and only if it moves: the one write that needs the new layout.
+  if (Math.abs(scrollTop - top) >= 1) w.scrollTop = top;
 }
 
 function applyGridFrame(grid, frame) {
+  // No-op while the metrics are cached; if a font change dropped them, the
+  // probe runs here, ahead of every write.
+  probeGridMetrics(grid);
   grid.cursor = frame.cursor;
   for (const rc of frame.changes) {
     const idx = grid.rowIndexByServerRow.get(rc.row);
@@ -1410,17 +1511,36 @@ function applyGridFrame(grid, frame) {
 // (claude-code token output emits frames faster than rAF can paint). Merge
 // rule: latest-wins per row index; latest cursor wins; seq tracks the most
 // recent merged frame.
+//
+// T11: snapshots go through the same rAF. Arrival order is preserved: a
+// snapshot discards every frame queued before it (it already contains them),
+// and frames that arrive after it -- before the rAF fires -- apply on top of
+// it in the same callback. A later snapshot replaces an earlier pending one.
 function queueGridFrame(grid, frame) {
   grid.pendingFrames.push(frame);
+  scheduleGridFlush(grid);
+}
+
+function queueGridSnapshot(grid, snap) {
+  grid.pendingSnapshot = snap;
+  grid.pendingFrames.length = 0;
+  scheduleGridFlush(grid);
+}
+
+function scheduleGridFlush(grid) {
   if (grid.frameRafScheduled) return;
   grid.frameRafScheduled = true;
-  requestAnimationFrame(() => {
-    grid.frameRafScheduled = false;
-    if (!grid.pendingFrames.length) return;
-    const merged = mergeFrames(grid.pendingFrames);
-    grid.pendingFrames.length = 0;
-    applyGridFrame(grid, merged);
-  });
+  requestAnimationFrame(() => flushGrid(grid));
+}
+
+function flushGrid(grid) {
+  grid.frameRafScheduled = false;
+  const snap = grid.pendingSnapshot;
+  const frames = grid.pendingFrames;
+  grid.pendingSnapshot = null;
+  grid.pendingFrames = [];
+  if (snap) applyGridSnapshot(grid, snap);
+  if (frames.length) applyGridFrame(grid, mergeFrames(frames));
 }
 
 function mergeFrames(frames) {
@@ -1490,7 +1610,10 @@ function switchTo(id) {
     // GPU-accelerated rendering: WebGL -> Canvas -> DOM fallback
     try {
       const webgl = new WebglAddon.WebglAddon();
-      webgl.onContextLost(() => {
+      // T11: the addon's event is onContextLoss. The old onContextLost call
+      // threw a TypeError here, so WebGL never engaged and every client ran
+      // on Canvas. Canvas remains the fallback on a real context loss.
+      webgl.onContextLoss(() => {
         webgl.dispose();
         try { term.loadAddon(new CanvasAddon.CanvasAddon()); } catch (e2) { console.warn('Canvas fallback failed:', e2.message); }
       });
@@ -1531,7 +1654,8 @@ function switchTo(id) {
       // fonts.ready resolves, which corrects to the real char width.
       setTimeout(() => doResize(), 50);
       if (document.fonts && document.fonts.ready) {
-        document.fonts.ready.then(() => doResize());
+        // T11: metrics are cached now, so drop what the first pass measured.
+        document.fonts.ready.then(() => remeasureGrids());
       }
     }
   }
@@ -2430,10 +2554,7 @@ function applyFontSize() {
     try { terms[id].options.fontSize = px; } catch (e) { clientLog('font xterm: ' + e.message); }
   });
   // Grid path: both cached metrics are now stale.
-  Object.keys(gridTerms).forEach(id => {
-    gridTerms[id].charWidth = 0;
-    gridTerms[id].rowHeight = 0;
-  });
+  invalidateGridMetrics();
   const val = $('set-font-val'); if (val) val.textContent = px;
   const slider = $('set-font'); if (slider) slider.value = px;
   // Re-window on the next frame (row height changed), then tell the server.
@@ -2887,11 +3008,12 @@ applyFontSize();
 // the settings readout all compute columns the same way.
 function computeGridDims(grid) {
   if (!grid || grid.wrap.clientWidth === 0) return null;
-  const cell = probeCell(grid.wrap);
-  if (cell.w <= 0 || cell.h <= 0) return null;
+  // T11: the renderer's own cached cell, so the cols/rows the server is told
+  // are computed from the same numbers the rows, cursor and mouse use.
+  if (!probeGridMetrics(grid)) return null;
   return {
-    cols: Math.max(10, Math.floor(grid.wrap.clientWidth / cell.w)),
-    rows: Math.max(5, Math.floor(grid.wrap.clientHeight / cell.h)),
+    cols: Math.max(10, Math.floor(grid.wrap.clientWidth / grid.charWidth)),
+    rows: Math.max(5, Math.floor(grid.wrap.clientHeight / grid.rowHeight)),
   };
 }
 
