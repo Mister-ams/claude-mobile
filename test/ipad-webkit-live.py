@@ -3,16 +3,26 @@
 
 The iPad is the target device and WebKit is its engine, so this drives
 Playwright's WebKit with the 'iPad Pro 11 landscape' profile (rotated to
-portrait in step 7) against a real server on the herdr backend -- never the
-live one. Bring the throwaway up and down with scripts/throwaway-instance.ps1.
+portrait in the rotate step) against a real server on the herdr backend --
+never the live one. Bring the throwaway up and down with
+scripts/throwaway-instance.js.
 
 Every step is a named PASS/FAIL with a screenshot. The live instance is only
 ever READ: its /health before and after, and `herdr session list --json`
 entries for its `cm-N` sessions. A change there is a FAIL, whatever else
 passed.
 
+  npm run sim:up            # prints TOTP_SECRET_FILE=<path>, never the secret
+  npm run test:ipad-live    # the line below, with --known-defects send-pointer
+  npm run sim:down
+
   py test/ipad-webkit-live.py --port 3457 \
-      --totp-secret-file <instance dir>/.totp-secret
+      --totp-secret-file .totp-secret [--known-defects send-pointer]
+
+--known-defects names steps that fail because of a real, TRACKED client defect
+(send-pointer: T09). The run exits 0 only when every failure is on that list,
+and prints each one loudly; without the flag any failure exits 1. A listed
+step that starts passing is reported so the entry can be removed.
 
 Windows note (D5): WebKit on Windows reports navigator.maxTouchPoints=0, so a
 tap reaches the page as mouse/pointer events, not touch. That is recorded in
@@ -260,7 +270,10 @@ def main():
     ap.add_argument("--out", default=os.path.join(os.environ.get("TEMP", "/tmp"),
                                                   "cm-ipad-live-%d" % int(time.time())))
     ap.add_argument("--headed", action="store_true")
+    ap.add_argument("--known-defects", default="",
+                    help="comma-separated step names failing on a tracked defect (e.g. send-pointer)")
     args = ap.parse_args()
+    known = {s.strip() for s in args.known_defects.split(",") if s.strip()}
 
     if args.port == args.live_port:
         print("refusing: --port %d is the live instance (D6)" % args.port)
@@ -611,7 +624,19 @@ def main():
         print("  NOTE  pageerror %s" % e)
     print("\n%d passed, %d failed -- report %s" % (len(run.results) - len(bad), len(bad),
                                                     os.path.join(args.out, "report.json")))
-    return 1 if bad else 0
+    known_bad = [r for r in bad if r["name"] in known]
+    unknown_bad = [r for r in bad if r["name"] not in known]
+    if known_bad:
+        print("\n" + "!" * 72)
+        for r in known_bad:
+            print("!! KNOWN DEFECT (tracked, still failing): %s -- %s" % (r["step"], r["evidence"]))
+        print("!" * 72)
+    for name in sorted(known - {r["name"] for r in bad}):
+        if any(r["name"] == name for r in run.results):
+            print("NOTE  known defect %r now PASSES -- remove it from --known-defects" % name)
+        else:
+            print("NOTE  --known-defects names %r, which is not a step" % name)
+    return 1 if unknown_bad else 0
 
 
 if __name__ == "__main__":

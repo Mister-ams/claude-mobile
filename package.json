@@ -12,7 +12,10 @@
     "watch:start": "pm2 start ecosystem.crash-watch.config.js",
     "watch:summary": "node scripts/crash-watch.js --summary",
     "test:watch": "node test/crash-watch-verify.js",
-    "test:watch:live": "node test/crash-watch-live-verify.js"
+    "test:watch:live": "node test/crash-watch-live-verify.js",
+    "sim:up": "node scripts/throwaway-instance.js up",
+    "sim:down": "node scripts/throwaway-instance.js down",
+    "test:ipad-live": "py test/ipad-webkit-live.py --port 3457 --totp-secret-file .totp-secret --known-defects send-pointer"
   },
   "dependencies": {
     "@simplewebauthn/server": "^10.0.1",
