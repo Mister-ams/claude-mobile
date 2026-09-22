@@ -67,22 +67,22 @@ function base64urlDecode(s) {
 }
 
 async function handleKeyExchange(msg) {
-  showStatus('Key exchange...', 'var(--accent)');
+  showStatus('Key exchange...', 'var(--accent-text)');
   try {
     // Import server identity pubkey for signature verification
-    showStatus('Importing identity key...', 'var(--accent)');
+    showStatus('Importing identity key...', 'var(--accent-text)');
     const identityDer = hexToBytes(msg.identity);
     const identityKey = await crypto.subtle.importKey('spki', identityDer,
       { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
 
     // Verify ECDSA signature on ephemeral pubkey
-    showStatus('Verifying signature...', 'var(--accent)');
+    showStatus('Verifying signature...', 'var(--accent-text)');
     const ephBytes = hexToBytes(msg.ephemeral);
     const sigBytes = hexToBytes(msg.sig);
     const valid = await crypto.subtle.verify(
       { name: 'ECDSA', hash: 'SHA-256' }, identityKey, sigBytes, ephBytes);
     if (!valid) {
-      showStatus('SIGNATURE INVALID', 'var(--intent-danger)');
+      showStatus('SIGNATURE INVALID', 'var(--intent-danger-text)');
       ws.close(); return;
     }
 
@@ -112,7 +112,7 @@ async function handleKeyExchange(msg) {
     }
 
     // Generate client ephemeral ECDH keypair
-    showStatus('Generating keys...', 'var(--accent)');
+    showStatus('Generating keys...', 'var(--accent-text)');
     const clientKP = await crypto.subtle.generateKey(
       { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
 
@@ -121,7 +121,7 @@ async function handleKeyExchange(msg) {
       { name: 'ECDH', namedCurve: 'P-256' }, false, []);
 
     // Derive shared secret
-    showStatus('Deriving secret...', 'var(--accent)');
+    showStatus('Deriving secret...', 'var(--accent-text)');
     const sharedBits = await crypto.subtle.deriveBits(
       { name: 'ECDH', public: serverEphKey }, clientKP.privateKey, 256);
 
@@ -130,7 +130,7 @@ async function handleKeyExchange(msg) {
     const clientPubHex = bytesToHex(clientPubRaw);
 
     // HKDF: derive AES key
-    showStatus('Deriving session key...', 'var(--accent)');
+    showStatus('Deriving session key...', 'var(--accent-text)');
     const salt = hexToBytes(msg.salt);
     const info = new Uint8Array([
       ...new TextEncoder().encode('cm-e2e'),
@@ -149,10 +149,10 @@ async function handleKeyExchange(msg) {
 
     // Send client ephemeral pubkey (plaintext -- last unencrypted message)
     ws.send(JSON.stringify({ type: 'key-exchange', ephemeral: clientPubHex }));
-    showStatus('Secure channel established', 'var(--intent-ok)');
+    showStatus('Secure channel established', 'var(--intent-ok-text)');
   } catch (err) {
     console.error('Key exchange error:', err);
-    showStatus('Key exchange failed: ' + err.message, 'var(--intent-danger)');
+    showStatus('Key exchange failed: ' + err.message, 'var(--intent-danger-text)');
     ws.close();
   }
 }
@@ -250,14 +250,14 @@ async function secureReceive(rawData) {
     } catch (err) {
       clientLog('DECRYPT FAILED: ' + err.message + ' payload:' + (parsed.e?.length || '?') + 'bytes seq:' + parsed.n);
       decryptFailCount++;
-      if (decryptFailCount === 1) showStatus('Decrypt error -- retrying...', 'var(--intent-warn)');
+      if (decryptFailCount === 1) showStatus('Decrypt error -- retrying...', 'var(--intent-warn-text)');
       if (decryptFailCount >= 3) {
         decryptReconnectCount++;
         if (decryptReconnectCount <= 3) {
-          showStatus('Encryption error -- reconnecting...', 'var(--intent-danger)');
+          showStatus('Encryption error -- reconnecting...', 'var(--intent-danger-text)');
           setTimeout(() => doConnect('reconnect'), 500);
         } else {
-          showStatus('Persistent encryption error. Reload the page.', 'var(--intent-danger)');
+          showStatus('Persistent encryption error. Reload the page.', 'var(--intent-danger-text)');
         }
       }
       return null;
@@ -393,7 +393,7 @@ function submitTotp() {
   const code = $('totp-input').value.trim();
   if (!code || code.length !== 6) return;
   authError.style.display = 'none';
-  showStatus('Verifying code...', 'var(--accent)');
+  showStatus('Verifying code...', 'var(--accent-text)');
   doConnect('totp', code);
 }
 
@@ -460,18 +460,18 @@ async function doPasskeyAuth() {
 }
 
 async function loginPasskey() {
-  showStatus('Requesting passkey...', 'var(--accent)');
+  showStatus('Requesting passkey...', 'var(--accent-text)');
   try {
     const token = await doPasskeyAuth();
     if (token) {
       sessionToken = token;
-      showStatus('Authenticated via passkey', 'var(--intent-ok)');
+      showStatus('Authenticated via passkey', 'var(--intent-ok-text)');
       doConnect('passkey');
     } else {
-      showStatus('Passkey verification failed', 'var(--intent-danger)');
+      showStatus('Passkey verification failed', 'var(--intent-danger-text)');
     }
   } catch (e) {
-    showStatus('Passkey error: ' + e.message, 'var(--intent-danger)');
+    showStatus('Passkey error: ' + e.message, 'var(--intent-danger-text)');
   }
 }
 
@@ -517,7 +517,7 @@ async function registerPasskey() {
       $('passkey-btn').style.display = 'block';
     }
   } catch (e) {
-    showStatus('Passkey registration failed: ' + e.message, 'var(--intent-danger)');
+    showStatus('Passkey registration failed: ' + e.message, 'var(--intent-danger-text)');
   }
 }
 
@@ -561,7 +561,7 @@ async function setupTotp() {
       await verifyCode();
     }
   } catch (e) {
-    showStatus('TOTP setup failed: ' + e.message, 'var(--intent-danger)');
+    showStatus('TOTP setup failed: ' + e.message, 'var(--intent-danger-text)');
   }
 }
 
@@ -576,16 +576,16 @@ function doConnect(method, totpCode) {
   ws = new WebSocket(`${proto}//${location.host}`);
   ws.onopen = () => {
     reconnectDelay = 1000; dot.className = 'dot on';
-    showStatus('Connecting securely...', 'var(--accent)');
+    showStatus('Connecting securely...', 'var(--accent-text)');
     // Wait for server key-exchange -- auth deferred until E2E ready
   };
   ws.onclose = () => {
     dot.className = 'dot off'; e2eReady = false;
-    if (sessionToken) { showStatus('Reconnecting...', 'var(--intent-warn)'); clearTimeout(reconnectTimer); reconnectTimer = setTimeout(() => doConnect('reconnect'), reconnectDelay); }
+    if (sessionToken) { showStatus('Reconnecting...', 'var(--intent-warn-text)'); clearTimeout(reconnectTimer); reconnectTimer = setTimeout(() => doConnect('reconnect'), reconnectDelay); }
     reconnectDelay = Math.min(reconnectDelay * 2, 30000);
   };
   ws.onerror = (ev) => {
-    showStatus('Connection error', 'var(--intent-danger)');
+    showStatus('Connection error', 'var(--intent-danger-text)');
   };
   ws.onmessage = async (e) => {
     // Safari may deliver WebSocket data as Blob instead of string
@@ -681,8 +681,8 @@ function handle(m) {
         setAuthMode('login'); authScreen.style.display = 'flex'; appEl.classList.remove('shown');
         $('totp-input').value = '';
         authError.style.display = 'block'; sessionToken = null;
-        if (m.locked) showStatus('Too many attempts. Locked out.', 'var(--intent-danger)');
-        if (m.reason) showStatus(m.reason, 'var(--intent-danger)');
+        if (m.locked) showStatus('Too many attempts. Locked out.', 'var(--intent-danger-text)');
+        if (m.reason) showStatus(m.reason, 'var(--intent-danger-text)');
         checkAuthStatus();
       }
       break;
@@ -691,7 +691,7 @@ function handle(m) {
       sessionToken = null;
       $('totp-input').value = '';
       authError.style.display = 'none';
-      showStatus('Session expired. Re-authenticate.', 'var(--intent-warn)');
+      showStatus('Session expired. Re-authenticate.', 'var(--intent-warn-text)');
       checkAuthStatus();
       break;
     case 'refreshed':
@@ -767,7 +767,7 @@ function handle(m) {
     case 'error':
       // Ignore lock/auth errors (handled by lock screen) -- don't block with alert()
       if (/locked|re-authenticate|not authenticated/i.test(m.message)) break;
-      showStatus(m.message, 'var(--intent-danger)');
+      showStatus(m.message, 'var(--intent-danger-text)');
       break;
   }
 }
@@ -782,9 +782,10 @@ async function loadProjects() {
   }
 }
 
+// D1: light only -- the dark palette and the theme toggle are gone.
+// T05 replaces this with the one shared ANSI palette.
 function getTermTheme() {
-  const isLight = document.documentElement.classList.contains('light');
-  return isLight ? {
+  return {
     background: '#f6f7f9', foreground: '#1c2127', cursor: '#2d72d2',
     selectionBackground: '#d6e4f7',
     black: '#1c2127', red: '#cd4246', green: '#238551', yellow: '#c87619',
@@ -792,14 +793,6 @@ function getTermTheme() {
     brightBlack: '#5c7080', brightRed: '#e76a6e', brightGreen: '#32a467',
     brightYellow: '#ec9a3c', brightBlue: '#4c90f0', brightMagenta: '#bd6bbd',
     brightCyan: '#3fa6da', brightWhite: '#1c2127'
-  } : {
-    background: '#111418', foreground: '#f6f7f9', cursor: '#2d72d2',
-    selectionBackground: '#184a90',
-    black: '#404854', red: '#cd4246', green: '#238551', yellow: '#c87619',
-    blue: '#2d72d2', magenta: '#9d3f9d', cyan: '#147eb3', white: '#abb3bf',
-    brightBlack: '#5f6b7c', brightRed: '#e76a6e', brightGreen: '#32a467',
-    brightYellow: '#ec9a3c', brightBlue: '#4c90f0', brightMagenta: '#bd6bbd',
-    brightCyan: '#3fa6da', brightWhite: '#f6f7f9'
   };
 }
 
@@ -2094,9 +2087,9 @@ imgInput.addEventListener('change', async () => {
     imgBtn.textContent = 'Img';
   } catch (e) {
     console.error('Upload failed:', e);
-    showStatus('Upload failed: ' + (e.message || 'unknown error'), 'var(--intent-danger)');
+    showStatus('Upload failed: ' + (e.message || 'unknown error'), 'var(--intent-danger-text)');
     imgBtn.style.borderColor = 'var(--intent-danger)';
-    imgBtn.style.color = 'var(--intent-danger)';
+    imgBtn.style.color = 'var(--intent-danger-text)';
     setTimeout(() => { imgBtn.textContent = 'Img'; imgBtn.style.borderColor = ''; imgBtn.style.color = ''; }, 3000);
   }
   imgBtn.disabled = false;
@@ -3022,7 +3015,7 @@ sendBtn.addEventListener('click', e => {
       pulling = true;
       countText.textContent = '+';
       btn.style.borderColor = 'var(--accent)';
-      btn.style.color = 'var(--accent-light)';
+      btn.style.color = 'var(--accent-text)';
     } else if (dy <= THRESHOLD && pulling) {
       pulling = false;
       countText.textContent = originalText;
@@ -3043,33 +3036,6 @@ sendBtn.addEventListener('click', e => {
     btn.style.color = '';
   });
 })();
-
-// ── Light/Dark Mode Toggle ──
-function updateThemeChar() {
-  const isLight = document.documentElement.classList.contains('light');
-  // Moon crescent in dark mode, sun in light mode
-  $('theme-char').innerHTML = isLight ? '&#9788;' : '&#9790;';
-}
-
-function toggleTheme() {
-  const isLight = document.documentElement.classList.toggle('light');
-  localStorage.setItem('cm-theme', isLight ? 'light' : 'dark');
-  updateThemeChar();
-  const theme = getTermTheme();
-  Object.keys(terms).forEach(id => { terms[id].options.theme = theme; });
-  let meta = document.querySelector('meta[name="theme-color"]');
-  if (!meta) { meta = document.createElement('meta'); meta.name = 'theme-color'; document.head.appendChild(meta); }
-  meta.content = isLight ? '#f6f7f9' : '#111418';
-}
-
-// T04a: was onclick="toggleTheme()" on #theme-toggle.
-$('theme-toggle').addEventListener('click', () => toggleTheme());
-
-// Restore saved theme
-if (localStorage.getItem('cm-theme') === 'light') {
-  document.documentElement.classList.add('light');
-}
-updateThemeChar();
 
 // Wake lock
 if ('wakeLock' in navigator) {

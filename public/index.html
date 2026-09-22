@@ -10,7 +10,9 @@
        attached). -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <!-- D1: light only. Matches --term-bg, the colour the status bar sits over. -->
+  <meta name="theme-color" content="#FBFBFD">
   <meta name="apple-mobile-web-app-title" content="Claude">
   <title>Claude Mobile</title>
   <link rel="stylesheet" href="/vendor/xterm.min.css" />
@@ -136,7 +138,6 @@
 
   <div id="tabs">
     <div id="tab-switcher"></div>
-    <button id="theme-toggle" aria-label="Toggle theme"><span id="theme-char">&#9790;</span></button>
     <div id="tab-pill" role="button" aria-label="Scroll to bottom">
       <span class="pill-notify"></span>
       <span class="pill-name">No session</span>

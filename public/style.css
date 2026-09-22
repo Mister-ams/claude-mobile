@@ -1,86 +1,140 @@
-/* ── Palantir/Blueprint Dark Theme ──
- * 4-layer elevation system:
- *   L0 --bg         terminal content well (deepest)
- *   L1 --surface    structural frame (header, tab bar)
- *   L2 --dock       action dock (qbar, input bar)
- *   L3 --surface-alt interactive elements (buttons, pill, inputs)
+/* ── Tokens: light only, one set (D1) ──
+ * This :root block is the ONLY place a colour literal may appear in this
+ * file; `npm run lint:colors` (test/color-lint.js) fails on any hex/rgb/hsl
+ * literal outside it, and in setup.html's <style>.
  *
- * Colorblind-safe: status uses shape+color, attention uses icon+color,
- * intent colors chosen for deuteranopia/protanopia distinguishability.
- * All text meets WCAG AA (4.5:1), UI elements meet 3:1.
+ * Layers:
+ *   content   the terminal: opaque, monospace, --term-* (D3). No glass.
+ *   chrome    header/rail, tab strip, input bar, chips, sheets, auth card:
+ *             Liquid Glass (--glass-*), floating over the content layer.
+ *
+ * Colours are Apple's UIKit semantic colours, light appearance. Where the
+ * stock value is below WCAG AA 4.5:1 as TEXT (systemBlue 4.0, systemGreen
+ * 2.2, secondaryLabel 3.5 on white), a separate *-text / *-fill token carries
+ * the accessible variant and the stock tint is used only for non-text marks
+ * (dots, rings, cursor, borders).
+ *
+ * Liquid Glass recipe (D2) ported from liquid-glass-component-kit by h0rhay,
+ * https://github.com/h0rhay/liquid-glass-component-kit -- MIT License,
+ * (c) its authors; see that repository's LICENSE. Ported: the layered
+ * backdrop filter (saturate + contrast + brightness + blur), the white tint,
+ * the inset specular highlights (its "subtle" intensity), the two-way depth
+ * shadow and the 135deg gradient rim. Not ported: its JS and the SVG
+ * displacement filter -- Safari cannot refract live content (WebKit 245510),
+ * so lens refraction is out of scope. Blur and saturation are raised to
+ * Apple's material values; the kit's 2.5px blur is tuned for dark pages.
  */
 :root {
-  --bg:            #111418;
-  --surface:       #1c2127;
-  --dock:          #181d23;
-  --surface-alt:   #252a31;
-  --surface-hover: #2f343c;
-  --border:        #404854;
-  --border-muted:  #313840;
-  --text:          #f6f7f9;
-  --text-sec:      #abb3bf;
-  --dim:           #738091;
-  --accent:        #2d72d2;
-  --accent-light:  #4c90f0;
-  --accent-muted:  #184a90;
-  --intent-ok:     #238551;
-  --intent-danger: #cd4246;
-  --intent-warn:   #c87619;
-  --cerulean:      #147eb3;
-  --radius:        4px;
-  --shadow-inset:  inset 0 0 0 1px rgba(255,255,255,0.05);
-  --shadow-1:      inset 0 0 0 1px rgba(255,255,255,0.05), 0 1px 2px rgba(0,0,0,0.4);
-  --transition:    cubic-bezier(0.4, 1, 0.75, 0.9);
-  --term-bg:       #111418;
-  --term-fg:       #f6f7f9;
-  --term-cursor:   #2d72d2;
+  /* Apple system colours (light) */
+  --system-background:            #FFFFFF;
+  --secondary-system-background:  #F2F2F7;
+  --system-grouped-background:    #F2F2F7;
+  --secondary-grouped-background: #FFFFFF;
+  --label:                        #1D1D1F;
+  --secondary-label:              rgba(60, 60, 67, 0.6);
+  --tertiary-label:               rgba(60, 60, 67, 0.3);
+  --secondary-label-aa:           #545456;  /* 7.6:1 on white */
+  --tertiary-label-aa:            #6E6E73;  /* 5.1:1 on white, 4.5:1 on F2F2F7 */
+  --separator:                    rgba(60, 60, 67, 0.29);
+  --separator-muted:              rgba(60, 60, 67, 0.12);
+  --opaque-separator:             #C6C6C8;
+  --system-fill:                  rgba(120, 120, 128, 0.2);
+  --secondary-fill:               rgba(120, 120, 128, 0.16);
+  --tertiary-fill:                rgba(118, 118, 128, 0.12);
+  --system-blue:                  #007AFF;
+  --system-green:                 #34C759;
+  --system-orange:                #FF9500;
+  --system-red:                   #FF3B30;
+  --system-yellow:                #FFCC00;
+  --system-gray:                  #8E8E93;
+  --on-tint:                      #FFFFFF;
+
+  /* Semantic roles (what the rules below use) */
+  --bg:             var(--secondary-system-background);  /* page backdrop */
+  --surface:        var(--system-background);
+  --surface-alt:    var(--tertiary-fill);
+  --surface-hover:  var(--secondary-fill);
+  --border:         var(--separator);
+  --border-muted:   var(--separator-muted);
+  --text:           var(--label);
+  --text-sec:       var(--secondary-label-aa);
+  --dim:            var(--tertiary-label-aa);
+  --accent:         var(--system-blue);   /* marks: rings, borders, cursor */
+  --accent-text:    #0066CC;              /* 5.6:1 on white */
+  --accent-fill:    #0071E3;              /* white label on it: 4.7:1 */
+  --accent-pressed: #0058B0;
+  --accent-muted:   rgba(0, 122, 255, 0.12);
+  --accent-strong-tint: rgba(0, 122, 255, 0.24);
+  --focus-ring:     0 0 0 3px rgba(0, 122, 255, 0.3);
+  --intent-ok:          var(--system-green);
+  --intent-ok-text:     #1A7F37;          /* 5.1:1 */
+  --intent-danger:      var(--system-red);
+  --intent-danger-text: #D70015;          /* 5.4:1 */
+  --intent-warn:        var(--system-orange);
+  --intent-warn-text:   #C93400;          /* 5.3:1; also the armed fill */
+  --intent-warn-halo:   rgba(255, 149, 0, 0.3);
+
+  /* Radii (continuous-corner look), spacing */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius:    var(--radius-sm);
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+
+  /* Shadows */
+  --shadow-1:     0 1px 2px rgba(0, 0, 0, 0.06), 0 0 0 0.5px rgba(0, 0, 0, 0.05);
+  --shadow-2:     0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-up:    0 -6px 18px rgba(0, 0, 0, 0.08);
+  --shadow-field: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+
+  /* Motion */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out:      cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast:      0.12s;
+  --dur-med:       0.24s;
+  --transition:    var(--ease-standard);
+
+  /* Liquid Glass (chrome only -- D3) */
+  --glass-bg:          rgba(255, 255, 255, 0.62);
+  --glass-bg-thick:    rgba(255, 255, 255, 0.8);
+  --glass-bg-fallback: rgba(255, 255, 255, 0.95);
+  --glass-chip-bg:     rgba(255, 255, 255, 0.72);
+  --glass-blur:        20px;
+  --glass-saturate:    180%;
+  --glass-filter:      saturate(var(--glass-saturate)) contrast(110%) brightness(102%) blur(var(--glass-blur));
+  --glass-border:      rgba(255, 255, 255, 0.6);
+  --glass-hairline:    rgba(60, 60, 67, 0.14);
+  --glass-highlight:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 5px 5px 10px rgba(153, 192, 255, 0.05),
+    inset 1px 1px 3px rgba(195, 218, 255, 0.1),
+    inset -5px -5px 10px rgba(229, 253, 190, 0.05),
+    inset -1px -1px 15px rgba(247, 255, 226, 0.1);
+  --glass-shadow:      0 5px 20px rgba(0, 0, 0, 0.1), 0 -5px 20px rgba(147, 147, 147, 0.1);
+  --glass-chip-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  --glass-rim: linear-gradient(135deg,
+    rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.2) 25%,
+    rgba(255, 255, 255, 0.2) 75%, rgba(255, 255, 255, 0.9) 100%);
+  --mask-solid: linear-gradient(#000 0 0);
+
+  /* Terminal content layer (D3). T05 owns the ANSI palette. */
+  --term-bg:       #FBFBFD;
+  --term-fg:       #1D1D1F;
+  --term-cursor:   var(--system-blue);
+  --term-selection: rgba(0, 122, 255, 0.2);
+  --font-mono:     ui-monospace, 'SF Mono', Menlo, monospace;
   /* T14: terminal font size. Set from localStorage by applyFontSize() --
      13px is the phone default, tablets start at 16px. The cell grid reads
      it directly; the xterm fallback gets it through term.options.fontSize. */
   --term-font-size: 13px;
 }
-/* ── Light Mode ── */
-.light {
-  --bg:            #f6f7f9;
-  --surface:       #ffffff;
-  --dock:          #eef0f3;
-  --surface-alt:   #e5e8eb;
-  --surface-hover: #dce0e5;
-  --border:        #c5cbd3;
-  --border-muted:  #d8dce2;
-  --text:          #1c2127;
-  --text-sec:      #5c7080;
-  --dim:           #8a9ba8;
-  --accent:        #2d72d2;
-  --accent-light:  #4c90f0;
-  --accent-muted:  rgba(45,114,210,0.12);
-  --intent-ok:     #238551;
-  --intent-danger: #cd4246;
-  --intent-warn:   #c87619;
-  --cerulean:      #147eb3;
-  --shadow-inset:  inset 0 0 0 1px rgba(17,20,24,0.1);
-  --shadow-1:      inset 0 0 0 1px rgba(17,20,24,0.12), 0 1px 1px rgba(17,20,24,0.08);
-  --term-bg:       #f6f7f9;
-  --term-fg:       #1c2127;
-  --term-cursor:   #2d72d2;
-}
-/* Light mode element overrides */
-.light #msg { background: var(--surface); }
-.light .totp-input { background: var(--surface); }
-.light .qb { background: var(--surface); }
-.light #send { color: #fff; background: linear-gradient(180deg, #4c90f0 0%, #2d72d2 100%); }
-.light #send:active { background: var(--accent); }
-.light #tab-pill { background: var(--surface); }
-.light .scroll-divider { opacity: 0; }
-.light #term-area { border-top: 1px solid var(--border); }
-.light #diag { background: rgba(45,114,210,0.06); color: var(--accent); }
-.light .switcher-item:active { background: var(--accent-muted); }
-.light #autocomplete { box-shadow: 0 -4px 12px rgba(17,20,24,0.08); }
-.light #tab-switcher { box-shadow: 0 -8px 24px rgba(17,20,24,0.08); }
-.light .auth-primary { background: linear-gradient(180deg, #32a467 0%, #238551 100%); }
-.light .auth-btn { background: linear-gradient(180deg, #4c90f0 0%, #2d72d2 100%); }
-.light #img-btn { background: var(--surface); }
-.light .auth-card { border-color: var(--border-muted); }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
@@ -93,11 +147,41 @@ html, body {
 /* Form controls do not inherit font by default; WebKit falls back to the UA
    control font (serif-looking 'MS Shell Dlg' on Windows WebKit). */
 button, input, textarea, select { font: inherit; }
-#app { display: none; flex-direction: column; height: 100dvh; position: relative; overflow: hidden; }
+/* The app's own backdrop is the terminal layer's colour: chrome glass floats
+   over the content layer, never over a second surface. */
+#app { display: none; flex-direction: column; height: 100dvh; position: relative; overflow: hidden; background: var(--term-bg); }
 /* Visibility is a CLASS, not an inline style. An inline `display:flex` beats
    every stylesheet rule, so the landscape rail at the bottom of this file
    could never take effect while app.js assigned display directly. */
 #app.shown { display: flex; }
+
+/* ── Liquid Glass: chrome surfaces ──
+   Bars and sheets get the full material (tint + backdrop blur/saturate +
+   specular highlight). Controls sitting ON a glass bar get the chip variant
+   without a second backdrop-filter: a nested backdrop only samples its glass
+   parent, so it would cost a compositing layer for no visible change.
+   The terminal (#term-area and below) is deliberately absent (D3). */
+#header, #tabs, #input-bar, #qbar, #img-preview,
+#settings-panel, #autocomplete, #tab-switcher, .auth-card {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+}
+#settings-panel, #autocomplete, #tab-switcher, .auth-card { background: var(--glass-bg-thick); }
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  #header, #tabs, #input-bar, #qbar, #img-preview,
+  #settings-panel, #autocomplete, #tab-switcher, .auth-card { background: var(--glass-bg-fallback); }
+}
+/* The kit's gradient rim: a 1px masked ring on floating glass. */
+.auth-card::after, #settings-panel::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  border-radius: inherit; padding: 1px;
+  background: var(--glass-rim);
+  -webkit-mask: var(--mask-solid) content-box, var(--mask-solid);
+  -webkit-mask-composite: xor;
+  mask: var(--mask-solid) content-box, var(--mask-solid);
+  mask-composite: exclude;
+}
 
 /* ── Auth Screen (login + lock modes) ── */
 #auth-screen {
@@ -120,104 +204,97 @@ button, input, textarea, select { font: inherit; }
 #auth-screen .lock-icon {
   font-size: 32px; color: var(--intent-warn); margin-bottom: 8px;
 }
-#auth-screen .sub { color: var(--dim); font-size: 13px; text-align: center; max-width: 280px; }
+#auth-screen .sub { color: var(--text-sec); font-size: 13px; text-align: center; max-width: 280px; }
 .auth-card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 24px;
-  box-shadow: var(--shadow-1);
+  position: relative;
+  border: 1px solid var(--glass-hairline);
+  border-radius: var(--radius-lg); padding: 24px;
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
   display: flex; flex-direction: column; align-items: center; gap: 16px;
   width: 300px;
 }
 .auth-primary {
   display: none; width: 100%; padding: 12px; font-size: 14px; font-weight: 600;
-  background: var(--intent-ok); color: #fff; border: none;
-  border-radius: var(--radius); cursor: pointer;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1), 0 1px 1px rgba(0,0,0,0.2);
-  transition: all 0.1s var(--transition);
+  background: var(--accent-fill); color: var(--on-tint); border: none;
+  border-radius: var(--radius-md); cursor: pointer;
+  box-shadow: var(--shadow-1);
+  transition: transform var(--dur-fast) var(--transition), opacity var(--dur-fast) var(--transition);
 }
 .auth-primary:active { transform: scale(0.98); opacity: 0.9; }
 #totp-section { display: none; text-align: center; width: 100%; }
 .totp-input {
   width: 100%; padding: 12px; text-align: center; font-size: 20px;
-  letter-spacing: 8px; font-variant-numeric: tabular-nums; background: var(--bg);
-  border: 1px solid var(--border); border-radius: var(--radius);
+  letter-spacing: 8px; font-variant-numeric: tabular-nums; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-md);
   color: var(--text); outline: none;
-  box-shadow: inset 0 1px 1px rgba(0,0,0,0.3);
+  box-shadow: var(--shadow-field);
 }
-.totp-input:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), inset 0 1px 1px rgba(0,0,0,0.2); }
+.totp-input:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
 .auth-btn {
   width: 100%; padding: 10px; margin-top: 8px; font-size: 14px; font-weight: 600;
-  background: var(--accent); color: #fff; border: none;
-  border-radius: var(--radius); cursor: pointer;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1), 0 1px 1px rgba(0,0,0,0.2);
-  transition: all 0.1s var(--transition);
+  background: var(--accent-fill); color: var(--on-tint); border: none;
+  border-radius: var(--radius-md); cursor: pointer;
+  box-shadow: var(--shadow-1);
+  transition: transform var(--dur-fast) var(--transition), background var(--dur-fast) var(--transition);
 }
-.auth-btn:active { background: var(--accent-muted); transform: scale(0.98); }
-#auth-error { color: var(--intent-danger); font-size: 12px; display: none; font-weight: 500; }
+.auth-btn:active { background: var(--accent-pressed); transform: scale(0.98); }
+#auth-error { color: var(--intent-danger-text); font-size: 12px; display: none; font-weight: 500; }
 #auth-status { color: var(--dim); font-size: 12px; display: none; }
 #setup-msg { display: none; text-align: center; }
-#setup-msg .sub { color: var(--intent-warn); font-size: 12px; }
+#setup-msg .sub { color: var(--intent-warn-text); font-size: 12px; }
 
-/* ── Header (Blueprint Toolbar) ── */
+/* ── Header (glass toolbar) ── */
 #header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 6px 10px; background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  box-shadow: var(--shadow-inset);
+  padding: 6px 10px;
+  border-bottom: 0.5px solid var(--glass-hairline);
+  box-shadow: var(--glass-highlight);
   padding-top: max(6px, env(safe-area-inset-top));
   gap: 8px;
   position: relative;  /* containing block for #settings-panel */
+  z-index: 30;         /* the settings sheet hangs over the terminal */
 }
 .sess-name {
   font-size: 16px; font-weight: 600;
   background: none; border: none; border-bottom: 1px dashed transparent;
   color: var(--text); outline: none;
   width: auto; max-width: 180px; min-width: 60px;
-  font-family: 'SF Mono', 'Menlo', monospace;
+  font-family: var(--font-mono);
   padding: 2px 0; text-transform: uppercase;
 }
 .sess-name:focus { border-bottom-color: var(--accent); }
 .sess-dir {
   font-size: 11px; color: var(--dim); margin-top: 1px;
-  font-family: 'SF Mono', 'Menlo', monospace;
+  font-family: var(--font-mono);
 }
-/* ── Theme Toggle (bottom-left) ── */
-#theme-toggle {
-  flex-shrink: 0; width: 34px; height: 44px;
-  display: flex; align-items: center; justify-content: center;
-  background: none; border: none; color: var(--text-sec);
-  cursor: pointer; transition: color 0.15s var(--transition);
-  padding: 0; font-size: 16px;
-}
-#theme-toggle:active { color: var(--accent-light); }
 /* ── Settings (T12) ── */
 #settings-btn {
   flex-shrink: 0; width: 34px; height: 34px;
   display: flex; align-items: center; justify-content: center;
   background: none; border: 1px solid transparent; border-radius: var(--radius);
   color: var(--text-sec); font-size: 16px; cursor: pointer; padding: 0;
-  transition: all 0.15s var(--transition);
+  transition: color var(--dur-fast) var(--transition), background var(--dur-fast) var(--transition);
 }
 #settings-btn:active, #settings-btn[aria-expanded="true"] {
-  color: var(--accent-light); border-color: var(--border);
+  color: var(--accent-text); background: var(--glass-chip-bg);
+  border-color: var(--glass-border); box-shadow: var(--glass-chip-shadow);
 }
 #settings-panel {
   display: none; position: absolute; z-index: 60;
-  top: 100%; right: max(4px, env(safe-area-inset-right));
+  top: calc(100% + 6px); right: max(8px, env(safe-area-inset-right));
   width: 280px; max-width: calc(100vw - 16px);
   padding: 12px 14px;
-  background: var(--surface); border: 1px solid var(--border);
-  border-top: none; border-radius: 0 0 var(--radius) var(--radius);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  border: 1px solid var(--glass-hairline);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
 }
-.light #settings-panel { box-shadow: 0 8px 24px rgba(17,20,24,0.12); }
 #settings-panel.open { display: block; }
 #settings-panel .set-row {
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px; min-height: 32px;
 }
 #settings-panel label {
-  font-size: 12px; color: var(--text); font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 12px; color: var(--text); font-family: var(--font-mono);
 }
 #settings-panel .set-note {
   font-size: 11px; color: var(--dim); line-height: 1.4; margin-top: 4px;
@@ -230,7 +307,7 @@ button, input, textarea, select { font: inherit; }
 }
 #settings-panel .set-val {
   font-size: 12px; color: var(--text-sec);
-  font-family: 'SF Mono', 'Menlo', monospace;
+  font-family: var(--font-mono);
 }
 
 /* ── Server control ──
@@ -238,27 +315,28 @@ button, input, textarea, select { font: inherit; }
    the same kind of control, and a second button vocabulary inside a 280px
    panel would read as a different app. */
 #settings-panel .set-sep {
-  height: 1px; background: var(--border-muted);
+  height: 0.5px; background: var(--border);
   margin: 12px -14px 10px;
 }
 #settings-panel .srv-actions { display: flex; gap: 6px; margin-top: 8px; }
 #settings-panel .srv-btn {
   flex: 1; padding: 6px; font-size: 11px; min-height: 32px;
-  background: var(--surface-alt); border: 1px solid var(--border);
+  background: var(--glass-chip-bg); border: 1px solid var(--glass-border);
   border-radius: var(--radius); color: var(--text-sec); cursor: pointer;
-  font-family: 'SF Mono', 'Menlo', monospace;
+  font-family: var(--font-mono);
+  box-shadow: var(--glass-chip-shadow);
 }
-#settings-panel .srv-btn:active { background: var(--accent); color: #fff; border-color: var(--accent); }
+#settings-panel .srv-btn:active { background: var(--accent-fill); color: var(--on-tint); border-color: var(--accent-fill); }
 #settings-panel .srv-btn[disabled] { opacity: 0.4; cursor: default; }
 /* Armed is the second tap of a two-step confirm. It has to be unmistakable at
    a glance, because the next tap restarts the server. */
 #settings-panel .srv-btn.armed {
-  background: var(--intent-warn); border-color: var(--intent-warn); color: #fff;
+  background: var(--intent-warn-text); border-color: var(--intent-warn-text); color: var(--on-tint);
 }
 #settings-panel .srv-btn.busy { opacity: 0.6; cursor: progress; }
-#settings-panel #srv-note.avail { color: var(--accent-light); }
-#settings-panel #srv-result.ok { color: var(--intent-ok); }
-#settings-panel #srv-result.bad { color: var(--intent-danger); }
+#settings-panel #srv-note.avail { color: var(--accent-text); }
+#settings-panel #srv-result.ok { color: var(--intent-ok-text); }
+#settings-panel #srv-result.bad { color: var(--intent-danger-text); }
 
 /* ── T14: full-screen terminal on a hardware keyboard ──
    Direct keystrokes make the compose box the exception rather than the
@@ -291,10 +369,10 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 .dot.on { background: var(--intent-ok); }
 .dot.off { background: none; border: 1.5px solid var(--intent-danger); }
 
-/* ── Terminal ── */
+/* ── Terminal: the opaque content layer (D3) ── */
 #term-area {
   flex: 1; min-height: 0; overflow: hidden; position: relative;
-  background: var(--bg);
+  background: var(--term-bg);
 }
 #scroll-zones {
   position: absolute; top: 0; left: 0; right: 0; bottom: 0;
@@ -311,7 +389,7 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 .scroll-zone-down { right: 0; width: 50%; }
 .scroll-divider {
   position: absolute; top: 16px; bottom: 16px; left: 50%;
-  width: 1px; background: var(--border); opacity: 0.3;
+  width: 1px; background: var(--border); opacity: 0;
   pointer-events: none;
 }
 .scroll-flash {
@@ -355,7 +433,7 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 .term-wrap.active { display: block; }
 .term-wrap.swipe-visible { display: block; }
 .term-wrap.swipe-animate {
-  transition: transform 0.28s cubic-bezier(0.25, 1, 0.5, 1);
+  transition: transform 0.28s var(--ease-out);
 }
 .term-wrap .xterm { height: 100% !important; }
 .term-wrap .xterm-viewport {
@@ -372,12 +450,12 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   overflow-y: auto; overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-family: var(--font-mono);
   font-size: var(--term-font-size, 13px);
   line-height: 1.286;
   white-space: pre;
-  background: var(--bg, #111418);
-  color: var(--text, #f6f7f9);
+  background: var(--term-bg);
+  color: var(--term-fg);
   padding: 0;
   box-sizing: border-box;
   position: relative;  /* containing block for absolutely-positioned cursor */
@@ -405,7 +483,7 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 .grid-cursor {
   position: absolute;
   width: 2px;
-  background: var(--accent, #2d72d2);
+  background: var(--term-cursor);
   pointer-events: none;
   display: none;
   animation: grid-cursor-blink 1s steps(2) infinite;
@@ -420,23 +498,23 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   width: 40px; height: 40px; border: 1px solid var(--border);
   border-radius: var(--radius); display: flex; align-items: center;
   justify-content: center; font-size: 20px; color: var(--dim);
-  box-shadow: var(--shadow-inset);
+  box-shadow: var(--shadow-1);
 }
 
 /* ── Diagnostics ── */
 #diag {
   display: none; padding: 4px 12px;
-  background: rgba(45,114,210,0.15); border-top: 1px solid var(--accent);
-  font-size: 11px; color: var(--accent-light);
-  font-family: 'SF Mono', 'Menlo', monospace;
+  background: var(--accent-muted); border-top: 1px solid var(--accent);
+  font-size: 11px; color: var(--accent-text);
+  font-family: var(--font-mono);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 #diag.show { display: block; }
 
-/* ── Quick Actions (Blueprint Button Group) ── */
+/* ── Quick Actions (glass chips) ── */
 #qbar {
-  display: flex; gap: 1px; padding: 2px 10px; overflow-x: auto;
-  background: var(--dock); border-top: 1px solid var(--border-muted);
+  display: flex; gap: 6px; padding: 4px 10px; overflow-x: auto;
+  border-top: 0.5px solid var(--glass-hairline);
   -webkit-overflow-scrolling: touch;
 }
 #qbar::-webkit-scrollbar { display: none; }
@@ -444,119 +522,121 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   flex: 1; padding: 4px 6px; font-size: 11px;
   min-height: 32px;
   display: flex; align-items: center; justify-content: center;
-  background: var(--surface-alt); border: 1px solid var(--border);
+  background: var(--glass-chip-bg); border: 1px solid var(--glass-border);
   border-radius: var(--radius); color: var(--text-sec); cursor: pointer;
-  font-family: 'SF Mono', 'Menlo', monospace;
-  box-shadow: var(--shadow-inset);
-  transition: all 0.1s var(--transition);
+  font-family: var(--font-mono);
+  box-shadow: var(--glass-chip-shadow);
+  transition: background var(--dur-fast) var(--transition), color var(--dur-fast) var(--transition);
   letter-spacing: 0.3px;
 }
-.qb:active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.qb:active { background: var(--accent-fill); color: var(--on-tint); border-color: var(--accent-fill); }
 
 /* ── Image Preview ── */
 #img-preview {
   display: none; align-items: center; gap: 8px; padding: 6px 12px;
-  background: var(--surface-alt); border-top: 1px solid var(--border);
+  border-top: 0.5px solid var(--glass-hairline);
   font-size: 12px; color: var(--text-sec);
 }
 #img-preview.show { display: flex; }
 #img-name {
   flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-family: 'SF Mono', 'Menlo', monospace;
+  font-family: var(--font-mono);
 }
 #img-clear {
-  background: none; border: 1px solid var(--border);
+  background: var(--glass-chip-bg); border: 1px solid var(--glass-border);
   border-radius: var(--radius); color: var(--dim); font-size: 11px;
   font-weight: 600; padding: 4px 8px; cursor: pointer;
   min-height: 44px; min-width: 44px;
-  transition: all 0.1s var(--transition);
+  box-shadow: var(--glass-chip-shadow);
 }
 
-/* ── Input (Blueprint InputGroup) ── */
+/* ── Input (glass bar) ── */
 #input-bar {
-  display: flex; gap: 4px; padding: 3px 10px;
-  background: var(--dock); border-top: 1px solid var(--border-muted);
+  display: flex; gap: 6px; padding: 3px 10px;
+  border-top: 0.5px solid var(--glass-hairline);
+  box-shadow: var(--glass-highlight);
   align-items: flex-end;
 }
 #img-btn {
   display: flex; align-items: center; justify-content: center;
   padding: 4px; min-height: 32px; min-width: 32px;
-  background: var(--surface-alt); color: var(--dim);
-  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--glass-chip-bg); color: var(--text-sec);
+  border: 1px solid var(--glass-border); border-radius: var(--radius);
   font-weight: 600; font-size: 11px; cursor: pointer;
   white-space: nowrap;
-  font-family: 'SF Mono', 'Menlo', monospace;
-  box-shadow: var(--shadow-inset);
-  transition: all 0.1s var(--transition);
+  font-family: var(--font-mono);
+  box-shadow: var(--glass-chip-shadow);
+  transition: background var(--dur-fast) var(--transition), color var(--dur-fast) var(--transition);
   -webkit-tap-highlight-color: transparent;
 }
-#img-btn:active { background: var(--accent); color: #fff; border-color: var(--accent); }
-#img-btn.has-img { background: var(--accent-muted); color: var(--accent-light); border-color: var(--accent); }
+#img-btn:active { background: var(--accent-fill); color: var(--on-tint); border-color: var(--accent-fill); }
+#img-btn.has-img { background: var(--accent-muted); color: var(--accent-text); border-color: var(--accent); }
 #msg {
   flex: 1; padding: 6px 10px; font-size: 16px;
-  background: var(--bg); border: 1px solid var(--border);
+  background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); color: var(--text); outline: none;
-  font-family: 'SF Mono', 'Menlo', monospace;
+  font-family: var(--font-mono);
   resize: none; min-height: 32px; max-height: 64px;
   line-height: 1.4; overflow-y: auto;
-  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.1);
+  box-shadow: var(--shadow-field);
 }
-#msg:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+#msg:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
 #send {
   padding: 4px 10px; min-height: 32px; min-width: 44px;
-  background: var(--accent); color: #fff;
+  background: var(--accent-fill); color: var(--on-tint);
   border: none; border-radius: var(--radius); font-weight: 600; font-size: 13px;
   cursor: pointer; white-space: nowrap;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1), 0 1px 1px rgba(0,0,0,0.2);
-  transition: all 0.1s var(--transition);
+  box-shadow: var(--shadow-1);
+  transition: transform var(--dur-fast) var(--transition), background var(--dur-fast) var(--transition);
   touch-action: manipulation;
   -webkit-touch-callout: none;
   -webkit-user-select: none; user-select: none;
 }
-#send:active { background: #215db0; transform: scale(0.98); }
+#send:active { background: var(--accent-pressed); transform: scale(0.98); }
 
-/* ── Autocomplete ── */
+/* ── Autocomplete (glass sheet) ── */
 #autocomplete {
   display: none; position: absolute; bottom: 100%; left: 0; right: 0;
   max-height: 200px; overflow-y: auto; -webkit-overflow-scrolling: touch;
-  background: var(--surface-alt); border: 1px solid var(--border);
-  border-bottom: none; border-radius: var(--radius) var(--radius) 0 0; z-index: 50;
-  box-shadow: 0 -4px 12px rgba(0,0,0,0.3);
+  border: 0.5px solid var(--glass-hairline);
+  border-bottom: none; border-radius: var(--radius-md) var(--radius-md) 0 0; z-index: 50;
+  box-shadow: var(--glass-highlight), var(--shadow-up);
 }
 #autocomplete.show { display: block; }
 .ac-item {
   display: block; width: 100%; padding: 14px 12px; border: none;
   background: none; color: var(--text); font-size: 13px; text-align: left;
-  cursor: pointer; border-bottom: 1px solid var(--border);
-  font-family: 'SF Mono', 'Menlo', monospace;
+  cursor: pointer; border-bottom: 0.5px solid var(--border);
+  font-family: var(--font-mono);
   min-height: 44px;
   transition: background 0.1s;
 }
 .ac-item:active { background: var(--accent-muted); }
-.ac-item .ac-cmd { font-weight: 600; color: var(--accent-light); }
+.ac-item .ac-cmd { font-weight: 600; color: var(--accent-text); }
 .ac-item .ac-desc { color: var(--dim); font-size: 12px; margin-left: 8px; }
 
-/* ── Tab Strip (Blueprint Panel Footer) ── */
+/* ── Tab Strip (glass bar) ── */
 #tabs {
   display: flex; align-items: center; gap: 6px;
-  background: var(--surface);
   padding: 6px 10px; padding-bottom: calc(6px + max(12px, env(safe-area-inset-bottom)));
-  border-top: 1px solid var(--border);
+  border-top: 0.5px solid var(--glass-hairline);
+  box-shadow: var(--glass-highlight);
   min-height: 46px; position: relative;
 }
 /* Active session pill */
 #tab-pill {
   flex: 1; display: flex; align-items: center; gap: 6px;
-  background: var(--bg); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 0 10px;
+  background: var(--glass-chip-bg); border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md); padding: 0 10px;
   height: 44px; min-width: 0; cursor: pointer;
+  box-shadow: var(--glass-chip-shadow);
   transition: border-color 0.15s var(--transition);
   overflow: hidden;
 }
 #tab-pill:active { border-color: var(--accent); }
 #tab-pill .pill-name {
   flex: 1; font-size: 12px; color: var(--text);
-  font-family: 'SF Mono', 'Menlo', monospace;
+  font-family: var(--font-mono);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   line-height: 44px;
 }
@@ -569,14 +649,15 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 #tab-count-btn {
   flex-shrink: 0; width: 44px; height: 44px;
   display: flex; align-items: center; justify-content: center;
-  background: none; border: 1px solid var(--border);
-  border-radius: var(--radius); color: var(--text-sec);
+  background: var(--glass-chip-bg); border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md); color: var(--text-sec);
   font-size: 12px; font-weight: 700; cursor: pointer;
-  font-family: 'SF Mono', 'Menlo', monospace;
-  transition: all 0.15s var(--transition);
+  font-family: var(--font-mono);
+  box-shadow: var(--glass-chip-shadow);
+  transition: border-color var(--dur-fast) var(--transition), color var(--dur-fast) var(--transition);
   position: relative;
 }
-#tab-count-btn:active { border-color: var(--accent); color: var(--accent-light); }
+#tab-count-btn:active { border-color: var(--accent); color: var(--accent-text); }
 /* Notification badge on tab count */
 #tab-count-btn .attn-badge {
   display: none; position: absolute; top: -4px; right: -4px;
@@ -589,9 +670,10 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 /* Tab switcher overlay */
 #tab-switcher {
   display: none; position: absolute; bottom: 100%; left: 0; right: 0;
-  background: var(--surface); border-top: 1px solid var(--border);
+  border-top: 0.5px solid var(--glass-hairline);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   max-height: 60vh; overflow-y: auto; -webkit-overflow-scrolling: touch;
-  z-index: 50; box-shadow: 0 -8px 24px rgba(0,0,0,0.4);
+  z-index: 50; box-shadow: var(--glass-highlight), var(--shadow-up);
   overscroll-behavior: contain;
 }
 #tab-switcher.open { display: block; }
@@ -600,18 +682,18 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   width: 100%; padding: 10px 12px; border: none;
   background: none; color: var(--text); font-size: 12px;
   text-align: left; cursor: pointer;
-  font-family: 'SF Mono', 'Menlo', monospace;
-  border-bottom: 1px solid var(--border);
+  font-family: var(--font-mono);
+  border-bottom: 0.5px solid var(--border);
   min-height: 44px;
   transition: background 0.1s;
 }
 .switcher-item:active { background: var(--surface-hover); }
-.switcher-item.active { background: var(--surface-alt); border-left: 2px solid var(--accent); }
+.switcher-item.active { background: var(--accent-muted); border-left: 2px solid var(--accent); }
 .switcher-item .sw-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .switcher-item .sw-attn {
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--intent-warn); flex-shrink: 0;
-  box-shadow: 0 0 0 2px rgba(200,118,25,0.3);
+  box-shadow: 0 0 0 2px var(--intent-warn-halo);
   animation: pulse 1.5s infinite;
 }
 .switcher-item .sw-close {
@@ -620,9 +702,9 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   background: none; border: 1px solid var(--border);
   border-radius: var(--radius); color: var(--dim); font-size: 11px;
   font-weight: 600; cursor: pointer;
-  transition: all 0.1s var(--transition);
+  transition: background var(--dur-fast) var(--transition), color var(--dur-fast) var(--transition);
 }
-.switcher-item .sw-close:active { background: var(--intent-danger); color: #fff; border-color: var(--intent-danger); }
+.switcher-item .sw-close:active { background: var(--intent-danger-text); color: var(--on-tint); border-color: var(--intent-danger-text); }
 /* Swipe hint edges */
 #swipe-hint-left, #swipe-hint-right {
   position: absolute; top: 0; bottom: 0; width: 4px;
@@ -635,16 +717,16 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 /* New session pull indicator */
 #new-session-hint {
   position: absolute; right: 0; top: 0; bottom: 0; width: 0;
-  background: rgba(45,114,210,0.15); display: flex;
+  background: var(--accent-muted); display: flex;
   align-items: center; justify-content: center;
   overflow: hidden; transition: width 0.1s; z-index: 15;
   pointer-events: none;
 }
 #new-session-hint span {
-  color: var(--accent-light); font-size: 18px; font-weight: 700;
+  color: var(--accent-text); font-size: 18px; font-weight: 700;
   opacity: 0; transition: opacity 0.15s;
 }
-#new-session-hint.ready { background: rgba(45,114,210,0.25); }
+#new-session-hint.ready { background: var(--accent-strong-tint); }
 #new-session-hint.ready span { opacity: 1; }
 @keyframes pulse {
   0%,100% { opacity:1; transform:scale(1); }
@@ -691,19 +773,22 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 
   /* -- persistent tab strip --
      The pill + count button + slide-up overlay are a one-session-at-a-time
-     affordance. With room on screen the sessions live in the bar itself. */
+     affordance. With room on screen the sessions live in the bar itself.
+     The strip sits inside the #tabs glass, so it drops its own material. */
   #tab-pill, #tab-count-btn { display: none; }
   #tab-switcher, #tab-switcher.open {
     display: flex; position: static; flex: 1 1 auto;
     max-height: none; overflow-x: auto; overflow-y: hidden;
-    border-top: none; box-shadow: none; background: none;
+    border-top: none; border-radius: 0; box-shadow: none; background: none;
+    -webkit-backdrop-filter: none; backdrop-filter: none;
     gap: 6px; align-items: stretch; min-width: 0;
   }
   #tab-switcher .switcher-item {
     width: auto; flex: 0 0 auto; max-width: 220px;
     min-height: 36px; padding: 6px 10px;
-    border: 1px solid var(--border); border-bottom: 1px solid var(--border);
-    border-radius: var(--radius); background: var(--surface-alt);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius); background: var(--glass-chip-bg);
+    box-shadow: var(--glass-chip-shadow);
   }
   #tab-switcher .switcher-item.active {
     border-color: var(--accent); border-left-width: 1px;
@@ -711,7 +796,7 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   }
   #tab-switcher .switcher-new {
     justify-content: center; min-width: 44px;
-    color: var(--accent-light); font-weight: 700; font-size: 16px;
+    color: var(--accent-text); font-weight: 700; font-size: 16px;
   }
   #tabs {
     padding: 6px 16px;
@@ -764,7 +849,7 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
     grid-area: railhead;
     flex-direction: column; align-items: stretch; justify-content: flex-start;
     gap: 2px;
-    border-bottom: none; border-right: 1px solid var(--border);
+    border-bottom: none; border-right: 0.5px solid var(--glass-hairline);
     padding: 10px 10px 8px;
     padding-top: max(10px, env(safe-area-inset-top));
   }
@@ -777,13 +862,13 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   }
   #settings-btn { position: absolute; top: 8px; right: 8px; }
   /* 280px panel cannot fit a 190px rail; hang it over the terminal instead */
-  #settings-panel { top: 100%; left: 8px; right: auto; }
+  #settings-panel { top: calc(100% + 6px); left: 8px; right: auto; }
 
   /* rail body: the session list, growing downward */
   #tabs {
     grid-area: railtabs;
     flex-direction: column; align-items: stretch; gap: 4px;
-    border-top: none; border-right: 1px solid var(--border);
+    border-top: none; border-right: 0.5px solid var(--glass-hairline);
     padding: 6px 8px;
     padding-bottom: calc(6px + max(8px, env(safe-area-inset-bottom)));
     overflow-y: auto; min-height: 0;
@@ -792,14 +877,13 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
     content: 'SESSIONS';
     font-size: 9px; letter-spacing: 0.11em; color: var(--dim);
     padding: 0 2px 5px; margin-bottom: 2px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 0.5px solid var(--border);
   }
   #tab-switcher, #tab-switcher.open {
     flex-direction: column; align-items: stretch;
     overflow-x: hidden; overflow-y: auto; min-height: 0;
   }
   #tab-switcher .switcher-item { width: 100%; max-width: none; }
-  #theme-toggle { margin-top: auto; align-self: flex-start; }
 
   #term-area  { grid-area: term; }
   #diag       { grid-area: diag; }
