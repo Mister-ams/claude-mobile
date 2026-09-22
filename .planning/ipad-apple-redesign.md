@@ -22,7 +22,7 @@ Appetite: L. No-gos: dark app chrome or a theme toggle, native app, phone-layout
   files: test/ipad-webkit.py, test/static-server.js
   check: WebKit at iPad Pro 11 portrait+landscape and iPad (gen 11); PNGs + metrics; exits non-zero on a console error or CSP violation; watched failing once
   risk: low
-- [ ] T02 Live WebKit harness against a throwaway 3457 instance
+- [x] T02 Live WebKit harness against a throwaway 3457 instance
   files: test/ipad-webkit-live.py, scripts/throwaway-instance.ps1
   check: own worktree install (no node_modules junction), own TOTP and herdr prefix; sign-in, existing screen shown, tap moves pane focus, split drag resizes, typed echo, rotate, reconnect; teardown runs herdr session stop+delete; 3456 /health and cm-0 unchanged before vs after
   after: T01
@@ -32,12 +32,12 @@ Appetite: L. No-gos: dark app chrome or a theme toggle, native app, phone-layout
   check: one instruction line on the TOTP screen; controls render sans-serif in WebKit; screenshot diff reviewed
   after: T01
   risk: low
-- [ ] T04 Liquid Glass token layer, light only
+- [x] T04 Liquid Glass token layer, light only
   files: public/style.css, public/setup.html, public/app.js, public/index.html
   check: dark :root and .light overrides gone; 0 hardcoded colours outside the token block in style.css and setup.html; glass tokens applied to chrome only; theme-color meta at load
   after: T03
   risk: med
-- [ ] T05 Terminal as the content layer
+- [x] T05 Terminal as the content layer
   files: public/app.js, public/style.css
   check: one ANSI palette feeds grid and xterm; every colour meets WCAG AA 4.5:1 on the terminal background (harness asserts); terminal stays opaque, monospace, edge to edge under the glass
   after: T04
@@ -59,7 +59,7 @@ Appetite: L. No-gos: dark app chrome or a theme toggle, native app, phone-layout
   risk: med
 - [ ] T09 Controls and motion
   files: public/index.html, public/style.css, public/app.js, public/setup.html
-  check: settings as a glass sheet with iOS switches; input bar and chips restyled; no `transition: all`; animations touch only transform/opacity; prefers-reduced-motion disables them (harness asserts)
+  check: settings as a glass sheet with iOS switches; input bar and chips restyled; a pointer click on Send works in hwkb mode (live step send-pointer passes, removed from known defects); setup.html scrolls; test/t04a-inline-handlers-verify.py no longer clicks the deleted theme toggle; no `transition: all`; animations touch only transform/opacity; prefers-reduced-motion disables them (harness asserts)
   after: T07
   risk: med
 - [ ] T10 Probe: renderer cost in WebKit
