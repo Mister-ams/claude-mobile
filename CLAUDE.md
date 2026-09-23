@@ -5,13 +5,15 @@ Claude Mobile Bridge -- mobile web interface for Claude Code terminal sessions o
 ## Architecture
 
 ```
-claude-mobile/                    v3.2.18
+claude-mobile/                    v4.0.0
 ├── server.js                     Node.js: Express + WebSocket + node-pty + session backend + E2E crypto
 ├── lib/server-control.js         Restart + update this process, from the client
 ├── lib/orphan-spawn.js           Spawn something PM2's tree-kill cannot reach
-├── lib/mouse.js                  Mouse reporting: DEC mode capture + event encoding (T22)
+├── lib/mouse.js                  Mouse + focus reporting: DEC mode capture + event encoding (T22)
+├── lib/herdr-events.js           herdr agent status feed: events.subscribe per session, snapshot poll fallback
 ├── scripts/update-runner.js      Runs update.sh from outside the server's life
 ├── scripts/crash-watch.js        P2 soak watch: crashes AND coverage, so quiet != unwatched
+├── scripts/throwaway-instance.js  Throwaway test instance (3457, cmsim-*): npm run sim:up / sim:down
 ├── lib/session-backend/          Session persistence, one module per backend
 │   ├── index.js                  The contract + `sessionBackend` selection (default dtach)
 │   ├── dtach.js                  dtach daemons inside WSL (shipped default)
@@ -23,11 +25,15 @@ claude-mobile/                    v3.2.18
 ├── install.sh                    Full setup script (WSL, dtach, PM2, Tailscale serve)
 ├── update.sh                     Pull + deps + PM2 restart
 ├── public/
-│   ├── index.html                Mobile web UI (xterm.js, custom input, Palantir theme, merged #auth-screen)
+│   ├── index.html                Web UI: side pane, compose bar, settings sheet, Cmd-K / ? overlays, #auth-screen
 │   ├── setup.html                Setup pages (TOTP config, extracted from server.js in T08)
-│   ├── style.css                 Extracted CSS (503 lines) -- layout, themes, animations
+│   ├── style.css                 One light token block (Liquid Glass chrome + terminal palette), layout, motion
 │   ├── vendor/                   Bundled xterm.js + addons (no CDN)
 │   └── apple-touch-icon.png      PWA icon
+├── test/ipad-webkit.py           Static WebKit iPad gate (no server): screenshots, contrast, targets, motion
+├── test/ipad-webkit-live.py      Live WebKit iPad run against the throwaway instance (npm run test:ipad-live)
+├── test/render-probe.py          Renderer cost probe: frame times + forced layouts per mode
+├── test/README.md                Which harness does what
 ├── test/live-session-verify.py   E2E against a RUNNING server: real auth, real session, 4 viewports
 ├── test/herdr-pane-geometry.py   herdr-only: does a resize reach the PANE, not just our mirror
 ├── test/t22-mouse-verify.js      Mouse encoding + DEC capture; a pty click moves herdr focus
@@ -54,9 +60,9 @@ claude-mobile/                    v3.2.18
   manifests moved, restart). There is no stop and no start -- the UI is served BY this process,
   so a stop is a one-way door and a start could never work. Both are auth-gated exactly like
   every other write route, and confirm with a two-step tap rather than `confirm()`
-- Attention detection (5s debounce) triggers Web Notifications + vibration on permission prompts, questions, idle prompt
+- Attention: on herdr it comes from herdr's own agent status (blocked / working / done / idle, lib/herdr-events.js); on dtach a 5s-debounced output regex still decides. Either way it drives the side pane, Web Notifications and vibration
 - Mouse events forward only while the app asks for them: the server reads tracking off the headless mirror and encoding off the DEC modes (herdr sends `CSI ?1003;1006h`), pushes each transition to the client, and encodes every event itself
-- GPU-accelerated rendering: WebGL -> Canvas -> DOM fallback chain (v3.0.2)
+- Rendering: the grid renderer is compositor-friendly (cursor by transform, snapshots in rAF, `contain`, zero forced layouts per frame -- measured by test/render-probe.py); the xterm fallback runs WebGL -> Canvas -> DOM
 - Slash command discovery: scans skills/ + commands/ directories (v3.0.1)
 
 ## Security (4-tier)
@@ -124,8 +130,9 @@ paint, restarts the process, and requires the SAME session back: id, name and di
 not a count. It also rotates each iPad viewport and requires the server's dimensions to
 catch up with the client's (`--no-rotate` skips it).
 
-`test/ipad-emulator.py` cannot do any of that -- it drives a static server with synthetic
-frames and never reaches a backend. Use it for pure-client regressions only.
+`test/ipad-webkit.py` cannot do any of that -- it drives a static server with synthetic
+frames and never reaches a backend. It is the pure-client gate. For a full live run in WebKit
+without a hand-built worktree: `npm run sim:up && npm run test:ipad-live; npm run sim:down`.
 
 Rotation converging proves client and server agree, NOT that the backend's pane followed --
 the server resizes its own mirror either way. Confirm herdr's far end through its own API:
@@ -182,7 +189,7 @@ python.exe test/herdr-pane-geometry.py --port PORT --totp-secret BASE32
 
 ## Renderer
 
-Default is the cell-grid renderer (W6 T24 cutover at 3.2.18, 2026-05-04). Server-side `@xterm/headless` v6.0.0 mirror diffs against last-emitted state; ships row changes (RLE-collapsed `CellRun[]`) over WS as `snapshot` (full state) and `frame` (changed rows). Client (`gridTerms{}`) maintains a virtualized DOM with bounded mount window via spacers. Cursor renders as a 2px absolute-positioned bar tracked from snapshot/frame `cursor` field.
+Default is the cell-grid renderer (W6 T24 cutover at 3.2.18, 2026-05-04). Server-side `@xterm/headless` v6.0.0 mirror diffs against last-emitted state; ships row changes (RLE-collapsed `CellRun[]`) over WS as `snapshot` (full state) and `frame` (changed rows). Client (`gridTerms{}`) maintains a virtualized DOM with bounded mount window via spacers. Cursor is positioned by transform from cached cell metrics, tracked from the snapshot/frame `cursor` field.
 
 Legacy xterm.js path retained as **opt-out fallback**: `?renderer=xterm` in URL forces it. Used by clients hitting any unforeseen grid-mode issue. T26-T28 (delete legacy server scrollback handler, drop xterm.js vendor bundle, sweep this file) are intentionally held to keep the fallback shipped.
 
@@ -190,8 +197,8 @@ Per-WS `gridRenderer` flag set from the `connect` message's `renderer` field (`s
 
 ## Current State
 
-v3.5.0. Grid renderer is default; xterm fallback retained via `?renderer=xterm`.
-Session backend is dtach by default; herdr ships behind the flag, unproven in daily use.
+v4.0.0. Grid renderer is default; xterm fallback retained via `?renderer=xterm`.
+Session backend is dtach by default in code; the live instance runs herdr.
 
 Current state, open items, the herdr evaluation and the security assessment live in the
 auto-memory project file `project_otg.md` -- that is the single pointer, kept outside this repo.

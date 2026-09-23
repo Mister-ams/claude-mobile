@@ -1,5 +1,5 @@
 // Minimal static server for the client harnesses (ipad-webkit.py,
-// ipad-emulator.py, w2-ipad-verify.py, t04a). Serves public/ with the SAME
+// ipad-webkit.py, render-probe.py, w2-ipad-verify.py, t04a). Serves public/ with the SAME
 // headers the real server sends, so a CSP regression fails here rather than
 // on the iPad. Deliberately separate from server.js: the harness must not
 // need a PTY, WSL, dtach or auth to exercise the client.
