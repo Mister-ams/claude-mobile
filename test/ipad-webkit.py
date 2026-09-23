@@ -34,7 +34,17 @@ the ? list filtering, the Cmd-K switcher filtering by name/cwd/title and
 picking with arrows + Enter, focus trapped in both and handed back on close,
 >= 44px targets (<profile>-help.png, <profile>-switcher.png), and focus
 reports (CSI ?1004h) sent in/out on window focus, blur and session switch
-only while the mode is on. The only tolerated console error is listed by EXACT text in
+only while the mode is on. T09 adds controls and motion: every interactive
+target on the iPad profiles >= 44px on the auth, app and settings screens
+(TARGET_GATED; the phone-width profile is reported, not gated); the portrait
+side-pane sheet sampled over known terminal text shows no text through it
+(pixel luminance range, with the same probe proven to see text when the sheet
+is hidden); side-pane names never truncated, one line for CLAUDE-MOBILE in the
+pinned pane, a 16-character probe name fits; no element transitions anything
+but transform/opacity (visibility only as a timed flip), no @keyframes touches
+anything else, no `transition: all` in the source; under prefers-reduced-motion
+every animation and transition duration computes to 0s (<profile>-reduced.png);
+setup.html scrolls when taller than the viewport. The only tolerated console error is listed by EXACT text in
 BENIGN_CONSOLE below -- never add a pattern there, and never add a message
 that describes a real defect.
 
@@ -46,7 +56,9 @@ purpose.
 SELF-TEST: --self-test injects one fault of each gated kind (an inline script
 the CSP must refuse, a console.error, an uncaught exception, a stock-yellow
 ANSI 3 below AA, a cell model 10% off the laid-out glyphs) into the first
-profile, plus (T08) a prefix passthrough that drops the \x02. Expected exit:
+profile, plus (T08) a prefix passthrough that drops the \x02, plus (T09) a
+sub-44px rename field, a translucent side-pane sheet, a `transition: all` and a
+width keyframe, and a transition that survives reduced motion. Expected exit:
 1 with all of them caught. Exit 2 means the gate missed
 an injected fault -- the gate itself is broken.
 
@@ -387,6 +399,7 @@ def check_sidepane(page, slug, out, pngs, findings, self_test):
         shot = "%s-sidepane-open.png" % slug
         page.screenshot(path=os.path.join(out, shot))
         pngs.append(shot)
+        rec["legibility"] = check_sheet_legibility(page, slug, findings, self_test)
     else:
         if not st["visible"]:
             fail("landscape: pane not pinned on screen")
@@ -431,6 +444,8 @@ def check_sidepane(page, slug, out, pngs, findings, self_test):
             bad.append("labels %r / %r" % (r["label"], r["closeLabel"]))
         if bad:
             fail("row %s: %s" % (s["id"], "; ".join(bad)))
+
+    rec["names"] = check_names(page, slug, findings, pinned=not modal)
 
     # -- targets >= 44 CSS px -----------------------------------------------------
     small = [t for t in st["targets"] if t["w"] < MIN_TAP or t["h"] < MIN_TAP]
@@ -799,6 +814,252 @@ def check_shortcuts(page, slug, out, pngs, findings, self_test):
     return rec
 
 
+# -- T09: controls and motion ----------------------------------------------------
+# Profiles whose every target must be >= 44px. ipad-gen-11 portrait (656px) is
+# below the 820px tablet breakpoint and keeps the phone layout (phone polish is
+# a no-go), so its count is reported, not gated.
+TARGET_GATED = {"ipad-pro-11", "ipad-pro-11-landscape", "ipad-gen-11-landscape"}
+
+# Transitions may animate only these. visibility is the discrete, zero-length
+# flip the portrait sheet schedules after its slide; it is not motion.
+MOTION_OK = {"transform", "opacity", "visibility"}
+KEYFRAME_OK = {"transform", "opacity"}
+
+MOTION = """() => {
+  const OK = new Set(%s), KF = new Set(%s);
+  const bad = [];
+  let animated = 0;
+  const name = el => el.id ? '#' + el.id : el.tagName.toLowerCase()
+    + (typeof el.className === 'string' && el.className ? '.' + el.className.trim().split(/\\s+/).join('.') : '');
+  for (const el of document.querySelectorAll('*')) {
+    for (const ps of [null, '::before', '::after']) {
+      const cs = getComputedStyle(el, ps);
+      const props = cs.transitionProperty.split(',').map(x => x.trim());
+      const durs = cs.transitionDuration.split(',').map(x => parseFloat(x) || 0);
+      props.forEach((p, i) => {
+        const d = durs[i %% durs.length];
+        if (d > 0) {
+          animated++;
+          if (!OK.has(p)) bad.push(name(el) + (ps || '') + ' transitions ' + p + ' ' + d + 's');
+        }
+      });
+    }
+  }
+  const frames = [];
+  for (const sh of document.styleSheets) {
+    let rules;
+    try { rules = sh.cssRules; } catch (e) { continue; }
+    const walk = list => {
+      for (const r of list) {
+        if (r.type === CSSRule.KEYFRAMES_RULE) {
+          frames.push(r.name);
+          for (const kf of r.cssRules)
+            for (let i = 0; i < kf.style.length; i++)
+              if (!KF.has(kf.style[i])) bad.push('@keyframes ' + r.name + ' animates ' + kf.style[i]);
+        } else if (r.cssRules) walk(r.cssRules);
+      }
+    };
+    walk(rules);
+  }
+  return { bad, animatedTransitions: animated, keyframes: frames };
+}""" % (json.dumps(sorted(MOTION_OK)), json.dumps(sorted(KEYFRAME_OK)))
+
+# Every duration in the document, for the reduced-motion check.
+DURATIONS = """() => {
+  const bad = [];
+  for (const el of document.querySelectorAll('*')) {
+    for (const ps of [null, '::before', '::after']) {
+      const cs = getComputedStyle(el, ps);
+      const t = cs.transitionDuration.split(',').map(x => parseFloat(x) || 0);
+      const a = cs.animationName !== 'none'
+        ? cs.animationDuration.split(',').map(x => parseFloat(x) || 0) : [0];
+      if (t.some(x => x > 0) || a.some(x => x > 0))
+        bad.push((el.id ? '#' + el.id : el.tagName.toLowerCase()) + (ps || '')
+                 + ' transition ' + cs.transitionDuration + ' animation ' + cs.animationName
+                 + ' ' + cs.animationDuration);
+    }
+  }
+  return bad;
+}"""
+
+
+def check_motion(page, slug, findings):
+    m = page.evaluate(MOTION)
+    for b in m["bad"]:
+        findings.append((slug, "motion", b))
+    return {"animatedTransitions": m["animatedTransitions"], "keyframes": m["keyframes"],
+            "violations": m["bad"]}
+
+
+def source_transition_all():
+    """`transition: all` anywhere in the shipped CSS (style.css, setup.html)."""
+    hits = []
+    for name in ("style.css", "setup.html"):
+        src = open(os.path.join(PUBLIC, name), encoding="utf-8").read()
+        for i, line in enumerate(src.splitlines(), 1):
+            if re.search(r"transition(-property)?\s*:\s*all\b", line):
+                hits.append("%s:%d" % (name, i))
+    return hits
+
+
+def lum_range(png_bytes):
+    """(min, max) luma of a PNG -- 0..255. Text on a plain field widens it."""
+    import io
+    from PIL import Image
+    im = Image.open(io.BytesIO(png_bytes)).convert("L")
+    return im.getextrema()
+
+
+# T09: the portrait sheet over terminal text. The probe is the sheet's body
+# BELOW its last row (no sheet content there), inset past the rim and the
+# inset highlights; the terminal's text runs under it from x=10.
+SHEET_PROBE = """() => {
+  const pane = document.getElementById('sidepane').getBoundingClientRect();
+  const rows = [...document.querySelectorAll('#sp-list > .sp-row')];
+  const last = rows.length ? rows[rows.length - 1].getBoundingClientRect().bottom : pane.top + 60;
+  return { x: pane.left + 24, y: last + 24, width: pane.width - 48, height: pane.bottom - last - 48 };
+}"""
+LEGIBLE_RANGE = 6     # luma levels: an opaque sheet reads 0-2 (antialiasing only)
+TEXT_RANGE = 60       # the same probe with the sheet hidden must see real text
+
+
+def check_sheet_legibility(page, slug, findings, self_test):
+    rec = {}
+    if self_test and slug == PROFILES[0][0]:
+        # The pre-T09 sheet: a 0.95 tint that relies on a blur this WebKit never draws.
+        page.evaluate("() => { sidepane.style.background = 'var(--glass-bg-fallback)'; }")
+    clip = page.evaluate(SHEET_PROBE)
+    rec["probe"] = {k: round(v) for k, v in clip.items()}
+    if clip["width"] < 40 or clip["height"] < 40:
+        findings.append((slug, "legibility", "sheet probe too small: %s" % rec["probe"]))
+        return rec
+    lo, hi = lum_range(page.screenshot(clip=clip))
+    rec["sheetOpen"] = {"min": lo, "max": hi, "range": hi - lo}
+    page.evaluate("() => { sidepane.style.visibility = 'hidden'; }")
+    page.wait_for_timeout(50)
+    lo2, hi2 = lum_range(page.screenshot(clip=clip))
+    page.evaluate("() => { sidepane.style.visibility = ''; sidepane.style.background = ''; }")
+    rec["sheetHidden"] = {"min": lo2, "max": hi2, "range": hi2 - lo2}
+    if hi2 - lo2 < TEXT_RANGE:
+        findings.append((slug, "legibility", "probe is not over terminal text (range %d with the sheet hidden)"
+                         % (hi2 - lo2)))
+    if hi - lo > LEGIBLE_RANGE:
+        findings.append((slug, "legibility", "terminal text shows through the side-pane sheet: luma range %d > %d"
+                         % (hi - lo, LEGIBLE_RANGE)))
+    return rec
+
+
+# T09: names in the side pane are never cut. Each name is measured as laid
+# out; a typical long name (16 chars) is probed on a live row, then restored.
+PROBE_NAME = "LOOMI-PAYMENTS-2"
+NAMES = """(probe) => {
+  const m = el => {
+    const lh = parseFloat(getComputedStyle(el).lineHeight) || 18;
+    return { text: el.textContent, lines: Math.round(el.getBoundingClientRect().height / lh),
+             clipped: el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1 };
+  };
+  const els = [...document.querySelectorAll('#sp-list .sp-name')];
+  const out = els.map(m);
+  const el = els[els.length - 1];
+  const was = el.textContent;
+  el.textContent = probe;
+  const p = m(el);
+  el.textContent = was;
+  return { names: out, probe: p };
+}"""
+
+
+def check_names(page, slug, findings, pinned):
+    r = page.evaluate(NAMES, PROBE_NAME)
+    for n in r["names"] + [r["probe"]]:
+        if n["clipped"]:
+            findings.append((slug, "names", "session name %r is truncated (%d lines)" % (n["text"], n["lines"])))
+    if pinned:
+        cm = next((n for n in r["names"] if n["text"] == "CLAUDE-MOBILE"), None)
+        if not cm or cm["lines"] != 1:
+            findings.append((slug, "names", "CLAUDE-MOBILE not on one line in the pinned pane: %s" % cm))
+    return r
+
+
+SETUP_STATUS = {"setupComplete": False}
+# 1x1 PNG; setup.html draws it at 200x200 like the real QR.
+SETUP_INIT = {"secret": "JBSWY3DPEHPK3PXP", "qr": "data:image/png;base64,"
+              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="}
+
+
+def check_setup_scroll(browser, p, base, findings):
+    """setup.html is a document: taller than the viewport, it must scroll."""
+    ctx = browser.new_context(**p.devices["iPad (gen 11) landscape"])
+    page = ctx.new_page()
+    page.route("**/api/setup/status", lambda r: r.fulfill(status=200, content_type="application/json",
+                                                          body=json.dumps(SETUP_STATUS)))
+    page.route("**/api/setup/init", lambda r: r.fulfill(status=200, content_type="application/json",
+                                                        body=json.dumps(SETUP_INIT)))
+    page.goto(base + "/setup.html", wait_until="load")
+    try:
+        page.wait_for_function("() => !document.getElementById('view-initial').classList.contains('hidden')",
+                               timeout=5000)
+    except Exception:
+        pass
+    page.wait_for_timeout(200)
+    r = page.evaluate("""() => {
+      // Content height from the laid-out children, not scrollHeight: an
+      // overflow:hidden root reports scrollHeight == the viewport.
+      const bottom = Math.max(...[...document.body.children].map(e => e.getBoundingClientRect().bottom));
+      const before = { h: Math.round(bottom), vh: innerHeight };
+      window.scrollTo(0, bottom);
+      return Object.assign(before, { scrollY: Math.round(scrollY),
+        overflow: getComputedStyle(document.documentElement).overflowY + '/' + getComputedStyle(document.body).overflowY });
+    }""")
+    ctx.close()
+    if r["h"] <= r["vh"]:
+        findings.append(("setup", "setup-scroll", "setup page not taller than the viewport (%s); probe proves nothing" % r))
+    elif r["scrollY"] <= 0:
+        findings.append(("setup", "setup-scroll", "setup page does not scroll: %s" % r))
+    return r
+
+
+def check_reduced_motion(browser, p, base, slug, device, out, pngs, findings, self_test):
+    """prefers-reduced-motion: every duration computes to 0s, sheets still open."""
+    ctx = browser.new_context(reduced_motion="reduce", **p.devices[device])
+    page = ctx.new_page()
+    page.goto(base + "/", wait_until="load")
+    page.wait_for_function("() => typeof switchTo === 'function'", timeout=10000)
+    page.wait_for_timeout(300)
+    page.evaluate(ARM, SESSIONS)
+    page.wait_for_timeout(300)
+    if self_test:
+        page.evaluate("""() => { const s = document.createElement('style');
+          s.textContent = '#sidepane { transition: transform 1s !important; }';
+          document.head.appendChild(s); }""")
+    rec = {"matches": page.evaluate("() => matchMedia('(prefers-reduced-motion: reduce)').matches")}
+    states = {}
+    states["app"] = page.evaluate(DURATIONS)
+    if page.evaluate("() => sidepaneIsModal()"):
+        page.click("#sp-toggle")
+        rec["sheetOpenAtOnce"] = page.evaluate(
+            "() => getComputedStyle(sidepane).visibility === 'visible'"
+            " && getComputedStyle(sidepane).transform === 'none'")
+        states["sidepane"] = page.evaluate(DURATIONS)
+        page.evaluate("() => closeSidepane()")
+    page.click("#settings-btn")
+    page.wait_for_timeout(100)
+    states["settings"] = page.evaluate(DURATIONS)
+    shot = "%s-reduced.png" % slug
+    page.screenshot(path=os.path.join(out, shot))
+    pngs.append(shot)
+    ctx.close()
+    if not rec["matches"]:
+        findings.append((slug, "reduced-motion", "reduced_motion='reduce' not seen by the page"))
+    if rec.get("sheetOpenAtOnce") is False:
+        findings.append((slug, "reduced-motion", "side-pane sheet did not open without motion"))
+    for k, v in states.items():
+        for b in v:
+            findings.append((slug, "reduced-motion", "%s: %s" % (k, b)))
+    rec["nonZero"] = {k: len(v) for k, v in states.items()}
+    return rec
+
+
 ROWS = """() => {
   const g = gridTerms[activeSession];
   const d = g ? computeGridDims(g) : null;
@@ -1140,6 +1401,9 @@ def main():
                 # -- app shell ---------------------------------------------------
                 page.evaluate(ARM, SESSIONS)
                 page.wait_for_timeout(300)
+                if self_test and idx == 0:
+                    # T09: a rename field back at its pre-T09 28px.
+                    page.evaluate("() => { sname.style.height = '28px'; }")
                 page.evaluate("(s) => { applyGridSnapshot(gridTerms[activeSession], s); }",
                               build_snapshot(max(10, page.evaluate(ROWS))))
                 page.wait_for_timeout(500)
@@ -1150,6 +1414,8 @@ def main():
                 page.screenshot(path=os.path.join(out, shot))
                 pngs.append(shot)
                 entry["app"] = app
+                if self_test and idx == 0:
+                    page.evaluate("() => { sname.style.height = ''; }")
                 floor = TERMINAL_FLOOR.get(slug)
                 area = (app.get("terminal") or {}).get("areaPx", 0)
                 if floor and area < floor:
@@ -1179,6 +1445,23 @@ def main():
                 page.screenshot(path=os.path.join(out, shot))
                 pngs.append(shot)
                 entry["settings"] = st
+                if slug in TARGET_GATED:
+                    for screen in ("auth", "app", "settings"):
+                        for t in entry[screen]["tapTargets"]["small"]:
+                            findings.append((slug, "targets", "%s: %s is %dx%d (< %dpx)"
+                                             % (screen, t["el"], t["w"], t["h"], MIN_TAP)))
+
+                # -- motion (T09): transform/opacity only, on the settings screen,
+                #    where the most chrome is on screen --
+                if self_test and idx == 0:
+                    page.evaluate("""() => { const s = document.createElement('style');
+                      s.id = 'st-motion';
+                      s.textContent = '#sp-sort { transition: all 1s; }'
+                        + ' @keyframes st-bad { from { width: 0; } to { width: 10px; } }';
+                      document.head.appendChild(s); }""")
+                entry["motion"] = check_motion(page, slug, findings)
+                if self_test and idx == 0:
+                    page.evaluate("() => document.getElementById('st-motion').remove()")
 
                 # -- cell geometry (T11), then again after a font-size change --
                 if self_test and idx == 0:
@@ -1221,6 +1504,10 @@ def main():
                 # Everything else WebKit said, for the record (never gated).
                 entry["consoleOther"] = sorted({"%s: %s" % (t, x) for t, x in console
                                                 if t != "error"})
+                # -- reduced motion (T09), first profile + first landscape --------
+                if idx in (0, 1):
+                    entry["reducedMotion"] = check_reduced_motion(
+                        browser, p, base, slug, device, out, pngs, findings, self_test and idx == 0)
                 if self_test and idx == 0:
                     entry["selfTestInlineScriptRan"] = bool(
                         page.evaluate("() => window.__selfTestRan === true"))
@@ -1246,14 +1533,35 @@ def main():
                          len((sp.get("targets") or {}).get("under44", []))))
                 n_sc = len([f for f in findings if f[0] == slug and f[1] == "shortcuts"])
                 print("   keys      %s" % ("ok" if not n_sc else "%d finding(s)" % n_sc))
-                print("   <44px     auth %d/%d   app %d/%d   settings %d/%d"
+                print("   <44px     auth %d/%d   app %d/%d   settings %d/%d   (%s)"
                       % (entry["auth"]["tapTargets"]["under44"], entry["auth"]["tapTargets"]["visible"],
                          a["tapTargets"]["under44"], a["tapTargets"]["visible"],
-                         st["tapTargets"]["under44"], st["tapTargets"]["visible"]))
+                         st["tapTargets"]["under44"], st["tapTargets"]["visible"],
+                         "gated" if slug in TARGET_GATED else "phone layout: reported"))
+                mo = entry["motion"]
+                print("   motion    %d animated transitions, keyframes %s, violations %d"
+                      % (mo["animatedTransitions"], mo["keyframes"], len(mo["violations"])))
+                if "legibility" in sp:
+                    lg = sp["legibility"]
+                    print("   sheet     luma range %s open / %s with the sheet hidden"
+                          % (lg.get("sheetOpen", {}).get("range"), lg.get("sheetHidden", {}).get("range")))
+                nm = sp.get("names")
+                if nm:
+                    print("   names     %s; probe %r -> %d line(s)"
+                          % (", ".join("%s:%d" % (n["text"], n["lines"]) for n in nm["names"]),
+                             nm["probe"]["text"], nm["probe"]["lines"]))
+                if "reducedMotion" in entry:
+                    print("   reduced   %s" % entry["reducedMotion"])
                 print()
+            metrics["setupScroll"] = check_setup_scroll(browser, p, base, findings)
             browser.close()
     finally:
         srv.kill()
+
+    ta = source_transition_all()
+    metrics["transitionAllInSource"] = ta
+    for h in ta:
+        findings.append(("all", "motion", "`transition: all` at %s" % h))
 
     # CSP parity with production (D10): the served header must equal server.js.
     prod = server_js_csp()
@@ -1304,7 +1612,9 @@ def main():
               " terminal palette AA, single-source, opaque, monospace;"
               " grid cell geometry + cursor match layout (incl. after a font-size change);"
               " side pane rows/order/diff/targets/open-close; terminal area >= pre-T07;"
-              " ctrl+b prefix + passthrough bytes, Cmd-K switcher, ? list, focus reports")
+              " ctrl+b prefix + passthrough bytes, Cmd-K switcher, ? list, focus reports;"
+              " targets >= 44px (iPad), sheet opaque over text, names uncut, motion transform/opacity"
+              " only, reduced motion 0s, setup scrolls")
 
     if self_test:
         kinds = {k for s, k, t in findings
@@ -1312,9 +1622,13 @@ def main():
                  or (k == "contrast" and "#FFCC00" in t)
                  or (k == "geometry" and s == PROFILES[0][0] and t.startswith("base:"))
                  or (k == "sidepane" and s == PROFILES[0][0] and "rebuilt rows" in t)
-                 or (k == "shortcuts" and s == PROFILES[0][0] and "prefix passthrough" in t)}
+                 or (k == "shortcuts" and s == PROFILES[0][0] and "prefix passthrough" in t)
+                 or (k == "targets" and s == PROFILES[0][0] and "#sname" in t)
+                 or (k == "legibility" and s == PROFILES[0][0] and "shows through" in t)
+                 or (k == "motion" and s == PROFILES[0][0] and ("#sp-sort" in t or "st-bad" in t))
+                 or (k == "reduced-motion" and s == PROFILES[0][0] and "#sidepane" in t)}
         want = {"csp-violation", "console-error", "pageerror", "contrast", "geometry", "sidepane",
-                "shortcuts"}
+                "shortcuts", "targets", "legibility", "motion", "reduced-motion"}
         missed = want - kinds
         if missed:
             print("SELF-TEST BROKEN: gate did not catch %s" % sorted(missed))
