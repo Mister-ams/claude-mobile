@@ -28,7 +28,6 @@ from playwright.sync_api import sync_playwright
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PUBLIC = os.path.join(os.path.dirname(HERE), "public")
-PORT = 3462
 PHONE = {"width": 390, "height": 844}
 IPAD = {"width": 1366, "height": 1024}
 
@@ -41,7 +40,7 @@ ARM = """() => {
   window.__sent = [];
   queueSend = (o) => { window.__sent.push(o); };
   authScreen.style.display = 'none';
-  appEl.style.display = 'flex';
+  appEl.classList.add('shown');   // T07: visibility is a class, not inline
   ws = { readyState: 1, send() {} };
   sessionList = [{ id: 1, name: 'T1', dir: '/home/x' }];
   activeSession = null;
@@ -94,7 +93,16 @@ def press_expect(page, c, keys, want, label=None):
     c.eq(label or ("key %-14s -> %s" % (keys, repr(want))), got, [want])
 
 
+def free_port():
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
 def main():
+    PORT = free_port()   # a fixed port drove whichever server already held it
     srv = subprocess.Popen(
         ["node", os.path.join(HERE, "static-server.js"), PUBLIC, str(PORT)],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
@@ -170,9 +178,10 @@ def main():
             page.evaluate("() => { msgInput.value=''; msgInput.blur(); }")
 
             page.evaluate(CLEAR)
-            page.keyboard.press("Meta+k")
+            # T08 gave Cmd-K to the session switcher; compose is Cmd-J.
+            page.keyboard.press("Meta+j")
             page.wait_for_timeout(40)
-            c.add("Cmd-K focuses the compose box",
+            c.add("Cmd-J focuses the compose box",
                   page.evaluate("() => document.activeElement === msgInput"))
             page.evaluate("() => msgInput.blur()")
 
@@ -198,7 +207,8 @@ def main():
               termH: document.getElementById('term-area').clientHeight,
               winH: window.innerHeight,
               qbar: getComputedStyle(document.getElementById('qbar')).display,
-              strip: getComputedStyle(document.getElementById('tab-switcher')).display,
+              tabs: getComputedStyle(document.getElementById('tabs')).display,
+              pane: getComputedStyle(document.getElementById('sidepane')).display,
               pill: getComputedStyle(document.getElementById('tab-pill')).display,
               hscroll: document.documentElement.scrollWidth
                        - document.documentElement.clientWidth,
@@ -206,8 +216,9 @@ def main():
             })""")
             c.add("iPad: quick-action bar hidden", ipad["qbar"] == "none",
                   ipad["qbar"])
-            c.add("iPad: tab strip persistent (not an overlay)",
-                  ipad["strip"] == "flex" and ipad["pill"] == "none", str(ipad))
+            # T07: from 820px the side pane replaces the tab strip + pill.
+            c.add("iPad: side pane replaces the tab strip",
+                  ipad["pane"] != "none" and ipad["tabs"] == "none", str(ipad))
             c.add("iPad: terminal >= 80%% of viewport height (%d/%d)"
                   % (ipad["termH"], ipad["winH"]),
                   ipad["termH"] >= 0.80 * ipad["winH"])
