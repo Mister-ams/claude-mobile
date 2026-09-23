@@ -11,26 +11,20 @@
     "app": {
       "bars": {
         "header": {
-          "h": 53,
+          "h": 76,
           "w": 656
         },
         "input-bar": {
-          "h": 24,
+          "h": 56,
           "w": 656
         },
         "input-wrap": {
-          "h": 24,
+          "h": 56,
           "w": 656
         },
-        "qbar": {
-          "h": 44,
-          "w": 656
-        },
+        "qbar": "hidden",
         "tab-switcher": "hidden",
-        "tabs": {
-          "h": 64,
-          "w": 656
-        }
+        "tabs": "hidden"
       },
       "controlFonts": {
         "#<button:button> \"CLAUDE-MOBILE, Working, \"": {
@@ -71,23 +65,23 @@
         },
         "#<button:submit> \"Arrow down\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": true
+          "visible": false
         },
         "#<button:submit> \"Arrow up\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": true
+          "visible": false
         },
         "#<button:submit> \"Clear prompt\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": true
+          "visible": false
         },
         "#<button:submit> \"Edit last message\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": true
+          "visible": false
         },
         "#<button:submit> \"Escape\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": true
+          "visible": false
         },
         "#auth-submit-btn<button:submit>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
@@ -115,7 +109,7 @@
         },
         "#new-btn<button:button>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": false
+          "visible": true
         },
         "#passkey-btn<button:submit>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
@@ -145,13 +139,9 @@
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
           "visible": true
         },
-        "#sp-sort<button:button>": {
-          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": false
-        },
         "#sp-toggle<button:button>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": false
+          "visible": true
         },
         "#srv-restart<button:button>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
@@ -163,7 +153,7 @@
         },
         "#tab-count-btn<button:submit>": {
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
-          "visible": true
+          "visible": false
         },
         "#totp-input<input:tel>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
@@ -172,39 +162,18 @@
       },
       "layout": "flex",
       "tapTargets": {
-        "small": [
-          {
-            "el": "#sname<input:text>",
-            "h": 25,
-            "w": 180
-          },
-          {
-            "el": "#settings-btn<button:submit>",
-            "h": 34,
-            "w": 34
-          },
-          {
-            "el": "#msg<textarea:textarea>",
-            "h": 22,
-            "w": 606
-          },
-          {
-            "el": "#send<button:button>",
-            "h": 22,
-            "w": 22
-          }
-        ],
-        "under44": 4,
-        "visible": 11
+        "small": [],
+        "under44": 0,
+        "visible": 6
       },
       "terminal": {
-        "areaPctOfViewport": 78,
-        "areaPx": 483050,
-        "h": 750,
-        "heightPct": 79.5,
-        "left": 6,
-        "top": 57,
-        "w": 644
+        "areaPctOfViewport": 82.5,
+        "areaPx": 510847,
+        "h": 803,
+        "heightPct": 85.1,
+        "left": 10,
+        "top": 80,
+        "w": 636
       }
     },
     "auth": {
@@ -289,10 +258,6 @@
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
           "visible": false
         },
-        "#sp-sort<button:button>": {
-          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": false
-        },
         "#sp-toggle<button:button>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
@@ -346,17 +311,6 @@
     "geometry": {
       "base": {
         "bad": [],
-        "charWidth": 7.8125,
-        "checked": 54,
-        "cursor": {
-          "dHeight": 0,
-          "dLeft": 0.02,
-          "dTop": 0
-        },
-        "rowHeight": 16.703125
-      },
-      "font+3": {
-        "bad": [],
         "charWidth": 9.609375,
         "checked": 81,
         "cursor": {
@@ -365,10 +319,21 @@
           "dTop": 0
         },
         "rowHeight": 20.5625
+      },
+      "font+3": {
+        "bad": [],
+        "charWidth": 11.40625,
+        "checked": 45,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.01,
+          "dTop": 0
+        },
+        "rowHeight": 24.421875
       }
     },
     "motion": {
-      "animatedTransitions": 20,
+      "animatedTransitions": 22,
       "keyframes": [
         "fadeIn",
         "grid-cursor-blink",
@@ -511,23 +476,23 @@
         },
         "#<button:submit> \"Arrow down\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": true
+          "visible": false
         },
         "#<button:submit> \"Arrow up\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": true
+          "visible": false
         },
         "#<button:submit> \"Clear prompt\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": true
+          "visible": false
         },
         "#<button:submit> \"Edit last message\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": true
+          "visible": false
         },
         "#<button:submit> \"Escape\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": true
+          "visible": false
         },
         "#auth-submit-btn<button:submit>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
@@ -555,7 +520,7 @@
         },
         "#new-btn<button:button>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": false
+          "visible": true
         },
         "#passkey-btn<button:submit>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
@@ -585,13 +550,9 @@
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
           "visible": true
         },
-        "#sp-sort<button:button>": {
-          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": false
-        },
         "#sp-toggle<button:button>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": false
+          "visible": true
         },
         "#srv-restart<button:button>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
@@ -603,7 +564,7 @@
         },
         "#tab-count-btn<button:submit>": {
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
-          "visible": true
+          "visible": false
         },
         "#totp-input<input:tel>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
@@ -612,30 +573,9 @@
       },
       "opened": true,
       "tapTargets": {
-        "small": [
-          {
-            "el": "#sname<input:text>",
-            "h": 25,
-            "w": 180
-          },
-          {
-            "el": "#settings-btn<button:submit>",
-            "h": 34,
-            "w": 34
-          },
-          {
-            "el": "#msg<textarea:textarea>",
-            "h": 22,
-            "w": 606
-          },
-          {
-            "el": "#send<button:button>",
-            "h": 22,
-            "w": 22
-          }
-        ],
-        "under44": 4,
-        "visible": 16
+        "small": [],
+        "under44": 0,
+        "visible": 11
       }
     },
     "shortcuts": {
@@ -693,9 +633,9 @@
       ],
       "plainKeys": "a\u0003\u001b\u001b[A\u001bx",
       "s": {
-        "chip": "No sessions pane at this width",
-        "modal": false,
-        "opened": false
+        "chip": null,
+        "modal": true,
+        "opened": true
       },
       "switcherFilters": {
         "loomi-api": [
@@ -737,6 +677,22 @@
       ]
     },
     "sidepane": {
+      "afterPick": {
+        "active": 4,
+        "connectSent": [
+          {
+            "renderer": "grid",
+            "session": 4,
+            "type": "connect"
+          }
+        ],
+        "open": false,
+        "visible": false
+      },
+      "afterScrim": {
+        "open": false,
+        "visible": false
+      },
       "closed": {
         "active": 1,
         "open": false,
@@ -746,16 +702,18 @@
           2,
           1
         ],
-        "pillVisible": true,
+        "pillVisible": false,
         "rect": {
-          "bottom": 0,
-          "left": 0,
-          "right": 0,
-          "top": 0,
-          "w": 0
+          "bottom": 936,
+          "left": -356,
+          "right": -16,
+          "top": 8,
+          "w": 340
         },
         "rows": [
           {
+            "branch": null,
+            "branchGlyph": true,
             "closeLabel": "Close HERDR",
             "current": null,
             "cwd": "work",
@@ -769,12 +727,14 @@
             "worktree": null
           },
           {
+            "branch": "0123456",
+            "branchGlyph": true,
             "closeLabel": "Close LOOMI API",
             "current": null,
             "cwd": "loomi-api",
             "glyph": "#s-done",
             "id": 4,
-            "label": "LOOMI API, Done, not yet viewed, in loomi-api, Claude Code",
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
             "name": "LOOMI API",
             "status": "done",
             "title": "Claude Code",
@@ -782,12 +742,14 @@
             "worktree": null
           },
           {
+            "branch": "feat/claude-mobile-next",
+            "branchGlyph": true,
             "closeLabel": "Close CLAUDE-MOBILE",
             "current": null,
             "cwd": "cm-next",
             "glyph": "#s-working",
             "id": 2,
-            "label": "CLAUDE-MOBILE, Working, in cm-next, worktree claude-mobile, Claude Code - side pane",
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
             "name": "CLAUDE-MOBILE",
             "status": "working",
             "title": "Claude Code - side pane",
@@ -795,12 +757,14 @@
             "worktree": "claude-mobile"
           },
           {
+            "branch": "master",
+            "branchGlyph": true,
             "closeLabel": "Close LOOMI OS",
             "current": "true",
             "cwd": "loomi-os",
             "glyph": "#s-idle",
             "id": 1,
-            "label": "LOOMI OS, Idle, in loomi-os, Claude Code, current",
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
             "name": "LOOMI OS",
             "status": "idle",
             "title": "Claude Code",
@@ -809,22 +773,258 @@
           }
         ],
         "scrimOpen": false,
-        "sort": "Priority",
-        "sortStored": null,
+        "sortControl": false,
         "targets": [
           {
+            "el": "sp-toggle",
+            "h": 44,
+            "label": "Show sessions",
+            "w": 44
+          },
+          {
+            "el": "new-btn",
+            "h": 44,
+            "label": "New session",
+            "w": 44
+          },
+          {
             "el": "settings-btn",
-            "h": 34,
+            "h": 44,
             "label": "Settings",
-            "w": 34
+            "w": 44
           }
         ],
-        "terminalLeft": 6,
+        "terminalLeft": 10,
         "toggleExpanded": "false",
-        "toggleVisible": false,
+        "toggleVisible": true,
         "visible": false
       },
-      "mode": "phone"
+      "legibility": {
+        "probe": {
+          "height": 569,
+          "width": 292,
+          "x": 32,
+          "y": 343
+        },
+        "sheetHidden": {
+          "max": 209,
+          "min": 24,
+          "range": 185
+        },
+        "sheetOpen": {
+          "max": 255,
+          "min": 255,
+          "range": 0
+        }
+      },
+      "mode": "slide-over",
+      "names": {
+        "names": [
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "HERDR"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "LOOMI API"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "CLAUDE-MOBILE"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "LOOMI OS"
+          }
+        ],
+        "probe": {
+          "clipped": false,
+          "lines": 1,
+          "text": "LOOMI-PAYMENTS-2"
+        }
+      },
+      "open": {
+        "active": 1,
+        "open": true,
+        "order": [
+          3,
+          4,
+          2,
+          1
+        ],
+        "pillVisible": false,
+        "rect": {
+          "bottom": 936,
+          "left": 8,
+          "right": 348,
+          "top": 8,
+          "w": 340
+        },
+        "rows": [
+          {
+            "branch": null,
+            "branchGlyph": true,
+            "closeLabel": "Close HERDR",
+            "current": null,
+            "cwd": "work",
+            "glyph": "#s-blocked",
+            "id": 3,
+            "label": "HERDR, Needs input, in work, Claude Code",
+            "name": "HERDR",
+            "status": "blocked",
+            "title": "Claude Code",
+            "unseenShown": false,
+            "worktree": null
+          },
+          {
+            "branch": "0123456",
+            "branchGlyph": true,
+            "closeLabel": "Close LOOMI API",
+            "current": null,
+            "cwd": "loomi-api",
+            "glyph": "#s-done",
+            "id": 4,
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
+            "name": "LOOMI API",
+            "status": "done",
+            "title": "Claude Code",
+            "unseenShown": true,
+            "worktree": null
+          },
+          {
+            "branch": "feat/claude-mobile-next",
+            "branchGlyph": true,
+            "closeLabel": "Close CLAUDE-MOBILE",
+            "current": null,
+            "cwd": "cm-next",
+            "glyph": "#s-working",
+            "id": 2,
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
+            "name": "CLAUDE-MOBILE",
+            "status": "working",
+            "title": "Claude Code - side pane",
+            "unseenShown": false,
+            "worktree": "claude-mobile"
+          },
+          {
+            "branch": "master",
+            "branchGlyph": true,
+            "closeLabel": "Close LOOMI OS",
+            "current": "true",
+            "cwd": "loomi-os",
+            "glyph": "#s-idle",
+            "id": 1,
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
+            "name": "LOOMI OS",
+            "status": "idle",
+            "title": "Claude Code",
+            "unseenShown": false,
+            "worktree": null
+          }
+        ],
+        "scrimOpen": true,
+        "sortControl": false,
+        "targets": [
+          {
+            "el": "sp-toggle",
+            "h": 44,
+            "label": "Hide sessions",
+            "w": 44
+          },
+          {
+            "el": "new-btn",
+            "h": 44,
+            "label": "New session",
+            "w": 44
+          },
+          {
+            "el": "settings-btn",
+            "h": 44,
+            "label": "Settings",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "HERDR, Needs input, in work, Claude Code",
+            "w": 330
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close HERDR",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
+            "w": 330
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close LOOMI API",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
+            "w": 330
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close CLAUDE-MOBILE",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
+            "w": 330
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close LOOMI OS",
+            "w": 44
+          }
+        ],
+        "terminalLeft": 10,
+        "toggleExpanded": "true",
+        "toggleVisible": true,
+        "visible": true
+      },
+      "targets": {
+        "under44": [],
+        "visible": 11
+      },
+      "viewedUpdate": {
+        "created": 0,
+        "moved": 1,
+        "order": [
+          3,
+          2,
+          1,
+          4
+        ],
+        "reused": true,
+        "status": {
+          "1": "idle",
+          "2": "working",
+          "3": "blocked",
+          "4": "idle"
+        },
+        "touched": [
+          4
+        ]
+      }
     }
   },
   "ipad-gen-11-landscape": {
@@ -959,10 +1159,6 @@
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
           "visible": true
         },
-        "#sp-sort<button:button>": {
-          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": true
-        },
         "#sp-toggle<button:button>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
@@ -988,7 +1184,7 @@
       "tapTargets": {
         "small": [],
         "under44": 0,
-        "visible": 14
+        "visible": 13
       },
       "terminal": {
         "areaPctOfViewport": 74.1,
@@ -1080,10 +1276,6 @@
         },
         "#sname<input:text>": {
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
-          "visible": false
-        },
-        "#sp-sort<button:button>": {
-          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
         "#sp-toggle<button:button>": {
@@ -1378,10 +1570,6 @@
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
           "visible": true
         },
-        "#sp-sort<button:button>": {
-          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": true
-        },
         "#sp-toggle<button:button>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
@@ -1407,7 +1595,7 @@
       "tapTargets": {
         "small": [],
         "under44": 0,
-        "visible": 19
+        "visible": 18
       }
     },
     "shortcuts": {
@@ -1540,6 +1728,8 @@
         },
         "rows": [
           {
+            "branch": null,
+            "branchGlyph": true,
             "closeLabel": "Close HERDR",
             "current": null,
             "cwd": "work",
@@ -1553,12 +1743,14 @@
             "worktree": null
           },
           {
+            "branch": "0123456",
+            "branchGlyph": true,
             "closeLabel": "Close LOOMI API",
             "current": null,
             "cwd": "loomi-api",
             "glyph": "#s-done",
             "id": 4,
-            "label": "LOOMI API, Done, not yet viewed, in loomi-api, Claude Code",
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
             "name": "LOOMI API",
             "status": "done",
             "title": "Claude Code",
@@ -1566,12 +1758,14 @@
             "worktree": null
           },
           {
+            "branch": "feat/claude-mobile-next",
+            "branchGlyph": true,
             "closeLabel": "Close CLAUDE-MOBILE",
             "current": null,
             "cwd": "cm-next",
             "glyph": "#s-working",
             "id": 2,
-            "label": "CLAUDE-MOBILE, Working, in cm-next, worktree claude-mobile, Claude Code - side pane",
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
             "name": "CLAUDE-MOBILE",
             "status": "working",
             "title": "Claude Code - side pane",
@@ -1579,12 +1773,14 @@
             "worktree": "claude-mobile"
           },
           {
+            "branch": "master",
+            "branchGlyph": true,
             "closeLabel": "Close LOOMI OS",
             "current": "true",
             "cwd": "loomi-os",
             "glyph": "#s-idle",
             "id": 1,
-            "label": "LOOMI OS, Idle, in loomi-os, Claude Code, current",
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
             "name": "LOOMI OS",
             "status": "idle",
             "title": "Claude Code",
@@ -1593,8 +1789,7 @@
           }
         ],
         "scrimOpen": false,
-        "sort": "Priority",
-        "sortStored": null,
+        "sortControl": false,
         "targets": [
           {
             "el": "new-btn",
@@ -1607,12 +1802,6 @@
             "h": 44,
             "label": "Settings",
             "w": 44
-          },
-          {
-            "el": "sp-sort",
-            "h": 44,
-            "label": "Sort: priority. Switch to manual order",
-            "w": 72
           },
           {
             "el": "sp-main",
@@ -1629,7 +1818,7 @@
           {
             "el": "sp-main",
             "h": 64,
-            "label": "LOOMI API, Done, not yet viewed, in loomi-api, Claude Code",
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
             "w": 200
           },
           {
@@ -1641,7 +1830,7 @@
           {
             "el": "sp-main",
             "h": 64,
-            "label": "CLAUDE-MOBILE, Working, in cm-next, worktree claude-mobile, Claude Code - side pane",
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
             "w": 200
           },
           {
@@ -1653,7 +1842,7 @@
           {
             "el": "sp-main",
             "h": 64,
-            "label": "LOOMI OS, Idle, in loomi-os, Claude Code, current",
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
             "w": 200
           },
           {
@@ -1698,47 +1887,9 @@
           "text": "LOOMI-PAYMENTS-2"
         }
       },
-      "sortToggle": {
-        "manual": {
-          "created": 0,
-          "moved": 2,
-          "order": [
-            1,
-            2,
-            3,
-            4
-          ],
-          "reused": true,
-          "status": {
-            "1": "idle",
-            "2": "working",
-            "3": "blocked",
-            "4": "done"
-          },
-          "touched": []
-        },
-        "priority": {
-          "created": 0,
-          "moved": 2,
-          "order": [
-            3,
-            4,
-            2,
-            1
-          ],
-          "reused": true,
-          "status": {
-            "1": "idle",
-            "2": "working",
-            "3": "blocked",
-            "4": "done"
-          },
-          "touched": []
-        }
-      },
       "targets": {
         "under44": [],
-        "visible": 11
+        "visible": 10
       },
       "viewedUpdate": {
         "created": 0,
@@ -1894,10 +2045,6 @@
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
           "visible": true
         },
-        "#sp-sort<button:button>": {
-          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": false
-        },
         "#sp-toggle<button:button>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": true
@@ -2015,10 +2162,6 @@
         },
         "#sname<input:text>": {
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
-          "visible": false
-        },
-        "#sp-sort<button:button>": {
-          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
         "#sp-toggle<button:button>": {
@@ -2322,10 +2465,6 @@
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
           "visible": true
         },
-        "#sp-sort<button:button>": {
-          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": false
-        },
         "#sp-toggle<button:button>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": true
@@ -2488,6 +2627,8 @@
         },
         "rows": [
           {
+            "branch": null,
+            "branchGlyph": true,
             "closeLabel": "Close HERDR",
             "current": null,
             "cwd": "work",
@@ -2501,12 +2642,14 @@
             "worktree": null
           },
           {
+            "branch": "0123456",
+            "branchGlyph": true,
             "closeLabel": "Close LOOMI API",
             "current": null,
             "cwd": "loomi-api",
             "glyph": "#s-done",
             "id": 4,
-            "label": "LOOMI API, Done, not yet viewed, in loomi-api, Claude Code",
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
             "name": "LOOMI API",
             "status": "done",
             "title": "Claude Code",
@@ -2514,12 +2657,14 @@
             "worktree": null
           },
           {
+            "branch": "feat/claude-mobile-next",
+            "branchGlyph": true,
             "closeLabel": "Close CLAUDE-MOBILE",
             "current": null,
             "cwd": "cm-next",
             "glyph": "#s-working",
             "id": 2,
-            "label": "CLAUDE-MOBILE, Working, in cm-next, worktree claude-mobile, Claude Code - side pane",
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
             "name": "CLAUDE-MOBILE",
             "status": "working",
             "title": "Claude Code - side pane",
@@ -2527,12 +2672,14 @@
             "worktree": "claude-mobile"
           },
           {
+            "branch": "master",
+            "branchGlyph": true,
             "closeLabel": "Close LOOMI OS",
             "current": "true",
             "cwd": "loomi-os",
             "glyph": "#s-idle",
             "id": 1,
-            "label": "LOOMI OS, Idle, in loomi-os, Claude Code, current",
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
             "name": "LOOMI OS",
             "status": "idle",
             "title": "Claude Code",
@@ -2541,8 +2688,7 @@
           }
         ],
         "scrimOpen": false,
-        "sort": "Priority",
-        "sortStored": null,
+        "sortControl": false,
         "targets": [
           {
             "el": "sp-toggle",
@@ -2635,6 +2781,8 @@
         },
         "rows": [
           {
+            "branch": null,
+            "branchGlyph": true,
             "closeLabel": "Close HERDR",
             "current": null,
             "cwd": "work",
@@ -2648,12 +2796,14 @@
             "worktree": null
           },
           {
+            "branch": "0123456",
+            "branchGlyph": true,
             "closeLabel": "Close LOOMI API",
             "current": null,
             "cwd": "loomi-api",
             "glyph": "#s-done",
             "id": 4,
-            "label": "LOOMI API, Done, not yet viewed, in loomi-api, Claude Code",
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
             "name": "LOOMI API",
             "status": "done",
             "title": "Claude Code",
@@ -2661,12 +2811,14 @@
             "worktree": null
           },
           {
+            "branch": "feat/claude-mobile-next",
+            "branchGlyph": true,
             "closeLabel": "Close CLAUDE-MOBILE",
             "current": null,
             "cwd": "cm-next",
             "glyph": "#s-working",
             "id": 2,
-            "label": "CLAUDE-MOBILE, Working, in cm-next, worktree claude-mobile, Claude Code - side pane",
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
             "name": "CLAUDE-MOBILE",
             "status": "working",
             "title": "Claude Code - side pane",
@@ -2674,12 +2826,14 @@
             "worktree": "claude-mobile"
           },
           {
+            "branch": "master",
+            "branchGlyph": true,
             "closeLabel": "Close LOOMI OS",
             "current": "true",
             "cwd": "loomi-os",
             "glyph": "#s-idle",
             "id": 1,
-            "label": "LOOMI OS, Idle, in loomi-os, Claude Code, current",
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
             "name": "LOOMI OS",
             "status": "idle",
             "title": "Claude Code",
@@ -2688,8 +2842,7 @@
           }
         ],
         "scrimOpen": true,
-        "sort": "Priority",
-        "sortStored": null,
+        "sortControl": false,
         "targets": [
           {
             "el": "sp-toggle",
@@ -2710,12 +2863,6 @@
             "w": 44
           },
           {
-            "el": "sp-sort",
-            "h": 44,
-            "label": "Sort: priority. Switch to manual order",
-            "w": 72
-          },
-          {
             "el": "sp-main",
             "h": 64,
             "label": "HERDR, Needs input, in work, Claude Code",
@@ -2730,7 +2877,7 @@
           {
             "el": "sp-main",
             "h": 64,
-            "label": "LOOMI API, Done, not yet viewed, in loomi-api, Claude Code",
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
             "w": 330
           },
           {
@@ -2742,7 +2889,7 @@
           {
             "el": "sp-main",
             "h": 64,
-            "label": "CLAUDE-MOBILE, Working, in cm-next, worktree claude-mobile, Claude Code - side pane",
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
             "w": 330
           },
           {
@@ -2754,7 +2901,7 @@
           {
             "el": "sp-main",
             "h": 64,
-            "label": "LOOMI OS, Idle, in loomi-os, Claude Code, current",
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
             "w": 330
           },
           {
@@ -2769,47 +2916,9 @@
         "toggleVisible": true,
         "visible": true
       },
-      "sortToggle": {
-        "manual": {
-          "created": 0,
-          "moved": 2,
-          "order": [
-            1,
-            2,
-            3,
-            4
-          ],
-          "reused": true,
-          "status": {
-            "1": "idle",
-            "2": "working",
-            "3": "blocked",
-            "4": "done"
-          },
-          "touched": []
-        },
-        "priority": {
-          "created": 0,
-          "moved": 2,
-          "order": [
-            3,
-            4,
-            2,
-            1
-          ],
-          "reused": true,
-          "status": {
-            "1": "idle",
-            "2": "working",
-            "3": "blocked",
-            "4": "done"
-          },
-          "touched": []
-        }
-      },
       "targets": {
         "under44": [],
-        "visible": 12
+        "visible": 11
       },
       "viewedUpdate": {
         "created": 0,
@@ -2965,10 +3074,6 @@
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
           "visible": true
         },
-        "#sp-sort<button:button>": {
-          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": true
-        },
         "#sp-toggle<button:button>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
@@ -2994,7 +3099,7 @@
       "tapTargets": {
         "small": [],
         "under44": 0,
-        "visible": 14
+        "visible": 13
       },
       "terminal": {
         "areaPctOfViewport": 79.5,
@@ -3086,10 +3191,6 @@
         },
         "#sname<input:text>": {
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
-          "visible": false
-        },
-        "#sp-sort<button:button>": {
-          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
         "#sp-toggle<button:button>": {
@@ -3391,10 +3492,6 @@
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
           "visible": true
         },
-        "#sp-sort<button:button>": {
-          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
-          "visible": true
-        },
         "#sp-toggle<button:button>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
@@ -3420,7 +3517,7 @@
       "tapTargets": {
         "small": [],
         "under44": 0,
-        "visible": 19
+        "visible": 18
       }
     },
     "shortcuts": {
@@ -3553,6 +3650,8 @@
         },
         "rows": [
           {
+            "branch": null,
+            "branchGlyph": true,
             "closeLabel": "Close HERDR",
             "current": null,
             "cwd": "work",
@@ -3566,12 +3665,14 @@
             "worktree": null
           },
           {
+            "branch": "0123456",
+            "branchGlyph": true,
             "closeLabel": "Close LOOMI API",
             "current": null,
             "cwd": "loomi-api",
             "glyph": "#s-done",
             "id": 4,
-            "label": "LOOMI API, Done, not yet viewed, in loomi-api, Claude Code",
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
             "name": "LOOMI API",
             "status": "done",
             "title": "Claude Code",
@@ -3579,12 +3680,14 @@
             "worktree": null
           },
           {
+            "branch": "feat/claude-mobile-next",
+            "branchGlyph": true,
             "closeLabel": "Close CLAUDE-MOBILE",
             "current": null,
             "cwd": "cm-next",
             "glyph": "#s-working",
             "id": 2,
-            "label": "CLAUDE-MOBILE, Working, in cm-next, worktree claude-mobile, Claude Code - side pane",
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
             "name": "CLAUDE-MOBILE",
             "status": "working",
             "title": "Claude Code - side pane",
@@ -3592,12 +3695,14 @@
             "worktree": "claude-mobile"
           },
           {
+            "branch": "master",
+            "branchGlyph": true,
             "closeLabel": "Close LOOMI OS",
             "current": "true",
             "cwd": "loomi-os",
             "glyph": "#s-idle",
             "id": 1,
-            "label": "LOOMI OS, Idle, in loomi-os, Claude Code, current",
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
             "name": "LOOMI OS",
             "status": "idle",
             "title": "Claude Code",
@@ -3606,8 +3711,7 @@
           }
         ],
         "scrimOpen": false,
-        "sort": "Priority",
-        "sortStored": null,
+        "sortControl": false,
         "targets": [
           {
             "el": "new-btn",
@@ -3620,12 +3724,6 @@
             "h": 44,
             "label": "Settings",
             "w": 44
-          },
-          {
-            "el": "sp-sort",
-            "h": 44,
-            "label": "Sort: priority. Switch to manual order",
-            "w": 72
           },
           {
             "el": "sp-main",
@@ -3642,7 +3740,7 @@
           {
             "el": "sp-main",
             "h": 64,
-            "label": "LOOMI API, Done, not yet viewed, in loomi-api, Claude Code",
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
             "w": 200
           },
           {
@@ -3654,7 +3752,7 @@
           {
             "el": "sp-main",
             "h": 64,
-            "label": "CLAUDE-MOBILE, Working, in cm-next, worktree claude-mobile, Claude Code - side pane",
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
             "w": 200
           },
           {
@@ -3666,7 +3764,7 @@
           {
             "el": "sp-main",
             "h": 64,
-            "label": "LOOMI OS, Idle, in loomi-os, Claude Code, current",
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
             "w": 200
           },
           {
@@ -3711,47 +3809,9 @@
           "text": "LOOMI-PAYMENTS-2"
         }
       },
-      "sortToggle": {
-        "manual": {
-          "created": 0,
-          "moved": 2,
-          "order": [
-            1,
-            2,
-            3,
-            4
-          ],
-          "reused": true,
-          "status": {
-            "1": "idle",
-            "2": "working",
-            "3": "blocked",
-            "4": "done"
-          },
-          "touched": []
-        },
-        "priority": {
-          "created": 0,
-          "moved": 2,
-          "order": [
-            3,
-            4,
-            2,
-            1
-          ],
-          "reused": true,
-          "status": {
-            "1": "idle",
-            "2": "working",
-            "3": "blocked",
-            "4": "done"
-          },
-          "touched": []
-        }
-      },
       "targets": {
         "under44": [],
-        "visible": 11
+        "visible": 10
       },
       "viewedUpdate": {
         "created": 0,
@@ -3775,6 +3835,116 @@
       }
     }
   },
+  "layoutSweep": [
+    {
+      "bodyWide": false,
+      "cssModal": false,
+      "cssWide": false,
+      "jsModal": false,
+      "jsWide": false,
+      "mode": "phone",
+      "size": "390x844"
+    },
+    {
+      "bodyWide": false,
+      "cssModal": false,
+      "cssWide": false,
+      "jsModal": false,
+      "jsWide": false,
+      "mode": "phone",
+      "size": "440x956"
+    },
+    {
+      "bodyWide": false,
+      "cssModal": false,
+      "cssWide": false,
+      "jsModal": false,
+      "jsWide": false,
+      "mode": "phone",
+      "size": "599x900"
+    },
+    {
+      "bodyWide": false,
+      "cssModal": false,
+      "cssWide": false,
+      "jsModal": false,
+      "jsWide": false,
+      "mode": "phone",
+      "size": "667x375"
+    },
+    {
+      "bodyWide": false,
+      "cssModal": false,
+      "cssWide": false,
+      "jsModal": false,
+      "jsWide": false,
+      "mode": "phone",
+      "size": "700x500"
+    },
+    {
+      "bodyWide": true,
+      "cssModal": true,
+      "cssWide": true,
+      "jsModal": true,
+      "jsWide": true,
+      "mode": "slide-over",
+      "size": "600x900"
+    },
+    {
+      "bodyWide": true,
+      "cssModal": true,
+      "cssWide": true,
+      "jsModal": true,
+      "jsWide": true,
+      "mode": "slide-over",
+      "size": "656x944"
+    },
+    {
+      "bodyWide": true,
+      "cssModal": true,
+      "cssWide": true,
+      "jsModal": true,
+      "jsWide": true,
+      "mode": "slide-over",
+      "size": "694x1024"
+    },
+    {
+      "bodyWide": true,
+      "cssModal": true,
+      "cssWide": true,
+      "jsModal": true,
+      "jsWide": true,
+      "mode": "slide-over",
+      "size": "819x1000"
+    },
+    {
+      "bodyWide": true,
+      "cssModal": true,
+      "cssWide": true,
+      "jsModal": true,
+      "jsWide": true,
+      "mode": "slide-over",
+      "size": "834x1194"
+    },
+    {
+      "bodyWide": true,
+      "cssModal": false,
+      "cssWide": true,
+      "jsModal": false,
+      "jsWide": true,
+      "mode": "pinned",
+      "size": "944x656"
+    },
+    {
+      "bodyWide": true,
+      "cssModal": false,
+      "cssWide": true,
+      "jsModal": false,
+      "jsWide": true,
+      "mode": "pinned",
+      "size": "1194x834"
+    }
+  ],
   "note": "static tier; synthetic session; WebKit on Windows",
   "setupScroll": {
     "h": 765,
