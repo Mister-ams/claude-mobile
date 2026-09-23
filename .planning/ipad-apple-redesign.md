@@ -58,7 +58,7 @@ Appetite: L. No-gos: dark app chrome or a theme toggle, native app, phone-layout
   check: ctrl+b prefix keys, n/p/1-9, next-needs-attention, ? overlay with filter and Cmd-K switcher all pass in the harness; keys meant for the terminal still reach it; focus in/out sent when herdr asks (?1004h)
   after: T07
   risk: med
-- [ ] T09 Controls and motion
+- [x] T09 Controls and motion
   files: public/index.html, public/style.css, public/app.js, public/setup.html
   check: portrait side-pane sheet legible with no terminal text readable through it, even where backdrop blur is not drawn; landscape session names not truncated at typical lengths; settings as a glass sheet with iOS switches; input bar and chips restyled; a pointer click on Send works in hwkb mode (live step send-pointer passes, removed from known defects); setup.html scrolls; legacy Chromium harnesses (t04a, w2-ipad-verify, ipad-emulator) updated or retired with the reason recorded; no `transition: all`; animations touch only transform/opacity; prefers-reduced-motion disables them (harness asserts)
   after: T07
@@ -73,7 +73,7 @@ Appetite: L. No-gos: dark app chrome or a theme toggle, native app, phone-layout
   check: D11 ships; cursor by transform; snapshots in rAF; contain on the grid; xterm WebGL fallback engages (onContextLoss); T10 re-run shows p95 frame time and forced layouts down; tap + drag geometry still passes T02
   after: T10
   risk: high
-- [ ] T12 Full live run and the review pack
+- [x] T12 Full live run and the review pack
   files: package.json, .planning/ipad-apple-redesign.md
   check: live harness green on the throwaway instance; one screenshot set (portrait, landscape, auth, side pane, settings, busy session) for operator review; version 4.0.0
   after: T05, T08, T09, T11
