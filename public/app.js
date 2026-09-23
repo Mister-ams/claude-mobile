@@ -1714,12 +1714,18 @@ sname.addEventListener('keydown', e => { if (e.key === 'Enter') sname.blur(); })
 
 // ── T13: layout mode ─────────────────────────────────────────────
 // One source of truth for "is this a tablet-or-wider viewport", shared by
-// the CSS breakpoints (820px), the persistent tab strip below, the swipe
-// gating (T15) and the keyboard/font defaults (T12/T14). Kept as a
-// matchMedia object rather than an innerWidth read so the transition fires
-// an event -- an iPad rotating portrait->landscape crosses the boundary
-// without a reload.
-const WIDE_LAYOUT_QUERY = '(min-width: 820px)';
+// the side pane below, the swipe gating (T15) and the keyboard/font defaults
+// (T12/T14). The bounds are the ones in style.css's tablet media queries (see
+// the comment there for why portrait starts lower): 820px wide in any
+// orientation, or 600px wide in portrait. test/ipad-webkit.py fails if these
+// queries and the CSS ever disagree. Kept as matchMedia objects rather than
+// an innerWidth read so the transition fires an event -- an iPad rotating
+// portrait->landscape crosses the boundary without a reload.
+const TABLET_MIN_PX = 820;
+const TABLET_PORTRAIT_MIN_PX = 600;
+// Portrait tablet: the side pane is a modal slide-over (T07).
+const PANE_MODAL_QUERY = `(min-width: ${TABLET_PORTRAIT_MIN_PX}px) and (orientation: portrait)`;
+const WIDE_LAYOUT_QUERY = `(min-width: ${TABLET_MIN_PX}px), ${PANE_MODAL_QUERY}`;
 const wideMQ = window.matchMedia(WIDE_LAYOUT_QUERY);
 
 function isWideLayout() { return wideMQ.matches; }
@@ -1777,7 +1783,7 @@ function closeSwitcher() {
 $('tab-pill').addEventListener('click', () => scrollBottom());
 $('tab-count-btn').addEventListener('click', () => toggleSwitcher());
 
-// The PHONE switcher overlay only. From 820px the sessions live in the side
+// The PHONE switcher overlay only. In the tablet layout the sessions live in the side
 // pane (T07, renderSidepane below), which is keyed and diffed; this overlay is
 // rebuilt only while it is open on a phone, where it is small and transient.
 function renderSwitcher() {
@@ -1840,7 +1846,6 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 const sidepane = $('sidepane'), spList = $('sp-list'), spScrim = $('sp-scrim');
 const spToggle = $('sp-toggle'), spSortBtn = $('sp-sort');
 const spRows = new Map();   // session id -> row record (DOM nodes + last written values)
-const PANE_MODAL_QUERY = '(min-width: 820px) and (orientation: portrait)';
 const paneModalMQ = window.matchMedia(PANE_MODAL_QUERY);
 
 function readSidepaneSort() {
@@ -2404,7 +2409,7 @@ function snapBack(activeWrap) {
 // costs iOS a hit-test on every frame of a system gesture.
 //
 // The code stays. A phone is still a supported client, and rotating an
-// iPad or resizing a desktop window across 820px re-binds it live.
+// iPad or resizing a desktop window across the tablet bound re-binds it live.
 let swipeHandlersBound = false;
 
 function swipeNavigationActive() { return swipeHandlersBound; }

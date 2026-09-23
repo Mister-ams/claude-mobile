@@ -322,7 +322,7 @@ button, input, textarea, select { font: inherit; }
 }
 /* Toolbar icon buttons (settings; T07 adds the sidebar toggle and new
    session). 34px on the phone, where the header height is the budget; 44px
-   (the HIG minimum target) from 820px up. */
+   (the HIG minimum target) in the tablet layout. */
 .tb-btn {
   flex-shrink: 0; width: 34px; height: 34px;
   display: flex; align-items: center; justify-content: center;
@@ -464,7 +464,7 @@ button, input, textarea, select { font: inherit; }
    mousedown -- so the button vanished before mouseup and the click never
    landed (touch was spared by its touchend handler). app.js also keeps
    focus in #msg on mousedown, so the layout does not move under the click.
-   Phone sizes stay compact (phone-layout polish is a no-go); the 820px
+   Phone sizes stay compact (phone-layout polish is a no-go); the tablet
    block raises every one of these to 44px. */
 body.hwkb #input-bar:not(:focus-within) { padding-top: 1px; padding-bottom: 1px; align-items: center; }
 body.hwkb #input-bar:not(:focus-within) #msg {
@@ -696,7 +696,7 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 /* ── Input (glass compose bar, T09) ──
    iOS Messages shape: a glass bar holding a capsule field and a filled
    circular Send with an SF-style glyph (arrow.up with text, return when
-   empty -- an empty Send is Enter). Phone sizes stay compact; the 820px
+   empty -- an empty Send is Enter). Phone sizes stay compact; the tablet
    block raises the field and buttons to 44px. */
 #input-bar {
   display: flex; gap: 8px; padding: 3px 10px;
@@ -853,8 +853,9 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 }
 .switcher-item .sw-close:active { background: var(--intent-danger-text); color: var(--on-tint); border-color: var(--intent-danger-text); }
 /* -- T07: sessions side pane (herdr's Agents list) --
-   Hidden on the phone, which keeps its tab strip. From 820px it is pinned in
-   landscape and a slide-over sheet in portrait (media blocks at the end).
+   Hidden on the phone, which keeps its tab strip. In the tablet layout it is
+   pinned in landscape and a slide-over sheet in portrait (media blocks at
+   the end).
    Rows are keyed DOM nodes updated in place by renderSidepane(); state is a
    data-status attribute, so a status change is one attribute write. */
 #sidepane, #sp-scrim { display: none; }
@@ -1101,13 +1102,23 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
    the screen. On an iPad none of that holds: there is room for the tab
    strip to stay on screen, and the terminal should own the viewport.
 
-   820px  = iPad portrait and up (tablet layout: persistent tab strip,
-            full-viewport terminal, phone width caps lifted).
+   Tablet layout (side pane, full-viewport terminal, phone width caps
+   lifted) = 820px wide in any orientation, OR 600px wide in PORTRAIT.
+   The portrait bound is lower because a portrait window that wide cannot
+   be a phone (the widest phone is 440px in portrait) and it is where
+   UIKit turns an iPad window's width from compact to regular: Split View
+   and Stage Manager windows, and the 656px iPad (gen 11) profile, get the
+   iPad portrait layout, while 1/3-width splits (320-375px) and every phone
+   keep the phone layout. Landscape keeps 820px: a phone on its side is
+   667-956px wide but only 375-440px tall, so width alone cannot tell it
+   apart there. app.js mirrors these queries (TABLET_MIN_PX,
+   TABLET_PORTRAIT_MIN_PX); test/ipad-webkit.py sweeps sizes either side of
+   each bound and fails if the two ever disagree.
    1180px = iPad landscape / desktop (more generous chrome).
 
    html/body are overflow:hidden, so no breakpoint can introduce a
    horizontal body scroll. */
-@media (min-width: 820px) {
+@media (min-width: 820px), (min-width: 600px) and (orientation: portrait) {
   /* -- phone width caps lifted -- */
   #auth-screen .sub { max-width: 420px; }
   .auth-card { width: 360px; }
@@ -1162,7 +1173,7 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 
   /* -- T07: the side pane replaces the tab strip --
      The pill + count button + slide-up overlay are a one-session-at-a-time
-     phone affordance; from 820px the sessions live in #sidepane, so the
+     phone affordance; in the tablet layout the sessions live in #sidepane, so the
      whole bottom bar goes and its height returns to the terminal. */
   #tabs { display: none; }
   #sidepane { display: flex; flex-direction: column; min-height: 0; }
@@ -1184,7 +1195,7 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
    swipe back or Esc. It slides by transform (compositor only); visibility
    flips after the slide so a closed sheet is out of the tab order and the
    accessibility tree. The terminal never changes size when it opens. */
-@media (min-width: 820px) and (orientation: portrait) {
+@media (min-width: 600px) and (orientation: portrait) {
   #chrome-col { display: contents; }
   #sp-toggle { display: flex; }
   #header { gap: 10px; justify-content: flex-start; }
@@ -1247,7 +1258,7 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
    out of it over the terminal still samples the real terminal behind it.
    #header and #sidepane become transparent sections of it. Grid areas, not a
    DOM move: #term-area, #diag and #input-wrap stay siblings. Must stay AFTER
-   the 820px and 1180px blocks: same specificity, later wins. */
+   the tablet and 1180px blocks: same specificity, later wins. */
 @media (min-width: 820px) and (orientation: landscape) {
   #app.shown {
     display: grid;

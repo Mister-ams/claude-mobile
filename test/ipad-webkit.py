@@ -36,7 +36,7 @@ picking with arrows + Enter, focus trapped in both and handed back on close,
 reports (CSI ?1004h) sent in/out on window focus, blur and session switch
 only while the mode is on. T09 adds controls and motion: every interactive
 target on the iPad profiles >= 44px on the auth, app and settings screens
-(TARGET_GATED; the phone-width profile is reported, not gated); the portrait
+(TARGET_GATED: every profile); the portrait
 side-pane sheet sampled over known terminal text shows no text through it
 (pixel luminance range, with the same probe proven to see text when the sheet
 is hidden); side-pane names never truncated, one line for CLAUDE-MOBILE in the
@@ -264,7 +264,7 @@ def viewed_update(sessions, sid):
 TERMINAL_FLOOR = {
     "ipad-pro-11": 841969,            # 814x1034 (portrait: tab strip at the bottom)
     "ipad-pro-11-landscape": 788676,  # 984x802  (landscape: 190px rail)
-    "ipad-gen-11": 483050,            # phone layout, unchanged by T07
+    "ipad-gen-11": 483050,            # 644x750, in the phone layout it had then
     "ipad-gen-11-landscape": 457729,
 }
 
@@ -373,10 +373,11 @@ def check_sidepane(page, slug, out, pngs, findings, self_test):
     st = page.evaluate(SP_STATE)
     rec["closed"] = st
     if not wide:
-        # Phone layout: no pane, the tab pill keeps its job.
-        if st["visible"] or not st["pillVisible"]:
-            findings.append((slug, "sidepane", "phone layout: pane visible=%s, tab pill visible=%s"
-                             % (st["visible"], st["pillVisible"])))
+        # Every profile here is an iPad: none may fall through to the phone
+        # layout (the 656px gen-11 portrait did, below the old 820px bound).
+        findings.append((slug, "sidepane", "iPad profile got the phone layout (%dpx wide): pane "
+                         "visible=%s, tab pill visible=%s" % (page.viewport_size["width"],
+                                                              st["visible"], st["pillVisible"])))
         rec["mode"] = "phone"
         return rec
     rec["mode"] = "slide-over" if modal else "pinned"
@@ -815,10 +816,10 @@ def check_shortcuts(page, slug, out, pngs, findings, self_test):
 
 
 # -- T09: controls and motion ----------------------------------------------------
-# Profiles whose every target must be >= 44px. ipad-gen-11 portrait (656px) is
-# below the 820px tablet breakpoint and keeps the phone layout (phone polish is
-# a no-go), so its count is reported, not gated.
-TARGET_GATED = {"ipad-pro-11", "ipad-pro-11-landscape", "ipad-gen-11-landscape"}
+# Profiles whose every target must be >= 44px: all of them. ipad-gen-11
+# portrait (656px) was once below the tablet breakpoint and only reported; an
+# iPad-width portrait window now gets the iPad layout, so it is gated too.
+TARGET_GATED = {slug for slug, _ in PROFILES}
 
 # Transitions may animate only these. visibility is the discrete, zero-length
 # flip the portrait sheet schedules after its slide; it is not motion.
@@ -979,6 +980,52 @@ def check_names(page, slug, findings, pinned):
         if not cm or cm["lines"] != 1:
             findings.append((slug, "names", "CLAUDE-MOBILE not on one line in the pinned pane: %s" % cm))
     return r
+
+
+# T07 fix round: which layout each window gets, and JS/CSS agreement on it.
+# (w, h) -> expected mode. Phones stay phone at every portrait width a phone
+# has (<= 440) and in landscape below 820; an iPad-width PORTRAIT window
+# (Split View, Stage Manager, the 656px gen-11) is the slide-over layout.
+LAYOUT_SWEEP = [
+    ((390, 844), "phone"), ((440, 956), "phone"), ((599, 900), "phone"),
+    ((667, 375), "phone"), ((700, 500), "phone"), ((600, 900), "slide-over"),
+    ((656, 944), "slide-over"), ((694, 1024), "slide-over"), ((819, 1000), "slide-over"),
+    ((834, 1194), "slide-over"), ((944, 656), "pinned"), ((1194, 834), "pinned"),
+]
+
+LAYOUT_STATE = """() => {
+  const d = id => getComputedStyle(document.getElementById(id)).display;
+  const jsWide = isWideLayout(), jsModal = sidepaneIsModal();
+  const cssWide = d('tabs') === 'none' && d('sidepane') !== 'none';
+  const cssModal = d('sp-toggle') !== 'none';
+  return { jsWide, jsModal, cssWide, cssModal, bodyWide: document.body.classList.contains('wide'),
+           mode: !jsWide ? 'phone' : jsModal ? 'slide-over' : 'pinned' };
+}"""
+
+
+def check_layout_sweep(browser, base, findings):
+    """The breakpoint is written twice (CSS media queries, app.js matchMedia):
+    prove they agree, and that each window size gets the layout it should."""
+    ctx = browser.new_context(viewport={"width": 390, "height": 844})
+    page = ctx.new_page()
+    page.goto(base + "/", wait_until="load")
+    out = []
+    for (w, h), want in LAYOUT_SWEEP:
+        page.set_viewport_size({"width": w, "height": h})
+        page.wait_for_timeout(120)
+        r = page.evaluate(LAYOUT_STATE)
+        r["size"] = "%dx%d" % (w, h)
+        out.append(r)
+        if r["jsWide"] != r["cssWide"] or r["jsModal"] != r["cssModal"] or r["bodyWide"] != r["jsWide"]:
+            findings.append(("all", "breakpoints", "%s: JS wide/modal %s/%s vs CSS %s/%s (body.wide %s)"
+                             % (r["size"], r["jsWide"], r["jsModal"], r["cssWide"], r["cssModal"],
+                                r["bodyWide"])))
+        if r["mode"] != want:
+            findings.append(("all", "breakpoints", "%s gets the %s layout, want %s"
+                             % (r["size"], r["mode"], want)))
+    ctx.close()
+    print("layout sweep: %s" % ", ".join("%s=%s" % (r["size"], r["mode"]) for r in out))
+    return out
 
 
 SETUP_STATUS = {"setupComplete": False}
@@ -1554,6 +1601,7 @@ def main():
                     print("   reduced   %s" % entry["reducedMotion"])
                 print()
             metrics["setupScroll"] = check_setup_scroll(browser, p, base, findings)
+            metrics["layoutSweep"] = check_layout_sweep(browser, base, findings)
             browser.close()
     finally:
         srv.kill()
@@ -1613,6 +1661,7 @@ def main():
               " grid cell geometry + cursor match layout (incl. after a font-size change);"
               " side pane rows/order/diff/targets/open-close; terminal area >= pre-T07;"
               " ctrl+b prefix + passthrough bytes, Cmd-K switcher, ? list, focus reports;"
+              " iPad-width portrait gets the iPad layout, JS/CSS breakpoints agree;"
               " targets >= 44px (iPad), sheet opaque over text, names uncut, motion transform/opacity"
               " only, reduced motion 0s, setup scrolls")
 
