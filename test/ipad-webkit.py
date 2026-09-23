@@ -592,6 +592,22 @@ FOCUS_REPORT = """() => {
 }"""
 
 
+# Resolves once every FINITE animation in the document has finished. Infinite
+# ones (the working spinner, the cursor blink) never finish and are skipped.
+SETTLE = """() => Promise.all(document.getAnimations().filter(a => {
+  const t = a.effect && a.effect.getComputedTiming();
+  return t && isFinite(t.endTime) && a.playState === 'running';
+}).map(a => a.finished.catch(() => null)))"""
+
+
+def await_animations(page):
+    """Wait for open/close animations to END before measuring. A fixed sleep
+    raced kb-rise (0.24s, scale-in) under load and measured a 44px target as
+    43x43 mid-animation: an intermittent failure that was the gate, not the app."""
+    page.wait_for_timeout(20)  # let the frame that STARTS the animation run
+    page.evaluate(SETTLE)
+
+
 def check_shortcuts(page, slug, out, pngs, findings, self_test):
     """T08 gate. Returns the metrics record."""
     rec = {}
@@ -718,7 +734,7 @@ def check_shortcuts(page, slug, out, pngs, findings, self_test):
     # 6. ctrl+b ? : the key list, filterable, focus trapped, Esc restores
     clear()
     keys("Control+b", "Shift+Slash")
-    page.wait_for_timeout(250)
+    await_animations(page)
     s = st()
     h = s["help"]
     if not (h["open"] and h["dialog"] and s["focused"] == "khelp-input"):
@@ -752,7 +768,7 @@ def check_shortcuts(page, slug, out, pngs, findings, self_test):
     active0 = st()["active"]
     clear()
     keys("Meta+k")
-    page.wait_for_timeout(250)
+    await_animations(page)
     s = st()
     w = s["switcher"]
     if not (w["open"] and w["dialog"] and s["focused"] == "ksw-input"):
