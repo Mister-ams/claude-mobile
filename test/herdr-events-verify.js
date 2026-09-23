@@ -187,7 +187,9 @@ function feedFor(pipe, extra = {}) {
   await until(() => t.last().herdrStatus === 'idle');
   check('the NEXT finish is news again', t.last().status === 'done');
 
-  // pane_updated carries a title; its agent_status is not trusted
+  // pane_updated carries a title; its agent_status is not trusted. Real herdr
+  // changes its state before it emits, so a later snapshot agrees.
+  fh.state.agents[0].terminal_title_stripped = 'Refactor thing';
   fh.push('pane_updated', { type: 'pane_updated', pane: { pane_id: 'w1:p1', agent_status: 'unknown',
     terminal_title_stripped: 'Refactor thing', cwd: 'C:\\work' } });
   await until(() => t.last().title === 'Refactor thing');
