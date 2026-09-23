@@ -20,7 +20,7 @@ and the grid must be opaque on that background and monospace. T11 adds cell
 geometry: clicks inside laid-out glyphs must resolve (gridCellFromEvent) to
 that exact cell and the cursor must sit on its cell, before and after a
 font-size change. T07 adds the side pane: one row per session with state,
-name, cwd, worktree and title; priority order, always (no sort control, and a
+name, cwd, git branch (the server's, from .git files), worktree and title; priority order, always (no sort control, and a
 manual mode left in localStorage by an older build is ignored); a server broadcast applied as a keyed diff (MutationObserver: no
 row rebuilt, only the changed row written, one move); every pane target
 >= 44px; portrait slide-over opened by the toolbar button, closed by the scrim
@@ -222,26 +222,29 @@ ARM = """(sessions) => {
 # carries T06's `agent` view -- with one session in each state the side pane
 # draws, listed in an order that is NOT the priority order (so a sort that did
 # nothing would fail). Session 1 is the active one.
-def _agent(status, cwd, title, worktree=None):
+def _agent(status, cwd, title, worktree=None, branch=None):
     return {"status": status, "herdrStatus": "idle" if status == "done" else status,
             "seen": status != "done", "agent": "claude", "title": title, "cwd": cwd,
-            "worktree": worktree, "agentSessionId": None, "paneId": "p1", "seq": 1,
-            "feed": "events", "reconnects": 0}
+            "worktree": worktree, "branch": branch, "agentSessionId": None, "paneId": "p1",
+            "seq": 1, "feed": "events", "reconnects": 0}
 
 
 SESSIONS = [
     {"id": 1, "name": "LOOMI OS", "dir": "/mnt/c/Users/MRAL-/Projects/loomi-os", "attention": None,
      "viewers": 1, "agent": _agent("idle", "C:\\Users\\MRAL-\\Projects\\loomi-os", "Claude Code",
-                                   {"repo": "loomi-os", "root": None, "path": None, "linked": False})},
+                                   {"repo": "loomi-os", "root": None, "path": None, "linked": False},
+                                   "master"), "branch": "master"},
     {"id": 2, "name": "CLAUDE-MOBILE", "dir": "/mnt/c/Users/MRAL-/Projects/claude-mobile", "attention": None,
      "viewers": 0, "agent": _agent("working", "C:\\Users\\MRAL-\\Projects\\_wt\\cm-next",
                                    "Claude Code - side pane",
                                    {"repo": "claude-mobile", "root": None,
-                                    "path": "C:\\Users\\MRAL-\\Projects\\_wt\\cm-next", "linked": True})},
+                                    "path": "C:\\Users\\MRAL-\\Projects\\_wt\\cm-next", "linked": True},
+                                   "feat/claude-mobile-next"), "branch": "feat/claude-mobile-next"},
     {"id": 3, "name": "HERDR", "dir": "/root/work", "attention": "permission",
-     "viewers": 0, "agent": _agent("blocked", "C:\\root\\work", "Claude Code")},
+     "viewers": 0, "agent": _agent("blocked", "C:\\root\\work", "Claude Code"), "branch": None},
     {"id": 4, "name": "LOOMI API", "dir": "/mnt/c/Users/MRAL-/Projects/loomi-api", "attention": "ready",
-     "viewers": 0, "agent": _agent("done", "C:\\Users\\MRAL-\\Projects\\loomi-api", "Claude Code")},
+     "viewers": 0, "agent": _agent("done", "C:\\Users\\MRAL-\\Projects\\loomi-api", "Claude Code",
+                                   branch="0123456"), "branch": "0123456"},
 ]
 SP_RANK = {"blocked": 0, "done": 1, "working": 2, "idle": 3, "unknown": 4}
 
@@ -290,6 +293,8 @@ SP_STATE = """() => {
     glyph: q(li, '.sp-state use').getAttribute('href'),
     name: q(li, '.sp-name').textContent, cwd: q(li, '.sp-cwd').textContent,
     worktree: q(li, '.sp-wt').hidden ? null : q(li, '.sp-wt').textContent,
+    branch: !q(li, '.sp-branch') || q(li, '.sp-branch').hidden ? null : q(li, '.sp-branch').textContent,
+    branchGlyph: !!(q(li, '.sp-branch') && q(li, '.sp-branch use[href="#i-branch"]')),
     title: q(li, '.sp-title').textContent,
     current: q(li, '.sp-main').getAttribute('aria-current'),
     label: q(li, '.sp-main').getAttribute('aria-label'),
@@ -424,10 +429,11 @@ def check_sidepane(page, slug, out, pngs, findings, self_test):
         a = s["agent"]
         cwd = re.split(r"[\\/]+", a["cwd"].rstrip("\\/"))[-1]
         wt = a["worktree"]
-        # First of (linked checkout name, repo name) that the cwd does not say.
+        # First of (linked checkout name, repo name) that neither the cwd nor
+        # the branch already says.
         cands = ([re.split(r"[\\/]+", wt["path"])[-1] if wt["linked"] and wt["path"] else None,
                   wt["repo"]] if wt else [])
-        want_wt = next((c for c in cands if c and c != cwd), None)
+        want_wt = next((c for c in cands if c and c != cwd and c != a["branch"]), None)
         bad = []
         if r["status"] != a["status"] or r["glyph"] != "#s-" + a["status"]:
             bad.append("status %s/%s" % (r["status"], r["glyph"]))
@@ -437,6 +443,10 @@ def check_sidepane(page, slug, out, pngs, findings, self_test):
             bad.append("cwd %r != %r" % (r["cwd"], cwd))
         if r["worktree"] != want_wt:
             bad.append("worktree %r != %r" % (r["worktree"], want_wt))
+        if r["branch"] != a["branch"] or (a["branch"] and not r["branchGlyph"]):
+            bad.append("branch %r (glyph %s) != %r" % (r["branch"], r["branchGlyph"], a["branch"]))
+        if a["branch"] and a["branch"] not in (r["label"] or ""):
+            bad.append("branch missing from the label %r" % r["label"])
         if r["title"] != a["title"]:
             bad.append("title %r" % r["title"])
         if (r["current"] == "true") != (s["id"] == st["active"]):

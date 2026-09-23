@@ -1825,8 +1825,8 @@ function renderSwitcher() {
 }
 
 // -- T07: sessions side pane (herdr's Agents list) --------------------
-// One row per session: state glyph, name, cwd basename (+ worktree), and the
-// agent's terminal title. Status is herdr's (D7, session.agent from T06);
+// One row per session: state glyph, name, cwd basename, git branch (+ the
+// worktree/repo name where it adds something), and the agent's terminal title. Status is herdr's (D7, session.agent from T06);
 // sessions without a feed (dtach) fall back to the server's attention, and
 // with neither the state is 'unknown' -- never a guessed idle.
 //
@@ -1877,12 +1877,18 @@ function baseName(p) {
 }
 
 // Worktree label: a linked worktree's checkout name, else the repo name --
-// the first that says something the cwd folder does not. herdr reports no
-// branch, so none is shown.
-function worktreeLabel(wt, cwdBase) {
+// the first that says something neither the cwd folder nor the branch does.
+function worktreeLabel(wt, cwdBase, branch) {
   if (!wt) return '';
   const names = [wt.linked && wt.path ? baseName(wt.path) : '', wt.repo || ''];
-  return names.find(n => n && n !== cwdBase) || '';
+  return names.find(n => n && n !== cwdBase && n !== branch) || '';
+}
+
+// The git branch: the server reads it from the cwd's .git files (herdr
+// reports none) -- on the agent view for herdr, on the session for dtach.
+function sessionBranch(s) {
+  const b = s.agent ? s.agent.branch : s.branch;
+  return typeof b === 'string' ? b : '';
 }
 
 function svgUse(href) {
@@ -1923,13 +1929,16 @@ function makeSidepaneRow(id) {
   meta.className = 'sp-meta';
   const cwd = document.createElement('span');
   cwd.className = 'sp-cwd';
+  const branch = document.createElement('span');
+  branch.className = 'sp-branch';
+  branch.hidden = true;
+  branch.appendChild(svgUse('#i-branch').svg);
+  const branchText = document.createElement('span');
+  branch.appendChild(branchText);
   const wt = document.createElement('span');
   wt.className = 'sp-wt';
   wt.hidden = true;
-  wt.appendChild(svgUse('#i-branch').svg);
-  const wtText = document.createElement('span');
-  wt.appendChild(wtText);
-  meta.append(cwd, wt);
+  meta.append(cwd, branch, wt);
   const title = document.createElement('span');
   title.className = 'sp-title';
   text.append(name, meta, title);
@@ -1941,14 +1950,15 @@ function makeSidepaneRow(id) {
   li.append(main, close);
   main.addEventListener('click', () => selectSession(id));
   close.addEventListener('click', e => { e.stopPropagation(); closeSession(id); });
-  return { li, main, use: glyph.use, name, cwd, wt, wtText, title, close };
+  return { li, main, use: glyph.use, name, cwd, branch, branchText, wt, title, close };
 }
 
 function updateSidepaneRow(r, s) {
   const status = sessionStatus(s);
   const a = s.agent || null;
   const cwdBase = baseName((a && a.cwd) || s.dir);
-  const wt = worktreeLabel(a && a.worktree, cwdBase);
+  const branch = sessionBranch(s);
+  const wt = worktreeLabel(a && a.worktree, cwdBase, branch);
   const title = (a && (a.title || a.agent)) || '';
   const active = s.id === activeSession;
   spAttr(r.li, 'data-status', status);
@@ -1957,11 +1967,14 @@ function updateSidepaneRow(r, s) {
   spAttr(r.main, 'aria-current', active ? 'true' : null);
   spText(r.name, s.name);
   spText(r.cwd, cwdBase);
-  spText(r.wtText, wt);
+  spText(r.branchText, branch);
+  if (r.branch.hidden !== !branch) r.branch.hidden = !branch;
+  spText(r.wt, wt);
   if (r.wt.hidden !== !wt) r.wt.hidden = !wt;
   spText(r.title, title);
   spAttr(r.main, 'aria-label', s.name + ', ' + SP_STATUS_TEXT[status]
-    + (cwdBase ? ', in ' + cwdBase : '') + (wt ? ', worktree ' + wt : '')
+    + (cwdBase ? ', in ' + cwdBase : '') + (branch ? ', branch ' + branch : '')
+    + (wt ? ', worktree ' + wt : '')
     + (title ? ', ' + title : '') + (active ? ', current' : ''));
   spAttr(r.close, 'aria-label', 'Close ' + s.name);
 }

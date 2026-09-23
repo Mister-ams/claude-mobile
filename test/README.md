@@ -10,6 +10,8 @@ Current client harnesses (iPad-first, WebKit; see .planning/ipad-apple-redesign.
 - `render-probe.py` -- renderer cost probe (frame times, forced layouts).
 - `herdr-events-verify.js` / `herdr-events-live.js` -- herdr status feed
   (`npm run test:herdr-events`).
+- `repo-branch-verify.js` -- the git branch a session row shows, read from
+  .git files without spawning git (`npm run test:repo-branch`).
 
 Legacy Chromium harnesses (T09 decisions):
 

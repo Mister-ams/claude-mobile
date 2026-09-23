@@ -257,6 +257,12 @@ async function up() {
   if (stale.length) throw new Refusal(`leftover herdr sessions ${stale.map(s => s.name).join(', ')} -- run 'down' first`);
 
   fs.mkdirSync(WORK_DIR, { recursive: true });
+  // A tiny repo on a named branch, so the live harness can prove the side
+  // pane shows the session's branch. Throwaway dir only, never REPO.
+  if (!fs.existsSync(path.join(WORK_DIR, '.git'))) {
+    execFileSync('git', ['init', '-q', '-b', `${args.prefix}-work`, WORK_DIR], { windowsHide: true });
+    log(`work dir ${WORK_DIR} is a git repo on branch ${args.prefix}-work`);
+  }
   const createdFiles = INSTANCE_FILES.filter(f => !fs.existsSync(path.join(REPO, f)));
   const config = {
     port: args.port,

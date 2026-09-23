@@ -684,7 +684,9 @@ def main():
         # blocked and done each within 2s of the client's own sessionList
         # showing them. The throwaway has one session, so "first" is trivially
         # true here; the multi-session priority order is proven by the static
-        # tier's four-state fixture.
+        # tier's four-state fixture. The row must also show the git branch of
+        # the session's work dir (sim:up makes it a `git init` repo on a named
+        # branch), checked against git's own answer for that directory.
         def s_sidepane_status():
             sid = st["sid"]
             log = run.page.evaluate("() => window.__spLog || []")
@@ -702,20 +704,41 @@ def main():
             lb, rb = lag("blocked")
             ld, rd = lag("done")
             ri = next((e for e in log if e["status"] == "idle" and rd is not None and e["t"] > rd["t"]), None)
-            now = run.page.evaluate("""(sel) => {
+            now = run.page.evaluate("""([sel, sid]) => {
               const rows = [...document.querySelectorAll(sel.sp_list + ' > ' + sel.sp_row)];
-              return { ids: rows.map(r => +r.dataset.id), sessions: sessionList.map(s => s.id) };
-            }""", SEL)
+              const s = sessionList.find(x => x.id === sid) || {};
+              const row = rows.find(r => +r.dataset.id === sid);
+              const b = row && row.querySelector('.sp-branch');
+              return { ids: rows.map(r => +r.dataset.id), sessions: sessionList.map(s => s.id),
+                       cwd: (s.agent && s.agent.cwd) || s.dir || null,
+                       agentBranch: s.agent ? s.agent.branch : undefined,
+                       rowBranch: b && !b.hidden ? b.textContent : null,
+                       branchGlyph: !!(b && b.querySelector('use[href="#i-branch"]')) };
+            }""", [SEL, sid])
+            want_branch = None
+            if now["cwd"]:
+                try:
+                    want_branch = subprocess.run(
+                        ["git", "-C", now["cwd"], "symbolic-ref", "--short", "HEAD"],
+                        capture_output=True, text=True, timeout=10).stdout.strip() or None
+                except Exception:
+                    want_branch = None
+            branch_ok = (want_branch is not None and now["agentBranch"] == want_branch
+                         and now["rowBranch"] == want_branch and now["branchGlyph"])
             ok = (rb is not None and rb["index"] == 0 and rb["glyph"] == "#s-blocked"
                   and "Needs input" in (rb["label"] or "")
                   and rd is not None and rd["glyph"] == "#s-done"
                   and ri is not None
                   and lb is not None and lb <= 2.0 and ld is not None and ld <= 2.0
-                  and sorted(now["ids"]) == sorted(now["sessions"]))
+                  and sorted(now["ids"]) == sorted(now["sessions"]) and branch_ok)
             return ok, ("row %s statuses %s; blocked: index=%s glyph=%s label=%r lag=%ss; done: glyph=%s "
-                        "lag=%ss; idle after view=%s; rows now %s for sessions %s" % (
+                        "lag=%ss; idle after view=%s; rows now %s for sessions %s; branch: git says %r "
+                        "for %r, agent.branch=%r, row shows %r (glyph %s)%s" % (
                             sid, seq, rb and rb["index"], rb and rb["glyph"], rb and rb["label"], lb,
-                            rd and rd["glyph"], ld, ri is not None, now["ids"], now["sessions"]))
+                            rd and rd["glyph"], ld, ri is not None, now["ids"], now["sessions"],
+                            want_branch, now["cwd"], now["agentBranch"], now["rowBranch"],
+                            now["branchGlyph"],
+                            "" if want_branch else " -- the work dir is not a git repo"))
         run.step("sidepane-status", s_sidepane_status, needs=("agent-status",))
 
         # ── 4. split the throwaway pane; a tap moves herdr focus ──────────

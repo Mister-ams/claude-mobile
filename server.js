@@ -98,6 +98,7 @@ function audit(category, message, ip) {
 // for the contract, including why state() has four values and not two.
 const { createSessionBackend } = require('./lib/session-backend');
 const createServerControl = require('./lib/server-control');
+const { createBranchResolver } = require('./lib/repo-branch');
 
 let lastError = null; // { message, timestamp }
 
@@ -1092,12 +1093,19 @@ function detectAttention(sessionId) {
   return null;
 }
 
+// T07: the git branch a session row shows, read from .git files (never a
+// spawned git). On herdr it rides on the agent view, resolved for the agent's
+// cwd whenever herdr reports a change; a session without a feed (dtach) has
+// it resolved from its directory at each list build.
+const branches = createBranchResolver();
+
 function getSessionList() {
   return Array.from(sessions.values()).map(s => ({
     id: s.id, name: s.name, dir: s.dir, attention: s.attention,
     viewers: s.clients.size,
     // D7 (T06): herdr's view of the agent -- null on a backend without a feed.
     agent: s.agent || null,
+    branch: s.agent ? (s.agent.branch || null) : branches.branchOf(s.dir),
   }));
 }
 
@@ -1129,6 +1137,11 @@ function startAgentFeed(session) {
   try {
     session.agentFeed = backend.agentFeed(session.id, (view) => {
       if (sessions.get(session.id) !== session) return;
+      // HEAD is re-read on every change herdr reports (a status change, a new
+      // cwd); a directory that was not a repo is re-checked on a status change.
+      const prev = session.agent;
+      view.branch = branches.branchOf(view.cwd || session.dir,
+        { refresh: !prev || prev.status !== view.status });
       session.agent = view;
       const reason = attentionFromAgent(view);
       if (reason !== session.attention) {

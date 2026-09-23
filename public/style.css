@@ -922,11 +922,14 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   font-size: 11px; line-height: 15px; color: var(--text-sec);
   font-family: var(--font-mono);
 }
-.sp-cwd, .sp-wt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sp-cwd, .sp-branch, .sp-branch > span, .sp-wt {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
 .sp-cwd { flex: 0 1 auto; }
-.sp-wt { display: flex; align-items: center; gap: 2px; flex: 0 1 auto; color: var(--dim); }
-.sp-wt[hidden] { display: none; }
-.sp-wt svg { width: 10px; height: 10px; flex-shrink: 0; }
+.sp-branch { display: flex; align-items: center; gap: 2px; flex: 0 1 auto; }
+.sp-branch svg { width: 10px; height: 10px; flex-shrink: 0; }
+.sp-wt { flex: 0 1000 auto; color: var(--dim); }  /* yields its room first: the branch is the fact the row owes */
+.sp-branch[hidden], .sp-wt[hidden] { display: none; }
 .sp-title { font-size: 11px; line-height: 15px; color: var(--dim); }
 .sp-title:empty { display: none; }
 .sp-close {
