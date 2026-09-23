@@ -48,7 +48,7 @@ Appetite: L. No-gos: dark app chrome or a theme toggle, native app, phone-layout
   check: per-session status, cwd, worktree and title reach the client; a status change arrives within 2s (live harness); the subscription survives a herdr restart; the regex detector no longer decides attention on herdr
   after: T02
   risk: high
-- [ ] T07 herdr-style sessions side pane
+- [x] T07 herdr-style sessions side pane
   files: public/index.html, public/style.css, public/app.js
   check: one row per session with state, name, cwd, branch and title; rows update by diff, not innerHTML rebuilds; priority sort (blocked, done, working, idle); done clears on view; pinned in landscape, slide-over in portrait; targets >= 44pt; terminal area not smaller than today
   after: T04, T06
@@ -60,7 +60,7 @@ Appetite: L. No-gos: dark app chrome or a theme toggle, native app, phone-layout
   risk: med
 - [ ] T09 Controls and motion
   files: public/index.html, public/style.css, public/app.js, public/setup.html
-  check: settings as a glass sheet with iOS switches; input bar and chips restyled; a pointer click on Send works in hwkb mode (live step send-pointer passes, removed from known defects); setup.html scrolls; test/t04a-inline-handlers-verify.py no longer clicks the deleted theme toggle; no `transition: all`; animations touch only transform/opacity; prefers-reduced-motion disables them (harness asserts)
+  check: portrait side-pane sheet legible with no terminal text readable through it, even where backdrop blur is not drawn; landscape session names not truncated at typical lengths; settings as a glass sheet with iOS switches; input bar and chips restyled; a pointer click on Send works in hwkb mode (live step send-pointer passes, removed from known defects); setup.html scrolls; test/t04a-inline-handlers-verify.py no longer clicks the deleted theme toggle; no `transition: all`; animations touch only transform/opacity; prefers-reduced-motion disables them (harness asserts)
   after: T07
   risk: med
 - [x] T10 Probe: renderer cost in WebKit
