@@ -1836,7 +1836,6 @@ function renderSwitcher() {
 //
 // Hooks for T08 (shortcuts): selectSession(id), nextNeedsAttention(),
 // openSidepane()/closeSidepane()/toggleSidepane().
-const SP_SORT_KEY = 'cm-sidepane-sort';
 const SP_RANK = { blocked: 0, done: 1, working: 2, idle: 3, unknown: 4 };
 const SP_STATUS_TEXT = {
   blocked: 'Needs input', done: 'Done, not yet viewed', working: 'Working',
@@ -1844,21 +1843,9 @@ const SP_STATUS_TEXT = {
 };
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const sidepane = $('sidepane'), spList = $('sp-list'), spScrim = $('sp-scrim');
-const spToggle = $('sp-toggle'), spSortBtn = $('sp-sort');
+const spToggle = $('sp-toggle');
 const spRows = new Map();   // session id -> row record (DOM nodes + last written values)
 const paneModalMQ = window.matchMedia(PANE_MODAL_QUERY);
-
-function readSidepaneSort() {
-  try { return localStorage.getItem(SP_SORT_KEY) === 'manual' ? 'manual' : 'priority'; }
-  catch (e) { return 'priority'; }   // storage blocked: the default, not an error
-}
-let spSort = readSidepaneSort();
-
-function setSidepaneSort(mode) {
-  spSort = mode === 'manual' ? 'manual' : 'priority';
-  try { localStorage.setItem(SP_SORT_KEY, spSort); } catch (e) { /* not persisted; still applied */ }
-  renderSidepane();
-}
 
 function sessionStatus(s) {
   const st = s.agent && s.agent.status;
@@ -1877,8 +1864,10 @@ function prioritySorted(list) {
     .map(x => x[0]);
 }
 
+// The pane is always in priority order; there is no alternate sort (a mode
+// an older build persisted in localStorage is ignored).
 function sidepaneOrder(list) {
-  return spSort === 'priority' ? prioritySorted(list) : list.slice();
+  return prioritySorted(list);
 }
 
 function baseName(p) {
@@ -2018,10 +2007,6 @@ function renderSidepane() {
   }
   const empty = $('sp-empty');
   if (empty.hidden !== order.length > 0) empty.hidden = order.length > 0;
-  const manual = spSort === 'manual';
-  spText($('sp-sort-val'), manual ? 'Manual' : 'Priority');
-  spAttr(spSortBtn, 'aria-label', manual ? 'Sort: manual order. Switch to priority'
-                                         : 'Sort: priority. Switch to manual order');
 }
 
 // Pick a session from the pane (or, later, a shortcut). Closes the portrait
@@ -2091,7 +2076,6 @@ paneModalMQ.addEventListener('change', syncSidepaneMode);
 
 spToggle.addEventListener('click', e => { e.preventDefault(); toggleSidepane(); });
 spScrim.addEventListener('click', () => closeSidepane());
-spSortBtn.addEventListener('click', () => setSidepaneSort(spSort === 'priority' ? 'manual' : 'priority'));
 $('new-btn').addEventListener('click', () => { closeSidepane(); newSession(); });
 
 // Swipe in from the left edge opens the portrait sheet; a leftward swipe on

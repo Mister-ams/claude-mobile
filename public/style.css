@@ -334,7 +334,7 @@ button, input, textarea, select { font: inherit; }
   color: var(--accent-text); background: var(--glass-chip-bg);
   border-color: var(--glass-border); box-shadow: var(--glass-chip-shadow);
 }
-.tb-btn:focus-visible, #sp-sort:focus-visible, .sp-main:focus-visible, .sp-close:focus-visible {
+.tb-btn:focus-visible, .sp-main:focus-visible, .sp-close:focus-visible {
   outline: none; box-shadow: var(--focus-ring);
 }
 /* Phone: only the settings button. The sessions live in the tab strip. */
@@ -871,14 +871,6 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--dim);
 }
-#sp-sort {
-  display: flex; align-items: center; gap: 4px;
-  min-height: 44px; min-width: 44px; padding: 0 8px;
-  background: none; border: none; border-radius: var(--radius);
-  color: var(--accent-text); font-size: 12px; cursor: pointer;
-}
-#sp-sort .ico { width: 14px; height: 14px; display: block; }
-#sp-sort:active { background: var(--surface-hover); }
 #sp-list {
   list-style: none; flex: 1 1 auto; min-height: 0;
   overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;

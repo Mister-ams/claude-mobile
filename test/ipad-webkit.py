@@ -20,8 +20,8 @@ and the grid must be opaque on that background and monospace. T11 adds cell
 geometry: clicks inside laid-out glyphs must resolve (gridCellFromEvent) to
 that exact cell and the cursor must sit on its cell, before and after a
 font-size change. T07 adds the side pane: one row per session with state,
-name, cwd, worktree and title; priority order; the sort control (reused rows,
-persisted); a server broadcast applied as a keyed diff (MutationObserver: no
+name, cwd, worktree and title; priority order, always (no sort control, and a
+manual mode left in localStorage by an older build is ignored); a server broadcast applied as a keyed diff (MutationObserver: no
 row rebuilt, only the changed row written, one move); every pane target
 >= 44px; portrait slide-over opened by the toolbar button, closed by the scrim
 and by a pick (<profile>-sidepane-open.png); and terminal area >= the pinned
@@ -199,6 +199,10 @@ document.addEventListener('securitypolicyviolation', e => {
 });
 """
 
+# An older build persisted a manual sort mode under this key. It must be
+# ignored: the row-order check then fails if anything still honours it.
+STALE_SORT = "try { localStorage.setItem('cm-sidepane-sort', 'manual'); } catch (e) {}"
+
 # Fakes auth + a live session list (same shape as ipad-emulator.py / w2 ARM).
 ARM = """(sessions) => {
   localStorage.setItem('cm-hw-keyboard', 'on');
@@ -313,8 +317,7 @@ SP_STATE = """() => {
     order: rows.map(r => r.id),
     rows, targets,
     terminalLeft: tr ? Math.round(tr.left) : null,
-    sort: document.getElementById('sp-sort-val').textContent,
-    sortStored: (() => { try { return localStorage.getItem('cm-sidepane-sort'); } catch (e) { return 'n/a'; } })(),
+    sortControl: !!document.getElementById('sp-sort'),
   };
 }"""
 
@@ -328,8 +331,7 @@ SP_DIFF = """(update) => {
   const recs = [];
   const mo = new MutationObserver(ms => recs.push(...ms));
   mo.observe(list, { childList: true, subtree: true, characterData: true, attributes: true });
-  if (update) handle({ type: 'sessions', sessions: update });
-  else document.getElementById('sp-sort').click();
+  handle({ type: 'sessions', sessions: update });
   recs.push(...mo.takeRecords());
   mo.disconnect();
   const after = [...list.children];
@@ -456,18 +458,9 @@ def check_sidepane(page, slug, out, pngs, findings, self_test):
     for t in small:
         fail("target under %dpx: %s" % (MIN_TAP, t))
 
-    # -- sort control: Manual then back to Priority, rows reused, persisted -------
-    d = page.evaluate(SP_DIFF, None)
-    stored = page.evaluate("() => localStorage.getItem('cm-sidepane-sort')")
-    manual_want = [s["id"] for s in SESSIONS]
-    if d["order"] != manual_want or not d["reused"] or d["created"] or stored != "manual":
-        fail("sort -> manual: order %s (want %s) reused=%s created=%s stored=%r"
-             % (d["order"], manual_want, d["reused"], d["created"], stored))
-    d2 = page.evaluate(SP_DIFF, None)
-    stored = page.evaluate("() => localStorage.getItem('cm-sidepane-sort')")
-    if d2["order"] != want or not d2["reused"] or stored != "priority":
-        fail("sort -> priority: order %s reused=%s stored=%r" % (d2["order"], d2["reused"], stored))
-    rec["sortToggle"] = {"manual": d, "priority": d2}
+    # -- no alternate sort: priority is the only order (STALE_SORT seeded 'manual')
+    if st["sortControl"]:
+        fail("a sort control is present; the pane is always priority order")
 
     # -- pick a row: done session 4 is viewed -> connect sent, sheet closes -------
     if modal:
@@ -1408,6 +1401,7 @@ def main():
             for idx, (slug, device) in enumerate(PROFILES):
                 ctx = browser.new_context(**p.devices[device])
                 ctx.add_init_script(CSP_LISTENER)
+                ctx.add_init_script(STALE_SORT)
                 page = ctx.new_page()
                 console = []
                 page.on("console", lambda m, c=console: c.append((m.type, m.text)))
@@ -1503,7 +1497,7 @@ def main():
                 if self_test and idx == 0:
                     page.evaluate("""() => { const s = document.createElement('style');
                       s.id = 'st-motion';
-                      s.textContent = '#sp-sort { transition: all 1s; }'
+                      s.textContent = '#sp-toggle { transition: all 1s; }'
                         + ' @keyframes st-bad { from { width: 0; } to { width: 10px; } }';
                       document.head.appendChild(s); }""")
                 entry["motion"] = check_motion(page, slug, findings)
@@ -1674,7 +1668,7 @@ def main():
                  or (k == "shortcuts" and s == PROFILES[0][0] and "prefix passthrough" in t)
                  or (k == "targets" and s == PROFILES[0][0] and "#sname" in t)
                  or (k == "legibility" and s == PROFILES[0][0] and "shows through" in t)
-                 or (k == "motion" and s == PROFILES[0][0] and ("#sp-sort" in t or "st-bad" in t))
+                 or (k == "motion" and s == PROFILES[0][0] and ("#sp-toggle" in t or "st-bad" in t))
                  or (k == "reduced-motion" and s == PROFILES[0][0] and "#sidepane" in t)}
         want = {"csp-violation", "console-error", "pageerror", "contrast", "geometry", "sidepane",
                 "shortcuts", "targets", "legibility", "motion", "reduced-motion"}
