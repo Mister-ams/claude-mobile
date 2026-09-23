@@ -43,7 +43,7 @@ Appetite: L. No-gos: dark app chrome or a theme toggle, native app, phone-layout
   check: one ANSI palette feeds grid and xterm; every colour meets WCAG AA 4.5:1 on the terminal background (harness asserts); terminal stays opaque, monospace, edge to edge under the glass
   after: T04
   risk: med
-- [ ] T06 herdr status feed on the server
+- [x] T06 herdr status feed on the server
   files: server.js, lib/session-backend/herdr.js, lib/herdr-events.js
   check: per-session status, cwd, worktree and title reach the client; a status change arrives within 2s (live harness); the subscription survives a herdr restart; the regex detector no longer decides attention on herdr
   after: T02
@@ -68,7 +68,7 @@ Appetite: L. No-gos: dark app chrome or a theme toggle, native app, phone-layout
   check: frame time p50/p95, forced layouts per frame, snapshot apply time for DOM grid vs xterm+WebGL on one synthetic stream at iPad Pro 11; chosen path recorded in Decisions
   after: T01
   risk: low
-- [ ] T11 GPU terminal rendering and layout-thrash fixes
+- [x] T11 GPU terminal rendering and layout-thrash fixes
   files: public/app.js, public/style.css
   check: D11 ships; cursor by transform; snapshots in rAF; contain on the grid; xterm WebGL fallback engages (onContextLoss); T10 re-run shows p95 frame time and forced layouts down; tap + drag geometry still passes T02
   after: T10
