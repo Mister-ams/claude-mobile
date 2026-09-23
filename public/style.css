@@ -119,6 +119,8 @@
     inset -1px -1px 15px rgba(247, 255, 226, 0.1);
   --glass-shadow:      0 5px 20px rgba(0, 0, 0, 0.1), 0 -5px 20px rgba(147, 147, 147, 0.1);
   --glass-chip-shadow: 0 1px 3px rgba(0, 0, 0, 0.08), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  /* T07: dims the terminal behind the portrait slide-over sheet. */
+  --scrim:             rgba(0, 0, 0, 0.18);
   --glass-rim: linear-gradient(135deg,
     rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.2) 25%,
     rgba(255, 255, 255, 0.2) 75%, rgba(255, 255, 255, 0.9) 100%);
@@ -289,18 +291,29 @@ button, input, textarea, select { font: inherit; }
   font-size: 11px; color: var(--dim); margin-top: 1px;
   font-family: var(--font-mono);
 }
-/* ── Settings (T12) ── */
-#settings-btn {
+/* Toolbar icon buttons (settings; T07 adds the sidebar toggle and new
+   session). 34px on the phone, where the header height is the budget; 44px
+   (the HIG minimum target) from 820px up. */
+.tb-btn {
   flex-shrink: 0; width: 34px; height: 34px;
   display: flex; align-items: center; justify-content: center;
   background: none; border: 1px solid transparent; border-radius: var(--radius);
-  color: var(--text-sec); font-size: 16px; cursor: pointer; padding: 0;
+  color: var(--text-sec); cursor: pointer; padding: 0;
   transition: color var(--dur-fast) var(--transition), background var(--dur-fast) var(--transition);
 }
-#settings-btn:active, #settings-btn[aria-expanded="true"] {
+.tb-btn .ico { width: 20px; height: 20px; display: block; }
+.tb-btn:active, #settings-btn[aria-expanded="true"], #sp-toggle[aria-expanded="true"] {
   color: var(--accent-text); background: var(--glass-chip-bg);
   border-color: var(--glass-border); box-shadow: var(--glass-chip-shadow);
 }
+.tb-btn:focus-visible, #sp-sort:focus-visible, .sp-main:focus-visible, .sp-close:focus-visible {
+  outline: none; box-shadow: var(--focus-ring);
+}
+/* Phone: only the settings button. The sessions live in the tab strip. */
+#sp-toggle, #new-btn, #app-title { display: none; }
+.hdr-sess { display: flex; align-items: center; }
+#hdr-id { min-width: 0; }
+/* ── Settings (T12) ── */
 #settings-panel {
   display: none; position: absolute; z-index: 60;
   top: calc(100% + 6px); right: max(8px, env(safe-area-inset-right));
@@ -746,6 +759,94 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   transition: background var(--dur-fast) var(--transition), color var(--dur-fast) var(--transition);
 }
 .switcher-item .sw-close:active { background: var(--intent-danger-text); color: var(--on-tint); border-color: var(--intent-danger-text); }
+/* -- T07: sessions side pane (herdr's Agents list) --
+   Hidden on the phone, which keeps its tab strip. From 820px it is pinned in
+   landscape and a slide-over sheet in portrait (media blocks at the end).
+   Rows are keyed DOM nodes updated in place by renderSidepane(); state is a
+   data-status attribute, so a status change is one attribute write. */
+#sidepane, #sp-scrim { display: none; }
+/* A layout wrapper only: its children behave as #app's own until the
+   landscape block turns it into the pinned panel. */
+#chrome-col { display: contents; }
+#sp-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 4px; min-height: 44px; padding: 0 4px 0 12px;
+  flex-shrink: 0;
+}
+#sp-heading {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--dim);
+}
+#sp-sort {
+  display: flex; align-items: center; gap: 4px;
+  min-height: 44px; min-width: 44px; padding: 0 8px;
+  background: none; border: none; border-radius: var(--radius);
+  color: var(--accent-text); font-size: 12px; cursor: pointer;
+}
+#sp-sort .ico { width: 14px; height: 14px; display: block; }
+#sp-sort:active { background: var(--surface-hover); }
+#sp-list {
+  list-style: none; flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain; scrollbar-width: none;
+  padding: 0 4px 6px;
+}
+#sp-list::-webkit-scrollbar { display: none; }
+#sp-empty { padding: 8px 12px; font-size: 12px; color: var(--dim); }
+#sp-empty[hidden] { display: none; }
+.sp-row { position: relative; margin-bottom: 2px; }
+.sp-main {
+  display: flex; align-items: flex-start; gap: 8px;
+  width: 100%; min-height: 52px; padding: 7px 44px 7px 8px;
+  background: none; border: none; border-radius: var(--radius-md);
+  text-align: left; color: var(--text); cursor: pointer;
+  transition: background var(--dur-fast) var(--transition);
+}
+.sp-main:active { background: var(--surface-hover); }
+.sp-row.active .sp-main { background: var(--accent-muted); }
+.sp-state {
+  position: relative; flex: 0 0 18px; width: 18px; height: 18px; margin-top: 1px;
+  color: var(--system-gray);
+}
+.sp-state svg { width: 18px; height: 18px; display: block; }
+.sp-row[data-status="blocked"] .sp-state { color: var(--intent-warn); }
+.sp-row[data-status="working"] .sp-state { color: var(--accent); }
+.sp-row[data-status="done"] .sp-state { color: var(--intent-ok); }
+/* A spinner, turned on the compositor (transform only). */
+.sp-row[data-status="working"] .sp-state svg { animation: sp-spin 1s linear infinite; }
+@keyframes sp-spin { to { transform: rotate(360deg); } }
+/* A finish nobody has looked at yet (herdr 'done' = unseen). */
+.sp-unseen {
+  display: none; position: absolute; top: -2px; right: -3px;
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 1.5px var(--surface);
+}
+.sp-row[data-status="done"] .sp-unseen { display: block; }
+.sp-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.sp-name, .sp-meta, .sp-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-name { font-size: 13px; font-weight: 600; line-height: 18px; }
+.sp-meta {
+  display: flex; align-items: center; gap: 4px; min-width: 0;
+  font-size: 11px; line-height: 15px; color: var(--text-sec);
+  font-family: var(--font-mono);
+}
+.sp-cwd, .sp-wt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.sp-cwd { flex: 0 1 auto; }
+.sp-wt { display: flex; align-items: center; gap: 2px; flex: 0 1 auto; color: var(--dim); }
+.sp-wt[hidden] { display: none; }
+.sp-wt svg { width: 10px; height: 10px; flex-shrink: 0; }
+.sp-title { font-size: 11px; line-height: 15px; color: var(--dim); }
+.sp-title:empty { display: none; }
+.sp-close {
+  position: absolute; top: 4px; right: 0;
+  width: 44px; height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: var(--radius);
+  color: var(--dim); cursor: pointer;
+  transition: color var(--dur-fast) var(--transition), background var(--dur-fast) var(--transition);
+}
+.sp-close svg { width: 11px; height: 11px; display: block; }
+.sp-close:active { color: var(--intent-danger-text); background: var(--surface-hover); }
 /* Swipe hint edges */
 #swipe-hint-left, #swipe-hint-right {
   position: absolute; top: 0; bottom: 0; width: 4px;
@@ -776,6 +877,8 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  /* An infinite 0.01ms spin is still a spin; the arc alone marks working. */
+  .sp-row[data-status="working"] .sp-state svg { animation: none; }
 }
 
 /* ══ T13: responsive breakpoints ════════════════════════════════════
@@ -798,9 +901,10 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   .auth-card { width: 360px; }
   .sess-name { max-width: 420px; font-size: 18px; }
   .sess-dir { font-size: 12px; }
-  #tab-pill .pill-dir { max-width: 260px; }
 
   #header { padding: 8px 16px; padding-top: max(8px, env(safe-area-inset-top)); }
+  .tb-btn { width: 44px; height: 44px; }
+  #new-btn { display: flex; }
   .term-wrap {
     left: max(10px, env(safe-area-inset-left));
     right: max(10px, env(safe-area-inset-right));
@@ -812,37 +916,12 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
      pure vertical cost here. */
   #qbar { display: none; }
 
-  /* -- persistent tab strip --
+  /* -- T07: the side pane replaces the tab strip --
      The pill + count button + slide-up overlay are a one-session-at-a-time
-     affordance. With room on screen the sessions live in the bar itself.
-     The strip sits inside the #tabs glass, so it drops its own material. */
-  #tab-pill, #tab-count-btn { display: none; }
-  #tab-switcher, #tab-switcher.open {
-    display: flex; position: static; flex: 1 1 auto;
-    max-height: none; overflow-x: auto; overflow-y: hidden;
-    border-top: none; border-radius: 0; box-shadow: none; background: none;
-    -webkit-backdrop-filter: none; backdrop-filter: none;
-    gap: 6px; align-items: stretch; min-width: 0;
-  }
-  #tab-switcher .switcher-item {
-    width: auto; flex: 0 0 auto; max-width: 220px;
-    min-height: 36px; padding: 6px 10px;
-    border: 1px solid var(--glass-border);
-    border-radius: var(--radius); background: var(--glass-chip-bg);
-    box-shadow: var(--glass-chip-shadow);
-  }
-  #tab-switcher .switcher-item.active {
-    border-color: var(--accent); border-left-width: 1px;
-    background: var(--accent-muted); color: var(--text);
-  }
-  #tab-switcher .switcher-new {
-    justify-content: center; min-width: 44px;
-    color: var(--accent-text); font-weight: 700; font-size: 16px;
-  }
-  #tabs {
-    padding: 6px 16px;
-    padding-bottom: calc(6px + max(8px, env(safe-area-inset-bottom)));
-  }
+     phone affordance; from 820px the sessions live in #sidepane, so the
+     whole bottom bar goes and its height returns to the terminal. */
+  #tabs { display: none; }
+  #sidepane { display: flex; flex-direction: column; min-height: 0; }
 
   /* Swipe affordances are a narrow-width behaviour (T15). */
   #swipe-hint-left, #swipe-hint-right, #new-session-hint { display: none; }
@@ -852,80 +931,137 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   .sess-name { max-width: 600px; }
   .auth-card { width: 400px; }
   #header { padding: 10px 20px; padding-top: max(10px, env(safe-area-inset-top)); }
-  #tabs { padding: 8px 20px; padding-bottom: calc(8px + max(8px, env(safe-area-inset-bottom))); }
   #input-bar { padding: 4px 20px; }
-  #tab-switcher .switcher-item { max-width: 300px; }
 }
 
-/* ── iPad landscape: session rail ──────────────────────────────────────────
-   In landscape the scarce resource is VERTICAL. The emulator measured 122
-   columns available with typical Claude output using well under half, while
-   160px of an 834px-tall screen went to chrome (header 64 + input 25 + tab
-   strip 71) -- 19%. A left rail spends columns that are not being used to buy
-   rows that are: 32 rows -> 39, at a cost of 21 columns (101 remain).
+/* -- T07 portrait iPad: toolbar + slide-over sheet --------------------------
+   Portrait is column-poor (84 at 16px), so the pane does not take a column:
+   it is a glass sheet OVER the terminal, opened by the toolbar's sidebar
+   button or a swipe in from the left edge, closed by the scrim, a pick, a
+   swipe back or Esc. It slides by transform (compositor only); visibility
+   flips after the slide so a closed sheet is out of the tab order and the
+   accessibility tree. The terminal never changes size when it opens. */
+@media (min-width: 820px) and (orientation: portrait) {
+  #chrome-col { display: contents; }
+  #sp-toggle { display: flex; }
+  #header { gap: 10px; justify-content: flex-start; }
+  #hdr-id { flex: 1 1 auto; }
 
-   Grid rather than a DOM restructure: #header, #tabs, #term-area, #diag and
-   #input-wrap stay siblings and are placed into named areas. #header keeps
-   the settings button and panel, so folding it into the rail does not strand
-   the only route to settings.
+  #sidepane {
+    position: absolute; z-index: 70;
+    top: max(8px, env(safe-area-inset-top));
+    bottom: max(8px, env(safe-area-inset-bottom));
+    left: max(8px, env(safe-area-inset-left));
+    width: min(340px, calc(100vw - 72px));
+    padding-top: 4px;
+    border: 1px solid var(--glass-hairline);
+    border-radius: var(--radius-lg);
+    /* A sheet of TEXT over live terminal text: the thickest material, so the
+       rows stay legible even where the blur is not rendered. */
+    background: var(--glass-bg-fallback);
+    -webkit-backdrop-filter: var(--glass-filter);
+    backdrop-filter: var(--glass-filter);
+    box-shadow: var(--glass-highlight), var(--glass-shadow);
+    transform: translateX(calc(-100% - 24px));
+    visibility: hidden;
+    transition: transform var(--dur-med) var(--ease-out), visibility 0s linear var(--dur-med);
+  }
+  #sidepane:focus { outline: none; }
+  #sidepane.open {
+    transform: none; visibility: visible;
+    transition: transform var(--dur-med) var(--ease-out), visibility 0s;
+  }
+  #sp-scrim {
+    display: block; position: absolute; inset: 0; z-index: 65;
+    background: var(--scrim);
+    opacity: 0; pointer-events: none;
+    transition: opacity var(--dur-med) var(--ease-standard);
+  }
+  #sp-scrim.open { opacity: 1; pointer-events: auto; }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    #sidepane { background: var(--glass-bg-fallback); }
+  }
+}
 
-   Portrait deliberately keeps the single-bar layout from the 820px block
-   above -- 84 columns is already tight there, so a rail would cost more than
-   it returns. Must stay AFTER the 820px and 1180px blocks: same specificity,
-   later wins. */
+/* -- T07 landscape iPad: pinned floating side pane --------------------------
+   In landscape the scarce resource is VERTICAL, so the sessions take a left
+   column instead of a bar (the T13 rail's reasoning: typical Claude output
+   uses well under half of the 122 columns). The column is the same 200px the
+   rail cost, so the terminal is no smaller: the pane floats inside it, inset
+   and rounded, and the terminal's text starts at the column edge, right of
+   the pane, so no terminal text is ever under glass.
+
+   #chrome-col is the ONE glass panel: its ::before carries the material, so
+   the column itself is not a backdrop root and the settings sheet that hangs
+   out of it over the terminal still samples the real terminal behind it.
+   #header and #sidepane become transparent sections of it. Grid areas, not a
+   DOM move: #term-area, #diag and #input-wrap stay siblings. Must stay AFTER
+   the 820px and 1180px blocks: same specificity, later wins. */
 @media (min-width: 820px) and (orientation: landscape) {
   #app.shown {
     display: grid;
-    grid-template-columns: 190px 1fr;
-    grid-template-rows: auto 1fr auto auto;
+    grid-template-columns: 200px 1fr;
+    grid-template-rows: 1fr auto auto;
     grid-template-areas:
-      "railhead term"
-      "railtabs term"
-      "railtabs diag"
-      "railtabs input";
+      "pane term"
+      "pane diag"
+      "pane input";
+  }
+  #chrome-col {
+    grid-area: pane;
+    display: flex; flex-direction: column; min-height: 0;
+    position: relative; z-index: 30;  /* the settings sheet hangs over the terminal */
+    margin: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom))
+            max(8px, env(safe-area-inset-left));
+    border: 1px solid var(--glass-hairline);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--glass-highlight), var(--glass-shadow);
+  }
+  #chrome-col::before {
+    content: ''; position: absolute; inset: 0; z-index: -1;
+    border-radius: inherit;
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: var(--glass-filter);
+    backdrop-filter: var(--glass-filter);
+    pointer-events: none;
+  }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    #chrome-col::before { background: var(--glass-bg-fallback); }
   }
 
-  /* rail top: session identity + settings */
+  /* pane head: app name + new session + settings, then the active session */
   #header {
-    grid-area: railhead;
-    flex-direction: column; align-items: stretch; justify-content: flex-start;
-    gap: 2px;
-    border-bottom: none; border-right: 0.5px solid var(--glass-hairline);
-    padding: 10px 10px 8px;
-    padding-top: max(10px, env(safe-area-inset-top));
+    display: grid;
+    grid-template-columns: 1fr 44px 44px;
+    grid-template-areas: "title new gear" "id id id";
+    align-items: center; row-gap: 0;
+    background: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+    border: none; box-shadow: none;
+    padding: 2px 2px 6px 12px;
   }
-  #header > div:first-child { min-width: 0; }
-  .sess-name { font-size: 14px; max-width: none; padding-right: 22px; }
+  #app-title {
+    display: block; grid-area: title;
+    font-size: 15px; font-weight: 600; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #new-btn { grid-area: new; }
+  #settings-btn { grid-area: gear; }
+  #hdr-id { grid-area: id; padding-right: 10px; }
+  .sess-name { font-size: 14px; max-width: none; width: 100%; }
   /* Tail-first truncation is done in shortDir() rather than with
      `direction: rtl`, which reorders a path's leading slash to the end. */
   .sess-dir {
     font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  #settings-btn { position: absolute; top: 8px; right: 8px; }
-  /* 280px panel cannot fit a 190px rail; hang it over the terminal instead */
-  #settings-panel { top: calc(100% + 6px); left: 8px; right: auto; }
+  /* 280px cannot fit the pane; the sheet hangs to its right, over the terminal. */
+  #settings-panel { top: 0; left: calc(100% + 10px); right: auto; }
 
-  /* rail body: the session list, growing downward */
-  #tabs {
-    grid-area: railtabs;
-    flex-direction: column; align-items: stretch; gap: 4px;
-    border-top: none; border-right: 0.5px solid var(--glass-hairline);
-    padding: 6px 8px;
-    padding-bottom: calc(6px + max(8px, env(safe-area-inset-bottom)));
-    overflow-y: auto; min-height: 0;
-  }
-  #tabs::before {
-    content: 'SESSIONS';
-    font-size: 9px; letter-spacing: 0.11em; color: var(--dim);
-    padding: 0 2px 5px; margin-bottom: 2px;
-    border-bottom: 0.5px solid var(--border);
-  }
-  #tab-switcher, #tab-switcher.open {
-    flex-direction: column; align-items: stretch;
-    overflow-x: hidden; overflow-y: auto; min-height: 0;
-  }
-  #tab-switcher .switcher-item { width: 100%; max-width: none; }
+  #sidepane { flex: 1 1 auto; border-top: 0.5px solid var(--glass-hairline); }
 
+  /* The pane's own 8px right margin is the gap to the text, so the terminal
+     starts at the column edge: 1194 - 200 - 10 = 984 px wide, the same as
+     the rail it replaces. */
+  .term-wrap { left: 0; }
   #term-area  { grid-area: term; }
   #diag       { grid-area: diag; }
   #input-wrap { grid-area: input; }

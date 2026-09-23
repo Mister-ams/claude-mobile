@@ -62,6 +62,11 @@ SEL = {
     "active_grid": ".term-wrap.active .grid-term",
     "msg_input": "#msg",
     "send_btn": "#send",
+    # T07: the sessions side pane; rows keyed by session id.
+    "sidepane": "#sidepane",
+    "sp_list": "#sp-list",
+    "sp_row": ".sp-row",
+    "sp_toggle": "#sp-toggle",
 }
 
 LIVE_PORT = 3456                      # D6: read-only, never a target
@@ -284,6 +289,28 @@ AGENT_RECORDER = """(sid) => {
                 agent: a ? a.agent : null, present: !!s };
     const key = JSON.stringify(e);
     if (key !== last) { last = key; e.t = Date.now() / 1000; window.__agentLog.push(e); }
+  }, 20);
+  return true;
+}"""
+
+# T07: the side pane's row for one session AS DRAWN -- its data-status, glyph,
+# position in the list and aria-label -- sampled every 20ms alongside the
+# agent recorder, so a step can show the row followed herdr's transitions.
+SP_ROW_RECORDER = """([sid, sel]) => {
+  if (window.__spRec) clearInterval(window.__spRec);
+  window.__spLog = window.__spLog || [];
+  let last = null;
+  window.__spRec = setInterval(() => {
+    const list = document.querySelector(sel.sp_list);
+    const rows = list ? [...list.querySelectorAll(':scope > ' + sel.sp_row)] : [];
+    const i = rows.findIndex(r => r.dataset.id === String(sid));
+    const r = i >= 0 ? rows[i] : null;
+    const use = r ? r.querySelector('use') : null;
+    const e = { status: r ? r.dataset.status : null, glyph: use ? use.getAttribute('href') : null,
+                index: i, rows: rows.length,
+                label: r ? r.querySelector('button').getAttribute('aria-label') : null };
+    const key = JSON.stringify(e);
+    if (key !== last) { last = key; e.t = Date.now() / 1000; window.__spLog.push(e); }
   }, 20);
   return true;
 }"""
@@ -583,6 +610,7 @@ def main():
             pane = ca["pane_id"]
             st["claude_pane"] = pane
             run.page.evaluate(AGENT_RECORDER, sid)
+            run.page.evaluate(SP_ROW_RECORDER, [sid, SEL])
             tap = HerdrEventTap(name, args.prefix, [pane])
             end = time.time() + 5
             while time.time() < end and not tap.started:
@@ -642,6 +670,47 @@ def main():
                             "idle/no attention" if pv else "STILL done", attn_miss,
                             agent.get("cwd"), agent.get("title"), agent.get("worktree")))
         run.step("agent-status", s_agent_status, needs=("existing-screen",))
+
+        # -- 3c. the side pane row follows herdr's status (T07) --------------
+        # Reads what the pane DREW during 3b: the row for the session must go
+        # blocked (sorted first, exclamation glyph, "Needs input" in its
+        # label), then done (check glyph, unseen), then idle once viewed --
+        # blocked and done each within 2s of the client's own sessionList
+        # showing them. The throwaway has one session, so "first" is trivially
+        # true here; the multi-session priority order is proven by the static
+        # tier's four-state fixture.
+        def s_sidepane_status():
+            sid = st["sid"]
+            log = run.page.evaluate("() => window.__spLog || []")
+            alog = page_log()
+            seq = []
+            for e in log:
+                if not seq or seq[-1] != e["status"]:
+                    seq.append(e["status"])
+
+            def lag(status):
+                a = next((e for e in alog if e["status"] == status), None)
+                r = next((e for e in log if e["status"] == status
+                          and (not a or e["t"] >= a["t"] - 0.05)), None)
+                return (round(r["t"] - a["t"], 3) if (a and r) else None), r
+            lb, rb = lag("blocked")
+            ld, rd = lag("done")
+            ri = next((e for e in log if e["status"] == "idle" and rd is not None and e["t"] > rd["t"]), None)
+            now = run.page.evaluate("""(sel) => {
+              const rows = [...document.querySelectorAll(sel.sp_list + ' > ' + sel.sp_row)];
+              return { ids: rows.map(r => +r.dataset.id), sessions: sessionList.map(s => s.id) };
+            }""", SEL)
+            ok = (rb is not None and rb["index"] == 0 and rb["glyph"] == "#s-blocked"
+                  and "Needs input" in (rb["label"] or "")
+                  and rd is not None and rd["glyph"] == "#s-done"
+                  and ri is not None
+                  and lb is not None and lb <= 2.0 and ld is not None and ld <= 2.0
+                  and sorted(now["ids"]) == sorted(now["sessions"]))
+            return ok, ("row %s statuses %s; blocked: index=%s glyph=%s label=%r lag=%ss; done: glyph=%s "
+                        "lag=%ss; idle after view=%s; rows now %s for sessions %s" % (
+                            sid, seq, rb and rb["index"], rb and rb["glyph"], rb and rb["label"], lb,
+                            rd and rd["glyph"], ld, ri is not None, now["ids"], now["sessions"]))
+        run.step("sidepane-status", s_sidepane_status, needs=("agent-status",))
 
         # ── 4. split the throwaway pane; a tap moves herdr focus ──────────
         def s_tap():

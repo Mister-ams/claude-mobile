@@ -19,7 +19,13 @@ the running client, the xterm theme must equal termPalette() (one source),
 and the grid must be opaque on that background and monospace. T11 adds cell
 geometry: clicks inside laid-out glyphs must resolve (gridCellFromEvent) to
 that exact cell and the cursor must sit on its cell, before and after a
-font-size change. The only tolerated console error is listed by EXACT text in
+font-size change. T07 adds the side pane: one row per session with state,
+name, cwd, worktree and title; priority order; the sort control (reused rows,
+persisted); a server broadcast applied as a keyed diff (MutationObserver: no
+row rebuilt, only the changed row written, one move); every pane target
+>= 44px; portrait slide-over opened by the toolbar button, closed by the scrim
+and by a pick (<profile>-sidepane-open.png); and terminal area >= the pinned
+pre-T07 floor. The only tolerated console error is listed by EXACT text in
 BENIGN_CONSOLE below -- never add a pattern there, and never add a message
 that describes a real defect.
 
@@ -171,24 +177,319 @@ document.addEventListener('securitypolicyviolation', e => {
 });
 """
 
-# Fakes auth + one live session (same shape as ipad-emulator.py / w2 ARM).
-ARM = """() => {
+# Fakes auth + a live session list (same shape as ipad-emulator.py / w2 ARM).
+ARM = """(sessions) => {
   localStorage.setItem('cm-hw-keyboard', 'on');
   window.__sent = [];
   queueSend = (o) => { window.__sent.push(o); };
   authScreen.style.display = 'none';
   appEl.classList.add('shown');
   ws = { readyState: 1, send() {} };
-  sessionList = [
-    { id: 1, name: 'LOOMI OS', dir: '/mnt/c/Users/MRAL-/Projects/loomi-os' },
-    { id: 2, name: 'claude-mobile', dir: '/mnt/c/Users/MRAL-/Projects/claude-mobile' },
-    { id: 3, name: 'herdr', dir: '/root/work' }
-  ];
+  sessionList = sessions;
   activeSession = null;
   switchTo(1);
   applyHwKeyboard();
   return true;
 }"""
+
+# T07: the session list as server.js broadcasts it on herdr -- each session
+# carries T06's `agent` view -- with one session in each state the side pane
+# draws, listed in an order that is NOT the priority order (so a sort that did
+# nothing would fail). Session 1 is the active one.
+def _agent(status, cwd, title, worktree=None):
+    return {"status": status, "herdrStatus": "idle" if status == "done" else status,
+            "seen": status != "done", "agent": "claude", "title": title, "cwd": cwd,
+            "worktree": worktree, "agentSessionId": None, "paneId": "p1", "seq": 1,
+            "feed": "events", "reconnects": 0}
+
+
+SESSIONS = [
+    {"id": 1, "name": "LOOMI OS", "dir": "/mnt/c/Users/MRAL-/Projects/loomi-os", "attention": None,
+     "viewers": 1, "agent": _agent("idle", "C:\\Users\\MRAL-\\Projects\\loomi-os", "Claude Code",
+                                   {"repo": "loomi-os", "root": None, "path": None, "linked": False})},
+    {"id": 2, "name": "CLAUDE-MOBILE", "dir": "/mnt/c/Users/MRAL-/Projects/claude-mobile", "attention": None,
+     "viewers": 0, "agent": _agent("working", "C:\\Users\\MRAL-\\Projects\\_wt\\cm-next",
+                                   "Claude Code - side pane",
+                                   {"repo": "claude-mobile", "root": None,
+                                    "path": "C:\\Users\\MRAL-\\Projects\\_wt\\cm-next", "linked": True})},
+    {"id": 3, "name": "HERDR", "dir": "/root/work", "attention": "permission",
+     "viewers": 0, "agent": _agent("blocked", "C:\\root\\work", "Claude Code")},
+    {"id": 4, "name": "LOOMI API", "dir": "/mnt/c/Users/MRAL-/Projects/loomi-api", "attention": "ready",
+     "viewers": 0, "agent": _agent("done", "C:\\Users\\MRAL-\\Projects\\loomi-api", "Claude Code")},
+]
+SP_RANK = {"blocked": 0, "done": 1, "working": 2, "idle": 3, "unknown": 4}
+
+
+def priority_order(sessions):
+    """The oracle: blocked, done, working, idle, unknown; stable by list order."""
+    return [s["id"] for _, s in sorted(enumerate(sessions),
+                                       key=lambda p: (SP_RANK[p[1]["agent"]["status"]], p[0]))]
+
+
+# What the server sends after the operator views session 4 (D7: the finish is
+# no longer news). Same ids, fresh objects -- as every broadcast is.
+def viewed_update(sessions, sid):
+    out = json.loads(json.dumps(sessions))
+    for s in out:
+        if s["id"] == sid:
+            s["agent"]["status"], s["agent"]["seen"], s["attention"] = "idle", True, None
+    return out
+
+
+# T07: terminal area (px^2) BEFORE the side pane, from the committed T01-T11
+# baseline. Pinned here, not read from the baseline file, so re-baselining can
+# never lower the bar. The pane may only give the terminal room, never take it.
+TERMINAL_FLOOR = {
+    "ipad-pro-11": 841969,            # 814x1034 (portrait: tab strip at the bottom)
+    "ipad-pro-11-landscape": 788676,  # 984x802  (landscape: 190px rail)
+    "ipad-gen-11": 483050,            # phone layout, unchanged by T07
+    "ipad-gen-11-landscape": 457729,
+}
+
+# T07: the side pane as the page shows it. Visibility is computed, never
+# assumed from a class: a closed portrait sheet is transformed off-screen.
+SP_STATE = """() => {
+  const vis = el => {
+    const cs = getComputedStyle(el);
+    if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.right > 0 && r.left < innerWidth
+      && r.bottom > 0 && r.top < innerHeight;
+  };
+  const pane = document.getElementById('sidepane');
+  const pr = pane.getBoundingClientRect();
+  const q = (li, sel) => li.querySelector(sel);
+  const rows = [...document.querySelectorAll('#sp-list > .sp-row')].map(li => ({
+    id: +li.dataset.id, status: li.dataset.status,
+    glyph: q(li, '.sp-state use').getAttribute('href'),
+    name: q(li, '.sp-name').textContent, cwd: q(li, '.sp-cwd').textContent,
+    worktree: q(li, '.sp-wt').hidden ? null : q(li, '.sp-wt').textContent,
+    title: q(li, '.sp-title').textContent,
+    current: q(li, '.sp-main').getAttribute('aria-current'),
+    label: q(li, '.sp-main').getAttribute('aria-label'),
+    closeLabel: q(li, '.sp-close').getAttribute('aria-label'),
+    unseenShown: getComputedStyle(q(li, '.sp-unseen')).display !== 'none',
+  }));
+  const targets = [...document.querySelectorAll(
+      '#sidepane button, #sidepane [role=button], #sp-toggle, #new-btn, #settings-btn')]
+    .filter(vis).map(el => {
+      const r = el.getBoundingClientRect();
+      return { el: el.id || el.className, label: el.getAttribute('aria-label'),
+               w: Math.round(r.width), h: Math.round(r.height) };
+    });
+  const wrap = document.querySelector('.term-wrap.active');
+  const tr = wrap ? wrap.getBoundingClientRect() : null;
+  return {
+    visible: vis(pane), open: pane.classList.contains('open'),
+    rect: { left: Math.round(pr.left), right: Math.round(pr.right), top: Math.round(pr.top),
+            bottom: Math.round(pr.bottom), w: Math.round(pr.width) },
+    toggleVisible: vis(document.getElementById('sp-toggle')),
+    toggleExpanded: document.getElementById('sp-toggle').getAttribute('aria-expanded'),
+    scrimOpen: document.getElementById('sp-scrim').classList.contains('open'),
+    pillVisible: vis(document.getElementById('tab-pill')),
+    active: activeSession,
+    order: rows.map(r => r.id),
+    rows, targets,
+    terminalLeft: tr ? Math.round(tr.left) : null,
+    sort: document.getElementById('sp-sort-val').textContent,
+    sortStored: (() => { try { return localStorage.getItem('cm-sidepane-sort'); } catch (e) { return 'n/a'; } })(),
+  };
+}"""
+
+# T07: rows update by keyed diff. Feeds one server broadcast through the real
+# message handler while a MutationObserver watches the list, then reports
+# whether every row node survived, how many were moved or created, and which
+# rows had anything inside them written at all.
+SP_DIFF = """(update) => {
+  const list = document.getElementById('sp-list');
+  const before = new Map([...list.children].map(li => [li.dataset.id, li]));
+  const recs = [];
+  const mo = new MutationObserver(ms => recs.push(...ms));
+  mo.observe(list, { childList: true, subtree: true, characterData: true, attributes: true });
+  if (update) handle({ type: 'sessions', sessions: update });
+  else document.getElementById('sp-sort').click();
+  recs.push(...mo.takeRecords());
+  mo.disconnect();
+  const after = [...list.children];
+  const added = new Set();
+  for (const r of recs) if (r.target === list) r.addedNodes.forEach(n => added.add(n));
+  const touched = new Set();
+  for (const r of recs) {
+    if (r.target === list) continue;
+    const el = r.target.nodeType === 1 ? r.target : r.target.parentElement;
+    const li = el && el.closest('.sp-row');
+    if (li) touched.add(li.dataset.id);
+  }
+  return {
+    reused: after.length === before.size && after.every(li => before.get(li.dataset.id) === li),
+    order: after.map(li => +li.dataset.id),
+    moved: [...added].filter(n => n.dataset && before.get(n.dataset.id) === n).length,
+    created: [...added].filter(n => !(n.dataset && before.get(n.dataset.id) === n)).length,
+    touched: [...touched].map(Number).sort(),
+    status: Object.fromEntries(after.map(li => [li.dataset.id, li.dataset.status])),
+  };
+}"""
+
+
+def settle(page, want_open):
+    """Wait for the portrait sheet's END state (slide finished, visibility
+    flipped) rather than a fixed time; the checks after it report failures."""
+    try:
+        page.wait_for_function(
+            "(o) => getComputedStyle(sidepane).visibility === (o ? 'visible' : 'hidden')"
+            " && (!o || getComputedStyle(sidepane).transform === 'none')", arg=want_open, timeout=4000)
+    except Exception:
+        pass
+    page.wait_for_timeout(100)
+
+
+def check_sidepane(page, slug, out, pngs, findings, self_test):
+    """T07 gate. Returns the metrics record."""
+    rec = {}
+    wide = page.evaluate("() => isWideLayout()")
+    modal = page.evaluate("() => sidepaneIsModal()")
+    st = page.evaluate(SP_STATE)
+    rec["closed"] = st
+    if not wide:
+        # Phone layout: no pane, the tab pill keeps its job.
+        if st["visible"] or not st["pillVisible"]:
+            findings.append((slug, "sidepane", "phone layout: pane visible=%s, tab pill visible=%s"
+                             % (st["visible"], st["pillVisible"])))
+        rec["mode"] = "phone"
+        return rec
+    rec["mode"] = "slide-over" if modal else "pinned"
+
+    def fail(text):
+        findings.append((slug, "sidepane", text))
+
+    if modal:
+        if st["visible"] or st["open"] or not st["toggleVisible"]:
+            fail("portrait: pane should start closed with the toggle shown (visible=%s open=%s toggle=%s)"
+                 % (st["visible"], st["open"], st["toggleVisible"]))
+        page.click("#sp-toggle")
+        settle(page, True)
+        st = page.evaluate(SP_STATE)
+        rec["open"] = st
+        if not (st["visible"] and st["open"] and st["scrimOpen"] and st["rect"]["left"] >= 0
+                and st["toggleExpanded"] == "true"):
+            fail("portrait: toggle did not open the sheet: %s" % {k: st[k] for k in
+                 ("visible", "open", "scrimOpen", "rect", "toggleExpanded")})
+        shot = "%s-sidepane-open.png" % slug
+        page.screenshot(path=os.path.join(out, shot))
+        pngs.append(shot)
+    else:
+        if not st["visible"]:
+            fail("landscape: pane not pinned on screen")
+        elif st["terminalLeft"] is None or st["rect"]["right"] > st["terminalLeft"]:
+            fail("landscape: pane (right %s) covers the terminal (left %s)"
+                 % (st["rect"]["right"], st["terminalLeft"]))
+
+    # -- rows: one per session, fields, priority order ---------------------------
+    want = priority_order(SESSIONS)
+    if len(st["rows"]) != len(SESSIONS):
+        fail("%d rows for %d sessions" % (len(st["rows"]), len(SESSIONS)))
+    if st["order"] != want:
+        fail("row order %s != priority order %s" % (st["order"], want))
+    by_id = {s["id"]: s for s in SESSIONS}
+    for r in st["rows"]:
+        s = by_id.get(r["id"])
+        if not s:
+            continue
+        a = s["agent"]
+        cwd = re.split(r"[\\/]+", a["cwd"].rstrip("\\/"))[-1]
+        wt = a["worktree"]
+        # First of (linked checkout name, repo name) that the cwd does not say.
+        cands = ([re.split(r"[\\/]+", wt["path"])[-1] if wt["linked"] and wt["path"] else None,
+                  wt["repo"]] if wt else [])
+        want_wt = next((c for c in cands if c and c != cwd), None)
+        bad = []
+        if r["status"] != a["status"] or r["glyph"] != "#s-" + a["status"]:
+            bad.append("status %s/%s" % (r["status"], r["glyph"]))
+        if r["name"] != s["name"]:
+            bad.append("name %r" % r["name"])
+        if r["cwd"] != cwd:
+            bad.append("cwd %r != %r" % (r["cwd"], cwd))
+        if r["worktree"] != want_wt:
+            bad.append("worktree %r != %r" % (r["worktree"], want_wt))
+        if r["title"] != a["title"]:
+            bad.append("title %r" % r["title"])
+        if (r["current"] == "true") != (s["id"] == st["active"]):
+            bad.append("aria-current %r" % r["current"])
+        if r["unseenShown"] != (a["status"] == "done"):
+            bad.append("unseen dot %s" % r["unseenShown"])
+        if not r["label"] or s["name"] not in r["label"] or not r["closeLabel"]:
+            bad.append("labels %r / %r" % (r["label"], r["closeLabel"]))
+        if bad:
+            fail("row %s: %s" % (s["id"], "; ".join(bad)))
+
+    # -- targets >= 44 CSS px -----------------------------------------------------
+    small = [t for t in st["targets"] if t["w"] < MIN_TAP or t["h"] < MIN_TAP]
+    rec["targets"] = {"visible": len(st["targets"]), "under44": small}
+    if not st["targets"]:
+        fail("no side-pane targets visible to measure")
+    for t in small:
+        fail("target under %dpx: %s" % (MIN_TAP, t))
+
+    # -- sort control: Manual then back to Priority, rows reused, persisted -------
+    d = page.evaluate(SP_DIFF, None)
+    stored = page.evaluate("() => localStorage.getItem('cm-sidepane-sort')")
+    manual_want = [s["id"] for s in SESSIONS]
+    if d["order"] != manual_want or not d["reused"] or d["created"] or stored != "manual":
+        fail("sort -> manual: order %s (want %s) reused=%s created=%s stored=%r"
+             % (d["order"], manual_want, d["reused"], d["created"], stored))
+    d2 = page.evaluate(SP_DIFF, None)
+    stored = page.evaluate("() => localStorage.getItem('cm-sidepane-sort')")
+    if d2["order"] != want or not d2["reused"] or stored != "priority":
+        fail("sort -> priority: order %s reused=%s stored=%r" % (d2["order"], d2["reused"], stored))
+    rec["sortToggle"] = {"manual": d, "priority": d2}
+
+    # -- pick a row: done session 4 is viewed -> connect sent, sheet closes -------
+    if modal:
+        page.mouse.click(page.viewport_size["width"] - 30, page.viewport_size["height"] // 2)
+        settle(page, False)
+        st = page.evaluate(SP_STATE)
+        rec["afterScrim"] = {"open": st["open"], "visible": st["visible"]}
+        if st["open"] or st["visible"]:
+            fail("portrait: tapping the scrim did not close the sheet")
+        page.click("#sp-toggle")
+        settle(page, True)
+    page.evaluate("() => { window.__sent = []; }")
+    page.click('#sp-list .sp-row[data-id="4"] .sp-main')
+    # Mounting the picked session blocks the main thread for a few hundred ms
+    # in headless WebKit on Windows, which (no threaded compositor here) also
+    # holds the slide-out; wait for the end state instead of a fixed time.
+    try:
+        page.wait_for_function("() => activeSession === 4 && (!sidepaneIsModal()"
+                               " || getComputedStyle(sidepane).visibility === 'hidden')",
+                               timeout=4000)
+    except Exception:
+        pass  # the checks below report what state it stopped in
+    st = page.evaluate(SP_STATE)
+    sent = page.evaluate("() => window.__sent")
+    rec["afterPick"] = {"active": st["active"], "open": st["open"], "visible": st["visible"],
+                        "connectSent": [m for m in sent if m.get("type") == "connect"]}
+    if st["active"] != 4 or not any(m.get("type") == "connect" and m.get("session") == 4 for m in sent):
+        fail("picking row 4 did not switch + connect (active=%s sent=%s)" % (st["active"], sent))
+    if modal and (st["open"] or st["visible"]):
+        fail("portrait: picking a session did not close the sheet")
+
+    # -- done clears on view: the server's follow-up broadcast, diffed ----------
+    if self_test and slug == PROFILES[0][0]:
+        # An innerHTML rebuild must fail the reuse check.
+        page.evaluate("""() => { const real = renderSidepane;
+          renderSidepane = function () { spList.innerHTML = ''; spRows.clear(); real(); }; }""")
+    d3 = page.evaluate(SP_DIFF, viewed_update(SESSIONS, 4))
+    rec["viewedUpdate"] = d3
+    want3 = priority_order(viewed_update(SESSIONS, 4))
+    if not d3["reused"] or d3["created"]:
+        fail("broadcast rebuilt rows (reused=%s created=%d) -- not a keyed diff"
+             % (d3["reused"], d3["created"]))
+    if d3["order"] != want3 or d3["status"].get("4") != "idle":
+        fail("after view: order %s (want %s), row 4 %s" % (d3["order"], want3, d3["status"].get("4")))
+    if d3["moved"] > 1 or d3["touched"] != [4]:
+        fail("after view: %d rows moved (want 1), rows written %s (want [4])" % (d3["moved"], d3["touched"]))
+    return rec
+
 
 ROWS = """() => {
   const g = gridTerms[activeSession];
@@ -529,7 +830,7 @@ def main():
                     page.wait_for_timeout(300)
 
                 # -- app shell ---------------------------------------------------
-                page.evaluate(ARM)
+                page.evaluate(ARM, SESSIONS)
                 page.wait_for_timeout(300)
                 page.evaluate("(s) => { applyGridSnapshot(gridTerms[activeSession], s); }",
                               build_snapshot(max(10, page.evaluate(ROWS))))
@@ -541,6 +842,11 @@ def main():
                 page.screenshot(path=os.path.join(out, shot))
                 pngs.append(shot)
                 entry["app"] = app
+                floor = TERMINAL_FLOOR.get(slug)
+                area = (app.get("terminal") or {}).get("areaPx", 0)
+                if floor and area < floor:
+                    findings.append((slug, "terminal-area", "terminal %s px^2 < pre-T07 %s"
+                                     % (area, floor)))
 
                 # -- terminal palette (T05): contrast, one source, opaque ------
                 if self_test and idx == 0:
@@ -584,6 +890,11 @@ def main():
                 page.wait_for_timeout(300)
                 entry["geometry"] = geo
 
+                # -- side pane (T07): rows, order, diff, targets, open/close -----
+                page.evaluate("() => closeSettings()")
+                page.wait_for_timeout(200)
+                entry["sidepane"] = check_sidepane(page, slug, out, pngs, findings, self_test)
+
                 # -- gate ----------------------------------------------------------
                 for v in page.evaluate("() => window.__cspv"):
                     findings.append((slug, "csp-violation", v))
@@ -614,6 +925,14 @@ def main():
                 print("   terminal  %sx%s px = %s%% of viewport area (%s%% of height)"
                       % (t.get("w"), t.get("h"), t.get("areaPctOfViewport"), t.get("heightPct")))
                 print("   bars      %s" % a["bars"])
+                floor = TERMINAL_FLOOR.get(slug)
+                if floor:
+                    print("   area      %s px^2 vs pre-T07 %s (%+.1f%%)"
+                          % (t.get("areaPx"), floor, (t.get("areaPx", 0) - floor) * 100.0 / floor))
+                sp = entry.get("sidepane", {})
+                print("   sidepane  %s; rows %s; targets <44: %d"
+                      % (sp.get("mode"), (sp.get("closed") or {}).get("order"),
+                         len((sp.get("targets") or {}).get("under44", []))))
                 print("   <44px     auth %d/%d   app %d/%d   settings %d/%d"
                       % (entry["auth"]["tapTargets"]["under44"], entry["auth"]["tapTargets"]["visible"],
                          a["tapTargets"]["under44"], a["tapTargets"]["visible"],
@@ -670,14 +989,16 @@ def main():
     else:
         print("GATE PASSED: no console errors, page errors or CSP violations; CSP matches server.js;"
               " terminal palette AA, single-source, opaque, monospace;"
-              " grid cell geometry + cursor match layout (incl. after a font-size change)")
+              " grid cell geometry + cursor match layout (incl. after a font-size change);"
+              " side pane rows/order/diff/targets/open-close; terminal area >= pre-T07")
 
     if self_test:
         kinds = {k for s, k, t in findings
                  if SELF_TEST_MARK in t or (k == "csp-violation" and "script-src" in t)
                  or (k == "contrast" and "#FFCC00" in t)
-                 or (k == "geometry" and s == PROFILES[0][0] and t.startswith("base:"))}
-        want = {"csp-violation", "console-error", "pageerror", "contrast", "geometry"}
+                 or (k == "geometry" and s == PROFILES[0][0] and t.startswith("base:"))
+                 or (k == "sidepane" and s == PROFILES[0][0] and "rebuilt rows" in t)}
+        want = {"csp-violation", "console-error", "pageerror", "contrast", "geometry", "sidepane"}
         missed = want - kinds
         if missed:
             print("SELF-TEST BROKEN: gate did not catch %s" % sorted(missed))

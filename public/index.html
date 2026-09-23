@@ -51,47 +51,91 @@
   </div>
 </div>
 
-<div id="app">
-  <div id="header">
-    <div>
-      <div style="display:flex;align-items:center">
-        <span class="dot" id="dot"></span>
-        <input type="text" class="sess-name" id="sname" value="No session"
-               autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false"
-               aria-label="Session name">
-      </div>
-      <div class="sess-dir" id="sdir"></div>
-    </div>
-    <button id="settings-btn" aria-label="Settings" aria-expanded="false" aria-controls="settings-panel">&#9881;</button>
-    <!-- T12: client settings. Wired with addEventListener in app.js rather
-         than inline onclick so the panel survives the T04 CSP tightening
-         that drops 'unsafe-inline' from script-src. -->
-    <div id="settings-panel" role="group" aria-label="Client settings">
-      <div class="set-row">
-        <label for="set-hwkb">Hardware keyboard</label>
-        <input type="checkbox" id="set-hwkb">
-      </div>
-      <p class="set-note">Keys go straight to the terminal unless the compose box has focus. Cmd-K composes, Esc returns.</p>
-      <div class="set-row">
-        <label for="set-font">Terminal font</label>
-        <span class="set-val"><span id="set-font-val">13</span>px</span>
-      </div>
-      <input type="range" id="set-font" min="10" max="24" step="1" aria-label="Terminal font size">
-      <p class="set-note" id="set-cols"></p>
+<!-- Icons (D4): self-drawn inline SVG in the SF Symbols style, referenced by
+     <use href="#...">. Status glyphs differ in SHAPE as well as colour, so the
+     side pane never relies on colour alone. -->
+<svg id="icon-sprite" aria-hidden="true" focusable="false" width="0" height="0" style="position:absolute">
+  <symbol id="i-sidebar" viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7.5 4v12" stroke="currentColor" stroke-width="1.6"/><path d="M4.4 7h1.4M4.4 9.5h1.4M4.4 12h1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 20 20"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 20 20"><path d="M16.2 8.5 L18.3 9.0 L18.3 11.0 L16.2 11.5 L15.5 13.3 L16.6 15.2 L15.2 16.6 L13.3 15.5 L11.5 16.2 L11.0 18.3 L9.0 18.3 L8.5 16.2 L6.7 15.5 L4.8 16.6 L3.4 15.2 L4.5 13.3 L3.8 11.5 L1.7 11.0 L1.7 9.0 L3.8 8.5 L4.5 6.7 L3.4 4.8 L4.8 3.4 L6.7 4.5 L8.5 3.8 L9.0 1.7 L11.0 1.7 L11.5 3.8 L13.3 4.5 L15.2 3.4 L16.6 4.8 L15.5 6.7 Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="10" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
+  <symbol id="i-sort" viewBox="0 0 20 20"><path d="M6.5 16V4M3.5 7l3-3 3 3M13.5 4v12M10.5 13l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-xmark" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 20 20"><circle cx="6" cy="4.5" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="6" cy="15.5" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="14" cy="6.5" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 6.5v7M14 8.5c0 3-8 2-8 5" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <!-- status: blocked = exclamation disc, working = spinning arc, done = check
+       disc, idle = small dot, unknown = hollow ring. Cut-outs are even-odd
+       holes, so one currentColor paints each glyph. -->
+  <symbol id="s-blocked" viewBox="0 0 20 20"><path fill="currentColor" fill-rule="evenodd" d="M10 1a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M9 4.8h2v7.4H9z M10 13.4a1.3 1.3 0 1 0 0 2.6a1.3 1.3 0 1 0 0-2.6z"/></symbol>
+  <symbol id="s-working" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-width="2.4"/><path d="M10 3a7 7 0 0 1 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+  <symbol id="s-done" viewBox="0 0 20 20"><path fill="currentColor" fill-rule="evenodd" d="M10 1a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M5.4 10.2l1.4-1.4 2.2 2.2 4.4-4.4 1.4 1.4-5.8 5.8z"/></symbol>
+  <symbol id="s-idle" viewBox="0 0 20 20"><circle cx="10" cy="10" r="4.5" fill="currentColor"/></symbol>
+  <symbol id="s-unknown" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+</svg>
 
-      <div class="set-sep" role="separator"></div>
-      <div class="set-row">
-        <label>Server</label>
-        <span class="set-val" id="srv-version">&mdash;</span>
+<div id="app">
+  <!-- T07: the chrome column. In landscape it is ONE floating glass panel
+       pinned left (the toolbar on top, the session list below); in portrait
+       it is display:contents, so #header is the top toolbar and #sidepane a
+       slide-over sheet. One DOM, placed by style.css. -->
+  <div id="chrome-col">
+    <div id="header">
+      <button type="button" id="sp-toggle" class="tb-btn" aria-label="Show sessions"
+              aria-expanded="false" aria-controls="sidepane"><svg class="ico" aria-hidden="true"><use href="#i-sidebar"/></svg></button>
+      <div id="app-title">Claude</div>
+      <div id="hdr-id">
+        <div class="hdr-sess">
+          <span class="dot" id="dot"></span>
+          <input type="text" class="sess-name" id="sname" value="No session"
+                 autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false"
+                 aria-label="Session name">
+        </div>
+        <div class="sess-dir" id="sdir"></div>
       </div>
-      <p class="set-note" id="srv-note">Checking...</p>
-      <div class="srv-actions">
-        <button type="button" id="srv-restart" class="srv-btn">Restart</button>
-        <button type="button" id="srv-update" class="srv-btn" disabled>Update</button>
+      <button type="button" id="new-btn" class="tb-btn" aria-label="New session"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg></button>
+      <button id="settings-btn" class="tb-btn" aria-label="Settings" aria-expanded="false" aria-controls="settings-panel"><svg class="ico" aria-hidden="true"><use href="#i-gear"/></svg></button>
+      <!-- T12: client settings. Wired with addEventListener in app.js rather
+           than inline onclick so the panel survives the T04 CSP tightening
+           that drops 'unsafe-inline' from script-src. -->
+      <div id="settings-panel" role="group" aria-label="Client settings">
+        <div class="set-row">
+          <label for="set-hwkb">Hardware keyboard</label>
+          <input type="checkbox" id="set-hwkb">
+        </div>
+        <p class="set-note">Keys go straight to the terminal unless the compose box has focus. Cmd-K composes, Esc returns.</p>
+        <div class="set-row">
+          <label for="set-font">Terminal font</label>
+          <span class="set-val"><span id="set-font-val">13</span>px</span>
+        </div>
+        <input type="range" id="set-font" min="10" max="24" step="1" aria-label="Terminal font size">
+        <p class="set-note" id="set-cols"></p>
+
+        <div class="set-sep" role="separator"></div>
+        <div class="set-row">
+          <label>Server</label>
+          <span class="set-val" id="srv-version">&mdash;</span>
+        </div>
+        <p class="set-note" id="srv-note">Checking...</p>
+        <div class="srv-actions">
+          <button type="button" id="srv-restart" class="srv-btn">Restart</button>
+          <button type="button" id="srv-update" class="srv-btn" disabled>Update</button>
+        </div>
+        <p class="set-note" id="srv-result"></p>
       </div>
-      <p class="set-note" id="srv-result"></p>
     </div>
+
+    <!-- T07: sessions side pane (herdr's Agents list). Rows are keyed by
+         session id and updated in place by app.js renderSidepane(). -->
+    <aside id="sidepane" aria-label="Sessions" tabindex="-1">
+      <div id="sp-head">
+        <h2 id="sp-heading">Sessions</h2>
+        <button type="button" id="sp-sort" aria-label="Sort: priority. Switch to manual order">
+          <svg class="ico" aria-hidden="true"><use href="#i-sort"/></svg><span id="sp-sort-val">Priority</span>
+        </button>
+      </div>
+      <ul id="sp-list" aria-labelledby="sp-heading"></ul>
+      <p id="sp-empty">No sessions</p>
+    </aside>
   </div>
+  <div id="sp-scrim" aria-hidden="true"></div>
 
   <div id="term-area">
     <div id="scroll-zones">

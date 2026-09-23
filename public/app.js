@@ -1727,6 +1727,7 @@ function onLayoutChange() {
   applyHwKeyboard();    // T12: the default (on for tablets) tracks the boundary
   applyFontSize();      // T14: so does the default font size
   syncSwipeHandlers();  // T15: swipe nav is bound only at narrow widths
+  if (isWideLayout()) closeSwitcher();  // T07: the phone overlay has no place here
   renderTabs();
 }
 
@@ -1752,8 +1753,9 @@ function renderTabs() {
   pill.classList.toggle('needs-input', anyAttn);
   countBtn.classList.toggle('has-attn', anyAttn);
 
-  // Update switcher if open
+  // Update switcher if open (phone), and the side pane (tablet, T07)
   renderSwitcher();
+  renderSidepane();
 }
 
 function toggleSwitcher() {
@@ -1773,13 +1775,12 @@ function closeSwitcher() {
 $('tab-pill').addEventListener('click', () => scrollBottom());
 $('tab-count-btn').addEventListener('click', () => toggleSwitcher());
 
+// The PHONE switcher overlay only. From 820px the sessions live in the side
+// pane (T07, renderSidepane below), which is keyed and diffed; this overlay is
+// rebuilt only while it is open on a phone, where it is small and transient.
 function renderSwitcher() {
   const sw = $('tab-switcher');
-  // T13: at tablet width the strip is always on screen (CSS pins it inline
-  // inside #tabs), so it must stay populated even without the .open class
-  // the phone overlay uses.
-  const persistent = isWideLayout();
-  if (!persistent && !sw.classList.contains('open')) return;
+  if (isWideLayout() || !sw.classList.contains('open')) return;
   sw.innerHTML = '';
   sessionList.forEach(s => {
     const item = document.createElement('div');
@@ -1813,19 +1814,302 @@ function renderSwitcher() {
     empty.textContent = 'No sessions';
     sw.appendChild(empty);
   }
-  if (persistent) {
-    // The phone reaches "new session" by pulling up on the count button or
-    // swiping past the last tab; neither exists in the tablet layout, so the
-    // strip carries the affordance itself.
-    const add = document.createElement('div');
-    add.className = 'switcher-item switcher-new';
-    add.textContent = '+';
-    add.setAttribute('role', 'button');
-    add.setAttribute('aria-label', 'New session');
-    add.onclick = () => newSession();
-    sw.appendChild(add);
-  }
 }
+
+// -- T07: sessions side pane (herdr's Agents list) --------------------
+// One row per session: state glyph, name, cwd basename (+ worktree), and the
+// agent's terminal title. Status is herdr's (D7, session.agent from T06);
+// sessions without a feed (dtach) fall back to the server's attention, and
+// with neither the state is 'unknown' -- never a guessed idle.
+//
+// Rows are keyed by session id and PATCHED: an existing row's nodes are
+// reused, only changed text/attributes are written, and a reorder moves only
+// the rows outside the longest already-ordered run. No innerHTML anywhere.
+//
+// Hooks for T08 (shortcuts): selectSession(id), nextNeedsAttention(),
+// openSidepane()/closeSidepane()/toggleSidepane().
+const SP_SORT_KEY = 'cm-sidepane-sort';
+const SP_RANK = { blocked: 0, done: 1, working: 2, idle: 3, unknown: 4 };
+const SP_STATUS_TEXT = {
+  blocked: 'Needs input', done: 'Done, not yet viewed', working: 'Working',
+  idle: 'Idle', unknown: 'Status unknown',
+};
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const sidepane = $('sidepane'), spList = $('sp-list'), spScrim = $('sp-scrim');
+const spToggle = $('sp-toggle'), spSortBtn = $('sp-sort');
+const spRows = new Map();   // session id -> row record (DOM nodes + last written values)
+const PANE_MODAL_QUERY = '(min-width: 820px) and (orientation: portrait)';
+const paneModalMQ = window.matchMedia(PANE_MODAL_QUERY);
+
+function readSidepaneSort() {
+  try { return localStorage.getItem(SP_SORT_KEY) === 'manual' ? 'manual' : 'priority'; }
+  catch (e) { return 'priority'; }   // storage blocked: the default, not an error
+}
+let spSort = readSidepaneSort();
+
+function setSidepaneSort(mode) {
+  spSort = mode === 'manual' ? 'manual' : 'priority';
+  try { localStorage.setItem(SP_SORT_KEY, spSort); } catch (e) { /* not persisted; still applied */ }
+  renderSidepane();
+}
+
+function sessionStatus(s) {
+  const st = s.agent && s.agent.status;
+  if (Object.prototype.hasOwnProperty.call(SP_RANK, st)) return st;
+  if (s.agent) return 'unknown';
+  if (s.attention === 'permission' || s.attention === 'question') return 'blocked';
+  if (s.attention === 'ready') return 'done';
+  return 'unknown';
+}
+
+// Priority = herdr's attention queue: blocked, done, working, idle, unknown;
+// ties keep the server's order (a stable sort on the original index).
+function prioritySorted(list) {
+  return list.map((s, i) => [s, i])
+    .sort((a, b) => (SP_RANK[sessionStatus(a[0])] - SP_RANK[sessionStatus(b[0])]) || (a[1] - b[1]))
+    .map(x => x[0]);
+}
+
+function sidepaneOrder(list) {
+  return spSort === 'priority' ? prioritySorted(list) : list.slice();
+}
+
+function baseName(p) {
+  if (!p) return '';
+  const parts = String(p).split(/[\\/]+/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : String(p);
+}
+
+// Worktree label: a linked worktree's checkout name, else the repo name --
+// the first that says something the cwd folder does not. herdr reports no
+// branch, so none is shown.
+function worktreeLabel(wt, cwdBase) {
+  if (!wt) return '';
+  const names = [wt.linked && wt.path ? baseName(wt.path) : '', wt.repo || ''];
+  return names.find(n => n && n !== cwdBase) || '';
+}
+
+function svgUse(href) {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  const use = document.createElementNS(SVG_NS, 'use');
+  use.setAttribute('href', href);
+  svg.appendChild(use);
+  return { svg, use };
+}
+
+function spText(el, v) { if (el.textContent !== v) el.textContent = v; }
+function spAttr(el, name, v) {
+  if (v === null || v === undefined) { if (el.hasAttribute(name)) el.removeAttribute(name); }
+  else if (el.getAttribute(name) !== v) el.setAttribute(name, v);
+}
+
+function makeSidepaneRow(id) {
+  const li = document.createElement('li');
+  li.className = 'sp-row';
+  li.dataset.id = String(id);
+  const main = document.createElement('button');
+  main.type = 'button';
+  main.className = 'sp-main';
+  const state = document.createElement('span');
+  state.className = 'sp-state';
+  const glyph = svgUse('#s-unknown');
+  state.appendChild(glyph.svg);
+  const unseen = document.createElement('span');
+  unseen.className = 'sp-unseen';
+  state.appendChild(unseen);
+  const text = document.createElement('span');
+  text.className = 'sp-text';
+  const name = document.createElement('span');
+  name.className = 'sp-name';
+  const meta = document.createElement('span');
+  meta.className = 'sp-meta';
+  const cwd = document.createElement('span');
+  cwd.className = 'sp-cwd';
+  const wt = document.createElement('span');
+  wt.className = 'sp-wt';
+  wt.hidden = true;
+  wt.appendChild(svgUse('#i-branch').svg);
+  const wtText = document.createElement('span');
+  wt.appendChild(wtText);
+  meta.append(cwd, wt);
+  const title = document.createElement('span');
+  title.className = 'sp-title';
+  text.append(name, meta, title);
+  main.append(state, text);
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'sp-close';
+  close.appendChild(svgUse('#i-xmark').svg);
+  li.append(main, close);
+  main.addEventListener('click', () => selectSession(id));
+  close.addEventListener('click', e => { e.stopPropagation(); closeSession(id); });
+  return { li, main, use: glyph.use, name, cwd, wt, wtText, title, close };
+}
+
+function updateSidepaneRow(r, s) {
+  const status = sessionStatus(s);
+  const a = s.agent || null;
+  const cwdBase = baseName((a && a.cwd) || s.dir);
+  const wt = worktreeLabel(a && a.worktree, cwdBase);
+  const title = (a && (a.title || a.agent)) || '';
+  const active = s.id === activeSession;
+  spAttr(r.li, 'data-status', status);
+  spAttr(r.use, 'href', '#s-' + status);
+  r.li.classList.toggle('active', active);
+  spAttr(r.main, 'aria-current', active ? 'true' : null);
+  spText(r.name, s.name);
+  spText(r.cwd, cwdBase);
+  spText(r.wtText, wt);
+  if (r.wt.hidden !== !wt) r.wt.hidden = !wt;
+  spText(r.title, title);
+  spAttr(r.main, 'aria-label', s.name + ', ' + SP_STATUS_TEXT[status]
+    + (cwdBase ? ', in ' + cwdBase : '') + (wt ? ', worktree ' + wt : '')
+    + (title ? ', ' + title : '') + (active ? ', current' : ''));
+  spAttr(r.close, 'aria-label', 'Close ' + s.name);
+}
+
+// Longest increasing subsequence of `seq` (indices into seq): the rows that
+// are already in the right relative order and need not move.
+function lisIndices(seq) {
+  const tails = [], prev = new Array(seq.length);
+  for (let i = 0; i < seq.length; i++) {
+    let lo = 0, hi = tails.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (seq[tails[m]] < seq[i]) lo = m + 1; else hi = m; }
+    prev[i] = lo > 0 ? tails[lo - 1] : -1;
+    tails[lo] = i;
+  }
+  const keep = new Set();
+  for (let k = tails.length ? tails[tails.length - 1] : -1; k >= 0; k = prev[k]) keep.add(k);
+  return keep;
+}
+
+function renderSidepane() {
+  const order = sidepaneOrder(sessionList);
+  const wanted = new Set(order.map(s => s.id));
+  for (const [id, r] of spRows) {
+    if (!wanted.has(id)) { r.li.remove(); spRows.delete(id); }
+  }
+  const domPos = new Map();
+  [...spList.children].forEach((el, i) => domPos.set(el, i));
+  const rows = order.map(s => {
+    let r = spRows.get(s.id);
+    if (!r) { r = makeSidepaneRow(s.id); spRows.set(s.id, r); }
+    updateSidepaneRow(r, s);
+    return r;
+  });
+  // Only rows already in the list can stay put; new ones get position -1.
+  const seq = rows.map(r => (domPos.has(r.li) ? domPos.get(r.li) : -1));
+  const placed = rows.map((r, i) => i).filter(i => seq[i] >= 0);
+  const keepIdx = lisIndices(placed.map(i => seq[i]));
+  const keep = new Set([...keepIdx].map(k => placed[k]));
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (keep.has(i)) continue;
+    const next = i + 1 < rows.length ? rows[i + 1].li : null;
+    spList.insertBefore(rows[i].li, next);
+  }
+  const empty = $('sp-empty');
+  if (empty.hidden !== order.length > 0) empty.hidden = order.length > 0;
+  const manual = spSort === 'manual';
+  spText($('sp-sort-val'), manual ? 'Manual' : 'Priority');
+  spAttr(spSortBtn, 'aria-label', manual ? 'Sort: manual order. Switch to priority'
+                                         : 'Sort: priority. Switch to manual order');
+}
+
+// Pick a session from the pane (or, later, a shortcut). Closes the portrait
+// sheet and hands keyboard focus back to the terminal.
+function selectSession(id) {
+  if (!sessionList.some(s => s.id === id)) return false;
+  const ae = document.activeElement;
+  if (ae && ae !== document.body && sidepane.contains(ae)) ae.blur();
+  if (sidepaneOpen()) {
+    // Start the slide-out before the switch: mounting a session is main-
+    // thread work, and the transition cannot begin until a frame commits.
+    closeSidepane();
+    requestAnimationFrame(() => setTimeout(() => { if (id !== activeSession) switchTo(id); }, 0));
+    return true;
+  }
+  if (id !== activeSession) switchTo(id);
+  return true;
+}
+
+// The next session needing the operator (blocked, then an unseen finish),
+// cycling from the active one. Returns false when nothing needs attention.
+function nextNeedsAttention() {
+  const queue = prioritySorted(sessionList).filter(s => {
+    const st = sessionStatus(s);
+    return st === 'blocked' || st === 'done';
+  });
+  if (!queue.length) return false;
+  const i = queue.findIndex(s => s.id === activeSession);
+  const next = queue[(i + 1) % queue.length];
+  return next.id === activeSession ? false : selectSession(next.id);
+}
+
+// Portrait: the pane is a modal slide-over. Landscape: pinned, never "open".
+function sidepaneIsModal() { return paneModalMQ.matches; }
+function sidepaneOpen() { return sidepane.classList.contains('open'); }
+
+function openSidepane() {
+  if (!sidepaneIsModal() || sidepaneOpen()) return;
+  closeSettings();
+  renderSidepane();
+  sidepane.classList.add('open');
+  spScrim.classList.add('open');
+  spToggle.setAttribute('aria-expanded', 'true');
+  spToggle.setAttribute('aria-label', 'Hide sessions');
+  // Focus the sheet itself (tabindex -1, no ring): screen readers land in it,
+  // and the next Tab reaches the rows.
+  try { sidepane.focus({ preventScroll: true }); } catch (e) { /* focus is best-effort */ }
+}
+
+function closeSidepane() {
+  if (!sidepaneOpen()) return;
+  const hadFocus = sidepane.contains(document.activeElement);
+  sidepane.classList.remove('open');
+  spScrim.classList.remove('open');
+  spToggle.setAttribute('aria-expanded', 'false');
+  spToggle.setAttribute('aria-label', 'Show sessions');
+  if (hadFocus) document.activeElement.blur();
+}
+
+function toggleSidepane() { sidepaneOpen() ? closeSidepane() : openSidepane(); }
+
+function syncSidepaneMode() {
+  if (!sidepaneIsModal()) closeSidepane();
+  renderSidepane();
+}
+paneModalMQ.addEventListener('change', syncSidepaneMode);
+
+spToggle.addEventListener('click', e => { e.preventDefault(); toggleSidepane(); });
+spScrim.addEventListener('click', () => closeSidepane());
+spSortBtn.addEventListener('click', () => setSidepaneSort(spSort === 'priority' ? 'manual' : 'priority'));
+$('new-btn').addEventListener('click', () => { closeSidepane(); newSession(); });
+
+// Swipe in from the left edge opens the portrait sheet; a leftward swipe on
+// the open sheet closes it. Passive listeners: they never block a scroll.
+const SP_EDGE_PX = 24, SP_SWIPE_PX = 48;
+let spSwipe = null;
+document.addEventListener('touchstart', e => {
+  spSwipe = null;
+  if (!sidepaneIsModal() || e.touches.length !== 1) return;
+  const t = e.touches[0];
+  if (!sidepaneOpen() && t.clientX <= SP_EDGE_PX) spSwipe = { x: t.clientX, y: t.clientY, opening: true };
+  else if (sidepaneOpen() && e.target.closest && e.target.closest('#sidepane')) {
+    spSwipe = { x: t.clientX, y: t.clientY, opening: false };
+  }
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (!spSwipe || e.touches.length !== 1) return;
+  const t = e.touches[0];
+  const dx = t.clientX - spSwipe.x, dy = t.clientY - spSwipe.y;
+  if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { spSwipe = null; return; }
+  if (spSwipe.opening && dx > SP_SWIPE_PX) { spSwipe = null; openSidepane(); }
+  else if (!spSwipe.opening && dx < -SP_SWIPE_PX) { spSwipe = null; closeSidepane(); }
+}, { passive: true });
+document.addEventListener('touchend', () => { spSwipe = null; }, { passive: true });
+document.addEventListener('touchcancel', () => { spSwipe = null; }, { passive: true });
 
 function newSession() {
   if (!ws || ws.readyState !== 1) return;
@@ -2938,7 +3222,13 @@ function terminalHasKeyboardFocus() {
   if (activeSession === null) return false;
   if (!appIsVisible()) return false;
   if (settingsOpen()) return false;
-  return !isTypingTarget(document.activeElement);
+  // T07: the portrait sheet is modal, and a pane control reached by keyboard
+  // (focus-visible) keeps its keys -- Enter/Space must activate the row, not
+  // reach the PTY. A pointer pick hands focus back (selectSession blurs).
+  if (sidepaneOpen()) return false;
+  const ae = document.activeElement;
+  if (ae && ae.closest && ae.closest('#chrome-col') && ae.matches(':focus-visible')) return false;
+  return !isTypingTarget(ae);
 }
 
 function focusCompose() {
@@ -2976,6 +3266,7 @@ function onGlobalKeyDown(e) {
   // Forwarding those would send the pre-edit buffer twice.
   if (e.isComposing || e.keyCode === 229) return;
   if (e.key === 'Escape' && settingsOpen()) { e.preventDefault(); closeSettings(); return; }
+  if (e.key === 'Escape' && sidepaneOpen()) { e.preventDefault(); closeSidepane(); return; }
   if (handleAppShortcut(e)) return;
   if (!terminalHasKeyboardFocus()) return;
   if (e.metaKey) return;
@@ -3110,7 +3401,7 @@ if (window.visualViewport) {
 // ── iOS Prevention ──
 // Prevent bounce scroll on non-scrollable areas
 document.addEventListener('touchmove', e => {
-  if (!e.target.closest('#term-area, #qbar, #msg, #input-bar, #img-btn, .xterm-viewport, #tab-switcher, #autocomplete, .switcher-item')) e.preventDefault();
+  if (!e.target.closest('#term-area, #qbar, #msg, #input-bar, #img-btn, .xterm-viewport, #tab-switcher, #autocomplete, .switcher-item, #sp-list')) e.preventDefault();
 }, { passive: false });
 
 // Prevent ALL double-tap zoom (comprehensive)
