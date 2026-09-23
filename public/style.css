@@ -186,7 +186,7 @@ button, input, textarea, select { font: inherit; }
    parent, so it would cost a compositing layer for no visible change.
    The terminal (#term-area and below) is deliberately absent (D3). */
 #header, #tabs, #input-bar, #qbar, #img-preview,
-#settings-panel, #autocomplete, #tab-switcher, .auth-card {
+#settings-panel, #autocomplete, #tab-switcher, .auth-card, .kb-sheet, .kb-chip {
   background: var(--glass-bg);
   -webkit-backdrop-filter: var(--glass-filter);
   backdrop-filter: var(--glass-filter);
@@ -194,10 +194,10 @@ button, input, textarea, select { font: inherit; }
 #settings-panel, #autocomplete, #tab-switcher, .auth-card { background: var(--glass-bg-thick); }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   #header, #tabs, #input-bar, #qbar, #img-preview,
-  #settings-panel, #autocomplete, #tab-switcher, .auth-card { background: var(--glass-bg-fallback); }
+  #settings-panel, #autocomplete, #tab-switcher, .auth-card, .kb-sheet, .kb-chip { background: var(--glass-bg-fallback); }
 }
 /* The kit's gradient rim: a 1px masked ring on floating glass. */
-.auth-card::after, #settings-panel::after {
+.auth-card::after, #settings-panel::after, .kb-sheet::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
   border-radius: inherit; padding: 1px;
   background: var(--glass-rim);
@@ -809,11 +809,12 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   color: var(--system-gray);
 }
 .sp-state svg { width: 18px; height: 18px; display: block; }
-.sp-row[data-status="blocked"] .sp-state { color: var(--intent-warn); }
-.sp-row[data-status="working"] .sp-state { color: var(--accent); }
-.sp-row[data-status="done"] .sp-state { color: var(--intent-ok); }
+.sp-row[data-status="blocked"] .sp-state, .kb-opt[data-status="blocked"] .sp-state { color: var(--intent-warn); }
+.sp-row[data-status="working"] .sp-state, .kb-opt[data-status="working"] .sp-state { color: var(--accent); }
+.sp-row[data-status="done"] .sp-state, .kb-opt[data-status="done"] .sp-state { color: var(--intent-ok); }
 /* A spinner, turned on the compositor (transform only). */
-.sp-row[data-status="working"] .sp-state svg { animation: sp-spin 1s linear infinite; }
+.sp-row[data-status="working"] .sp-state svg,
+.kb-opt[data-status="working"] .sp-state svg { animation: sp-spin 1s linear infinite; }
 @keyframes sp-spin { to { transform: rotate(360deg); } }
 /* A finish nobody has looked at yet (herdr 'done' = unseen). */
 .sp-unseen {
@@ -821,7 +822,7 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--accent); box-shadow: 0 0 0 1.5px var(--surface);
 }
-.sp-row[data-status="done"] .sp-unseen { display: block; }
+.sp-row[data-status="done"] .sp-unseen, .kb-opt[data-status="done"] .sp-unseen { display: block; }
 .sp-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .sp-name, .sp-meta, .sp-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-name { font-size: 13px; font-weight: 600; line-height: 18px; }
@@ -847,6 +848,107 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 }
 .sp-close svg { width: 11px; height: 11px; display: block; }
 .sp-close:active { color: var(--intent-danger-text); background: var(--surface-hover); }
+/* -- T08: keyboard layer (ctrl+b chip, Cmd-K switcher, key list) --
+   Chrome over the content layer (D3): glass sheets, the thickest material
+   because they carry text over live terminal text. Every target >= 44px.
+   They animate opacity/transform only; the reduced-motion block below the
+   breakpoints flattens it. */
+.kb-chip {
+  position: fixed; z-index: 90; left: 50%;
+  top: calc(max(8px, env(safe-area-inset-top)) + 56px);
+  transform: translateX(-50%);
+  max-width: calc(100vw - 32px);
+  padding: 8px 14px; border-radius: var(--radius-xl);
+  border: 1px solid var(--glass-hairline);
+  background: var(--glass-bg-fallback);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+  font-family: var(--font-mono); font-size: 13px; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  pointer-events: none;
+  animation: kb-fade var(--dur-fast) var(--ease-out);
+}
+.kb-chip[hidden] { display: none; }
+.kb-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: calc(max(12px, env(safe-area-inset-top)) + 8vh) 16px 16px;
+}
+.kb-overlay[hidden] { display: none; }
+.kb-scrim {
+  position: absolute; inset: 0; background: var(--scrim);
+  animation: kb-fade var(--dur-med) var(--ease-standard);
+}
+.kb-sheet {
+  position: relative; display: flex; flex-direction: column;
+  width: min(560px, 100%); max-height: min(72vh, 640px);
+  border: 1px solid var(--glass-hairline); border-radius: var(--radius-lg);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+  padding: 4px 8px 8px;
+  animation: kb-rise var(--dur-med) var(--ease-out);
+}
+.kb-sheet, .kb-chip { background: var(--glass-bg-fallback); }
+.kb-head {
+  display: flex; align-items: center; justify-content: space-between;
+  min-height: 44px; padding-left: 8px;
+}
+.kb-title {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--dim);
+}
+.kb-close {
+  width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: var(--radius); color: var(--dim); cursor: pointer;
+}
+.kb-close .ico { width: 12px; height: 12px; display: block; }
+.kb-close:active { background: var(--surface-hover); }
+.kb-search {
+  width: 100%; min-height: 44px; padding: 10px 12px; margin-bottom: 6px;
+  font-size: 17px;  /* >= 16px: iOS does not zoom the page on focus */
+  color: var(--text); background: var(--surface);
+  border: 1px solid var(--border-muted); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-field); outline: none;
+}
+.kb-search:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
+.kb-list {
+  list-style: none; flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+}
+.kb-opt {
+  display: flex; align-items: center; gap: 10px;
+  min-height: 52px; padding: 6px 10px; margin-bottom: 2px;
+  border-radius: var(--radius-md); cursor: pointer;
+}
+.kb-opt:active { background: var(--surface-hover); }
+.kb-opt[aria-selected="true"] { background: var(--accent-muted); }
+.kb-opt-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.kb-opt-name, .kb-opt-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-opt-name { font-size: 15px; font-weight: 600; line-height: 20px; }
+.kb-opt-meta { font-size: 12px; line-height: 16px; color: var(--text-sec); font-family: var(--font-mono); }
+.kb-opt-cur { flex: 0 0 auto; font-size: 12px; color: var(--dim); }
+.kb-group {
+  padding: 10px 10px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--dim);
+}
+.kb-row {
+  display: grid; grid-template-columns: minmax(150px, 38%) 1fr; align-items: center;
+  gap: 12px; min-height: 36px; padding: 4px 10px;
+  font-size: 14px; color: var(--text);
+}
+.kb-row kbd {
+  justify-self: start;
+  font-family: var(--font-mono); font-size: 12px; line-height: 18px;
+  padding: 1px 6px; border-radius: var(--radius-xs);
+  background: var(--surface-alt); border: 0.5px solid var(--border-muted);
+  color: var(--text);
+}
+.kb-note { padding: 10px; font-size: 12px; color: var(--text-sec); }
+.kb-group[hidden], .kb-row[hidden], .kb-note[hidden], .kb-empty[hidden] { display: none; }
+.kb-empty { padding: 12px 10px; font-size: 13px; color: var(--dim); }
+@keyframes kb-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes kb-rise {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
 /* Swipe hint edges */
 #swipe-hint-left, #swipe-hint-right {
   position: absolute; top: 0; bottom: 0; width: 4px;
@@ -878,7 +980,8 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
   /* An infinite 0.01ms spin is still a spin; the arc alone marks working. */
-  .sp-row[data-status="working"] .sp-state svg { animation: none; }
+  .sp-row[data-status="working"] .sp-state svg,
+  .kb-opt[data-status="working"] .sp-state svg { animation: none; }
 }
 
 /* ══ T13: responsive breakpoints ════════════════════════════════════

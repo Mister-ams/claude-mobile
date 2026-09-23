@@ -100,7 +100,7 @@
           <label for="set-hwkb">Hardware keyboard</label>
           <input type="checkbox" id="set-hwkb">
         </div>
-        <p class="set-note">Keys go straight to the terminal unless the compose box has focus. Cmd-K composes, Esc returns.</p>
+        <p class="set-note">Keys go straight to the terminal unless the compose box has focus. Cmd-J composes, Esc returns. Cmd-K switches session; ctrl+b ? lists every key.</p>
         <div class="set-row">
           <label for="set-font">Terminal font</label>
           <span class="set-val"><span id="set-font-val">13</span>px</span>
@@ -192,6 +192,42 @@
   <div id="swipe-hint-left"></div>
   <div id="swipe-hint-right"></div>
   <div id="new-session-hint"><span>+</span></div>
+</div>
+
+<!-- T08: keyboard layer. The chip shows the armed ctrl+b prefix (and short
+     notices); the two overlays are glass sheets over the terminal. Hidden
+     until app.js opens them; handlers bound there (no inline on*). -->
+<div id="kb-chip" class="kb-chip" role="status" aria-live="polite" hidden></div>
+
+<div id="kb-switcher" class="kb-overlay" hidden>
+  <div class="kb-scrim" data-kb-close></div>
+  <div class="kb-sheet" role="dialog" aria-modal="true" aria-labelledby="ksw-title">
+    <div class="kb-head">
+      <h2 id="ksw-title" class="kb-title">Switch session</h2>
+      <button type="button" class="kb-close" data-kb-close aria-label="Close"><svg class="ico" aria-hidden="true"><use href="#i-xmark"/></svg></button>
+    </div>
+    <input type="text" id="ksw-input" class="kb-search" role="combobox"
+           aria-expanded="true" aria-controls="ksw-list" aria-autocomplete="list"
+           aria-label="Search sessions" placeholder="Search sessions"
+           autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+    <ul id="ksw-list" class="kb-list" role="listbox" aria-label="Sessions"></ul>
+    <p id="ksw-empty" class="kb-empty" hidden>No matching session</p>
+  </div>
+</div>
+
+<div id="kb-help" class="kb-overlay" hidden>
+  <div class="kb-scrim" data-kb-close></div>
+  <div class="kb-sheet" role="dialog" aria-modal="true" aria-labelledby="khelp-title">
+    <div class="kb-head">
+      <h2 id="khelp-title" class="kb-title">Keyboard shortcuts</h2>
+      <button type="button" class="kb-close" data-kb-close aria-label="Close"><svg class="ico" aria-hidden="true"><use href="#i-xmark"/></svg></button>
+    </div>
+    <input type="text" id="khelp-input" class="kb-search"
+           aria-label="Filter shortcuts" aria-controls="khelp-list" placeholder="Filter shortcuts"
+           autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+    <ul id="khelp-list" class="kb-list kb-keys" aria-label="Shortcuts"></ul>
+    <p id="khelp-empty" class="kb-empty" hidden>No matching shortcut</p>
+  </div>
 </div>
 
 <script src="/vendor/xterm.min.js"></script>

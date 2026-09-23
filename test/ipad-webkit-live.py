@@ -24,6 +24,12 @@ passed.
 and prints each one loudly; without the flag any failure exits 1. A listed
 step that starts passing is reported so the entry can be removed.
 
+T08 steps (after reconnect, since they add a pane and a session):
+focus-report (a probe in the shell pane asks for CSI ?1004h; page blur/focus
+must reach it as ^[[O / ^[[I), prefix-passthrough (ctrl+b v typed into the web
+client splits the herdr pane), session-switch (a second session via the UI;
+ctrl+b n follows side-pane order, ctrl+b a jumps to an unseen finish).
+
 Windows note (D5): WebKit on Windows reports navigator.maxTouchPoints=0, so a
 tap reaches the page as mouse/pointer events, not touch. That is recorded in
 the report, never failed on.
@@ -867,6 +873,146 @@ def main():
                     ok1, fresh, g1["active"], g1["nonEmptyRows"], g2["active"], g2["sessions"],
                     g2["nonEmptyRows"], len(panes)))
         run.step("reconnect", s_reconnect, needs=("existing-screen",))
+
+        # -- 8c. T08: keyboard layer against real herdr ----------------------
+        # After reconnect on purpose: these steps add a pane and a session,
+        # and reconnect asserts the 2-pane / 1-session shape.
+        def terminal_keys():
+            """Hand the keyboard to the terminal (hwkb mode, nothing focused)."""
+            run.page.evaluate("() => { const a = document.activeElement;"
+                              " if (a && a !== document.body) a.blur(); }")
+            if not run.page.evaluate("() => terminalHasKeyboardFocus()"):
+                raise RuntimeError("terminal does not have keyboard focus (hwkb off?)")
+
+        def pane_text(h, pane):
+            return h.cli("pane", "read", pane, "--source", "visible")
+
+        # Focus reporting (CSI ?1004h). herdr itself asks for it (the client's
+        # mouse.focus); a probe in the SHELL pane asks herdr in turn and prints
+        # every input chunk with ESC as ^[. Page blur / focus must reach the
+        # pane as ^[[O / ^[[I -- read back through herdr, not the client.
+        # Window focus/blur are dispatched as events: headless WebKit has no
+        # OS window to defocus.
+        FOCUS_PROBE = (
+            "process.stdout.write('\\x1b[?1004h');\n"
+            "if (process.stdin.isTTY) process.stdin.setRawMode(true);\n"
+            "process.stdout.write('PROBE READY\\r\\n');\n"
+            "process.stdin.on('data', d => {\n"
+            "  const s = d.toString('latin1');\n"
+            "  process.stdout.write('GOT ' + s.replace(/\\x1b/g, '^[') + '\\r\\n');\n"
+            "  if (s.includes('q')) { process.stdout.write('\\x1b[?1004l'); process.exit(0); }\n"
+            "});\n")
+
+        def s_focus_report():
+            h = st["herdr"]
+            shell = st["new_pane"]
+            focused, _ = h.layout()
+            if focused != shell:
+                return False, "shell pane %s not focused (%s); not typing" % (shell, focused)
+            g = grid(run.page)
+            if not (g["mouse"] or {}).get("focus"):
+                return False, "client never learned herdr asked for ?1004h: %s" % (g["mouse"],)
+            work = os.path.join(os.path.dirname(args.audit_log), "work")
+            with open(os.path.join(work, "focus-probe.js"), "w", encoding="utf-8") as f:
+                f.write(FOCUS_PROBE)
+            terminal_keys()
+            run.page.keyboard.type("node focus-probe.js")
+            run.page.keyboard.press("Enter")
+            end = time.time() + 15
+            while time.time() < end and "PROBE READY" not in pane_text(h, shell):
+                time.sleep(0.3)
+            before = pane_text(h, shell)
+            if "PROBE READY" not in before:
+                return False, "probe never started: %r" % before[-200:]
+            n0 = before.count("GOT ")
+            run.page.evaluate("() => window.dispatchEvent(new Event('blur'))")
+            time.sleep(1.5)
+            run.page.evaluate("() => window.dispatchEvent(new Event('focus'))")
+            end = time.time() + 5
+            txt = pane_text(h, shell)
+            while time.time() < end and txt.count("GOT ") < n0 + 2:
+                time.sleep(0.3)
+                txt = pane_text(h, shell)
+            got = re.findall(r"GOT (\S+)", txt[txt.index("PROBE READY"):])
+            run.page.keyboard.press("q")   # probe exits and turns ?1004 back off
+            time.sleep(0.8)
+            ok = got[-2:] == ["^[[O", "^[[I"]
+            return ok, "client mouse=%s; probe in shell pane %s received %s after blur, focus" % (
+                g["mouse"], shell, got)
+        run.step("focus-report", s_focus_report, needs=("typed-echo",))
+
+        # ctrl+b v typed into the WEB client must split the herdr pane: the
+        # prefix is held, then released to herdr as \x02v in one write.
+        def s_prefix_passthrough():
+            h = st["herdr"]
+            _, panes0 = h.layout()
+            terminal_keys()
+            run.page.keyboard.press("Control+b")
+            chip = run.page.evaluate("() => kbPrefixArmed && document.getElementById('kb-chip').textContent")
+            run.page.keyboard.press("v")
+            end = time.time() + 8
+            panes = panes0
+            while time.time() < end and len(panes) == len(panes0):
+                time.sleep(0.3)
+                _, panes = h.layout()
+            return len(panes) == len(panes0) + 1, "chip %r; herdr panes %d -> %d after ctrl+b v" % (
+                chip, len(panes0), len(panes))
+        run.step("prefix-passthrough", s_prefix_passthrough, needs=("tap-focus",))
+
+        # A second session made through the UI; ctrl+b n moves in side-pane
+        # order; ctrl+b a jumps to the session needing attention. The oracle is
+        # computed HERE from the statuses the server sent, not by the client.
+        RANK = {"blocked": 0, "done": 1, "working": 2, "idle": 3, "unknown": 4}
+
+        def statuses():
+            return run.page.evaluate("() => sessionList.map(s => [s.id, sessionStatus(s)])")
+
+        def side_order(sts):
+            return [sid for _, (sid, stt) in sorted(enumerate(sts), key=lambda p: (RANK[p[1][1]], p[0]))]
+
+        def s_session_switch():
+            sid = st["sid"]
+            n0 = len(grid(run.page)["sessions"])
+            run.page.click("#new-btn")
+            ok, g = wait_grid(run.page, lambda g: len(g["sessions"]) == n0 + 1 and g["active"] not in (None, sid), 30)
+            if not ok:
+                return False, "new session never appeared/activated: %s active=%s" % (g["sessions"], g["active"])
+            new = g["active"]
+            notes = ["created session %s via #new-btn" % new]
+            # n: next in side-pane order
+            sts = statuses()
+            order = side_order(sts)
+            want = order[(order.index(new) + 1) % len(order)]
+            terminal_keys()
+            run.page.keyboard.press("Control+b")
+            run.page.keyboard.press("n")
+            ok_n, g = wait_grid(run.page, lambda g: g["active"] == want, 5)
+            notes.append("statuses %s, order %s: ctrl+b n %s -> %s (want %s)" % (sts, order, new, g["active"], want))
+            # a: make session `sid` finish unseen (Claude answers while we look
+            # at the other one), then jump to it.
+            run.page.evaluate("(id) => selectSession(id)", new)
+            wait_grid(run.page, lambda g: g["active"] == new, 5)
+            ok_a = False
+            pane = st.get("claude_pane")
+            if pane and st.get("herdr_agent"):
+                st["herdr_agent"].cli("agent", "prompt", pane, "Reply with the single word OK. Do nothing else.")
+                end = time.time() + 120
+                while time.time() < end and dict(statuses()).get(sid) != "done":
+                    time.sleep(0.5)
+                sts = statuses()
+                q = [i for i in side_order(sts) if dict(sts)[i] in ("blocked", "done")]
+                want_a = (q[(q.index(new) + 1) % len(q)] if new in q else q[0]) if q else None
+                terminal_keys()
+                run.page.keyboard.press("Control+b")
+                run.page.keyboard.press("a")
+                ok_a, g = wait_grid(run.page, lambda g: g["active"] == want_a, 5)
+                ok_a = ok_a and want_a == sid
+                notes.append("after prompting session %s: statuses %s; ctrl+b a -> %s (want %s, the unseen finish)"
+                             % (sid, sts, g["active"], want_a))
+            else:
+                notes.append("no claude pane from agent-status; ctrl+b a not exercised live")
+            return ok_n and ok_a, "; ".join(notes)
+        run.step("session-switch", s_session_switch, needs=("existing-screen",))
 
         # -- 8b. herdr restart: the status feed resumes (T06) --------------
         # Runs the REAL lib/herdr-events.js feed against a REAL herdr server

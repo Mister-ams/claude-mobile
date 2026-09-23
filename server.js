@@ -1419,9 +1419,9 @@ function wireSessionProc(session) {
       const nowMouse = mouseState(session);
       const prevMouse = session.lastMouse;
       if (!prevMouse || prevMouse.tracking !== nowMouse.tracking ||
-          prevMouse.encoding !== nowMouse.encoding) {
+          prevMouse.encoding !== nowMouse.encoding || prevMouse.focus !== nowMouse.focus) {
         session.lastMouse = nowMouse;
-        audit('MOUSE', `cm-${id} tracking=${nowMouse.tracking} encoding=${nowMouse.encoding}`);
+        audit('MOUSE', `cm-${id} tracking=${nowMouse.tracking} encoding=${nowMouse.encoding} focus=${nowMouse.focus}`);
         for (const mws of session.clients) {
           if (mws.readyState === 1 && mws.gridRenderer) {
             secureSend(mws, { type: 'mouse-mode', session: id, mouse: nowMouse });
@@ -1936,6 +1936,26 @@ wss.on('connection', (ws, req) => {
         catch (e) { audit('ERROR', `pty mouse write: ${e.message}`); }
         if (AGENT_STATUS_FROM_BACKEND) markAgentSeen(activeSession);
         else if (activeSession.attention) { activeSession.attention = null; broadcastSessions(); }
+        break;
+      }
+
+      // T08: focus reporting (CSI ?1004h). The client says which session the
+      // operator is looking at; the bytes are written here, and only while
+      // that session's app has the mode on -- re-checked now, so a report
+      // that crossed a ?1004l on the wire is dropped rather than typed into a
+      // shell as `^[[I`. Addressed by msg.session, not the socket's current
+      // session: switching away reports `out` to the session just left.
+      case 'focus': {
+        const fsess = targetSession;
+        if (!fsess || !fsess.proc) break;
+        if (!mouseState(fsess).focus) {
+          fsess.focusDropped = (fsess.focusDropped || 0) + 1;
+          break;
+        }
+        const fseq = msg.focused ? '\x1b[I' : '\x1b[O';
+        audit('FOCUS', `cm-${fsess.id} ${msg.focused ? 'in' : 'out'}`, ws._ip);
+        try { fsess.proc.write(fseq); }
+        catch (e) { audit('ERROR', `pty focus write: ${e.message}`); }
         break;
       }
 

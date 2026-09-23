@@ -734,6 +734,7 @@ function handle(m) {
       if (gridTerms[m.session] && m.mouse) {
         gridTerms[m.session].mouse = m.mouse;
         applyGridMouseMode(gridTerms[m.session]);
+        syncFocusReport();   // T08: mouse.focus carries CSI ?1004h/l
       }
       break;
     case 'scrollback':
@@ -1455,7 +1456,7 @@ function applyGridSnapshot(grid, snap) {
   grid.cursor = snap.cursor;
   // T22: a snapshot is the full truth about the pane, mouse mode included --
   // it is how a client that connects mid-session learns the app is listening.
-  if (snap.mouse) { grid.mouse = snap.mouse; applyGridMouseMode(grid); }
+  if (snap.mouse) { grid.mouse = snap.mouse; applyGridMouseMode(grid); syncFocusReport(); }
 
   // Build full row list. Server row indices: scrollback < 0, viewport 0..rows-1.
   const sb = snap.scrollback.slice(-GRID_MAX_ROWS);
@@ -1663,6 +1664,7 @@ function switchTo(id) {
   emptyState.style.display = 'none';
   if (ws && ws.readyState === 1) queueSend({ type: 'connect', session: id, renderer: RENDERER_MODE });
   updateHdr(); renderTabs();
+  syncFocusReport();   // T08: out for the session left, in for this one
 }
 
 function closeSession(id) {
@@ -2765,7 +2767,7 @@ msgInput.addEventListener('blur', () => { lastMsgHeight = -1; autoGrow(); });
 //
 // This forwards keystrokes straight to the PTY whenever a terminal is on
 // screen and no form field has focus. The compose box stays for long or
-// multi-line prompts: Cmd-K focuses it, Esc leaves it, a tap on the
+// multi-line prompts: Cmd-J focuses it (T08; was Cmd-K), Esc leaves it, a tap on the
 // terminal leaves it.
 //
 // ATOMICITY (CLAUDE.md): text and Enter must reach the PTY as a SINGLE
@@ -2799,7 +2801,7 @@ function applyHwKeyboard() {
   document.body.classList.toggle('hwkb', on);
   const box = $('set-hwkb');
   if (box) box.checked = on;
-  msgInput.placeholder = on ? 'Compose (Cmd-K)...' : 'Type a message...';
+  msgInput.placeholder = on ? 'Compose (Cmd-J)...' : 'Type a message...';
 }
 
 // ── T14: terminal font size ─────────────────────────────────────────
@@ -3222,6 +3224,7 @@ function terminalHasKeyboardFocus() {
   if (activeSession === null) return false;
   if (!appIsVisible()) return false;
   if (settingsOpen()) return false;
+  if (kbOverlayOpen()) return false;   // T08: switcher / key list are modal
   // T07: the portrait sheet is modal, and a pane control reached by keyboard
   // (focus-visible) keeps its keys -- Enter/Space must activate the row, not
   // reach the PTY. A pointer pick hands focus back (selectSession blurs).
@@ -3240,11 +3243,15 @@ function focusCompose() {
 // ── Cmd-based app shortcuts ──
 // Cmd chords never reach the PTY: on iPadOS they are the app-level verbs.
 // Anything not claimed here falls through to the browser (Cmd-R, Cmd-Tab).
+// Safari's own chords (Cmd-T/W/L/R/Q/Tab/Space) are deliberately never
+// claimed. T08 (D8): Cmd-K is the session switcher; the compose box moved to
+// Cmd-J.
 function handleAppShortcut(e) {
   if (!e.metaKey || e.ctrlKey) return false;
   if (!appIsVisible()) return false;
   const k = e.key;
-  if (k === 'k' || k === 'K') { e.preventDefault(); focusCompose(); return true; }
+  if (!e.shiftKey && (k === 'k' || k === 'K')) { e.preventDefault(); openSwitcher(); return true; }
+  if (!e.shiftKey && (k === 'j' || k === 'J')) { e.preventDefault(); focusCompose(); return true; }
   if (k === '/') { e.preventDefault(); toggleSettings(); return true; }
   if (!e.shiftKey && k >= '1' && k <= '9') {
     const idx = Number(k) - 1;
@@ -3265,11 +3272,19 @@ function onGlobalKeyDown(e) {
   // some locales) delivers keyCode 229 until the composition commits.
   // Forwarding those would send the pre-edit buffer twice.
   if (e.isComposing || e.keyCode === 229) return;
+  // T08: an open overlay owns every key (its own listener runs first).
+  if (kbOverlayOpen()) return;
   if (e.key === 'Escape' && settingsOpen()) { e.preventDefault(); closeSettings(); return; }
   if (e.key === 'Escape' && sidepaneOpen()) { e.preventDefault(); closeSidepane(); return; }
+  // T08: a bare modifier is not the key after the prefix -- '?' arrives as
+  // Shift, then '?'.
+  if (kbPrefixArmed && KB_MODIFIER_KEYS.has(e.key)) return;
+  if (kbPrefixArmed && (e.metaKey || !terminalHasKeyboardFocus())) kbDisarmPrefix();
   if (handleAppShortcut(e)) return;
   if (!terminalHasKeyboardFocus()) return;
   if (e.metaKey) return;
+  if (kbPrefixArmed) { e.preventDefault(); kbDisarmPrefix(); kbHandlePrefixed(e); return; }
+  if (kbIsPrefixChord(e)) { e.preventDefault(); kbFlush(); kbArmPrefix(); return; }
   const seq = keyToSequence(e);
   if (seq === null || seq === undefined) return;
   e.preventDefault();
@@ -3290,6 +3305,415 @@ document.addEventListener('paste', e => {
   e.preventDefault();
   kbFlush(text);
 });
+
+// == T08: prefix keys, switcher, key list, focus reporting ===============
+// D8: shortcuts mirror herdr's defaults. herdr's OWN prefix is also ctrl+b
+// (herdr --default-config; herdr-config.toml does not rebind it), so the web
+// must not steal it. ctrl+b arms a short prefix state here and HOLDS the
+// byte. The next key is either one the web handles -- n/p/1-9/a/?/s, all
+// session-level -- or it is forwarded as ctrl+b + that key in ONE write, so
+// herdr receives exactly the chord a real terminal would have sent and its
+// own bindings (v split, minus split, h/j/k/l focus, z zoom, ...) keep
+// working. ctrl+b ctrl+b sends one literal ctrl+b.
+//
+// Shadowed on purpose: herdr's n/p/1-9 switch herdr TABS, and every session
+// here is one herdr tab, so they would do nothing; the web binds the same
+// letters to sessions. herdr's ? (help) and s (settings) are replaced by the
+// key list below and the sessions pane.
+const KB_PREFIX_BYTE = '\x02';
+const KB_PREFIX_MS = 1500;
+const KB_FLASH_MS = 1600;
+const KB_MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Fn', 'OS']);
+// var, not let: the prefix/overlay/focus state is read from paths
+// (switchTo, the message handler) that must never hit a TDZ.
+var kbPrefixArmed = false;
+var kbPrefixTimer = 0;
+var kbChipTimer = 0;
+const kbChip = $('kb-chip');
+
+function kbIsPrefixChord(e) {
+  return e.ctrlKey && !e.altKey && !e.metaKey && (e.key === 'b' || e.key === 'B');
+}
+
+function kbChipShow(text, sticky) {
+  clearTimeout(kbChipTimer);
+  kbChip.textContent = text;
+  kbChip.hidden = false;
+  kbChipTimer = sticky ? 0 : setTimeout(kbChipHide, KB_FLASH_MS);
+}
+function kbChipHide() { clearTimeout(kbChipTimer); kbChipTimer = 0; kbChip.hidden = true; }
+
+function kbArmPrefix() {
+  kbPrefixArmed = true;
+  clearTimeout(kbPrefixTimer);
+  kbPrefixTimer = setTimeout(kbDisarmPrefix, KB_PREFIX_MS);
+  kbChipShow('ctrl+b   n p 1-9 a ? s  --  any other key goes to herdr', true);
+}
+
+// Timing out sends nothing: herdr never saw the prefix, so it is not waiting.
+function kbDisarmPrefix() {
+  kbPrefixArmed = false;
+  clearTimeout(kbPrefixTimer);
+  kbPrefixTimer = 0;
+  if (!kbChipTimer) kbChipHide();
+}
+
+// The one place a held prefix is released to the pane: prefix + key, atomic.
+function kbPrefixPassthrough(seq) { kbFlush(KB_PREFIX_BYTE + seq); }
+
+function kbSessionOrder() { return sidepaneOrder(sessionList); }
+
+function kbStepSession(dir) {
+  const order = kbSessionOrder();
+  if (!order.length) return false;
+  const i = order.findIndex(s => s.id === activeSession);
+  const next = i < 0 ? order[dir > 0 ? 0 : order.length - 1]
+                     : order[(i + dir + order.length) % order.length];
+  return selectSession(next.id);
+}
+
+function kbHandlePrefixed(e) {
+  if (kbIsPrefixChord(e)) { kbFlush(KB_PREFIX_BYTE); return; }
+  const k = e.key;
+  if (k === 'Escape') return;   // cancel: nothing was sent, nothing to undo
+  if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+    if (k === 'n' || k === 'p') { kbStepSession(k === 'n' ? 1 : -1); return; }
+    if (k.length === 1 && k >= '1' && k <= '9') {
+      const s = kbSessionOrder()[Number(k) - 1];
+      if (s) selectSession(s.id); else kbChipShow('No session ' + k);
+      return;
+    }
+    if (k === 'a') { if (!nextNeedsAttention()) kbChipShow('Nothing needs attention'); return; }
+    if (k === '?') { openHelp(); return; }
+    if (k === 's') {
+      if (sidepaneIsModal()) toggleSidepane();
+      else kbChipShow(isWideLayout() ? 'Sessions are pinned in landscape' : 'No sessions pane at this width');
+      return;
+    }
+  }
+  const seq = keyToSequence(e);
+  if (seq === null || seq === undefined) return;   // nothing herdr could receive
+  kbPrefixPassthrough(seq);
+}
+
+// -- Overlays: Cmd-K switcher and the ctrl+b ? key list --
+// Glass sheets over the terminal (D3: chrome, never content). role=dialog +
+// aria-modal, focus trapped while open, and focus handed back to the
+// terminal's input on close: the page itself in hardware-keyboard mode, the
+// compose box when that is where the operator was.
+var kbOverlay = null;   // { el, kind, input, prevFocus }
+const kbSwitcherEl = $('kb-switcher'), kbHelpEl = $('kb-help');
+const kswInput = $('ksw-input'), kswList = $('ksw-list'), kswEmpty = $('ksw-empty');
+const khelpInput = $('khelp-input'), khelpList = $('khelp-list'), khelpEmpty = $('khelp-empty');
+var kswItems = [];      // [{ s, li }] in display order
+var kswIndex = -1;
+
+function kbOverlayOpen() { return !!kbOverlay; }
+
+function kbOpenOverlay(kind) {
+  const el = kind === 'switcher' ? kbSwitcherEl : kbHelpEl;
+  const input = kind === 'switcher' ? kswInput : khelpInput;
+  const prev = kbOverlay ? kbOverlay.prevFocus : document.activeElement;
+  if (kbOverlay) kbCloseOverlay(false);
+  kbDisarmPrefix();
+  closeSettings();
+  closeSidepane();
+  kbOverlay = { el, kind, input, prevFocus: prev };
+  input.value = '';
+  el.hidden = false;
+  try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); }
+}
+
+function kbCloseOverlay(restore) {
+  const o = kbOverlay;
+  if (!o) return;
+  kbOverlay = null;
+  o.el.hidden = true;
+  if (restore !== false) kbRestoreTerminalFocus(o.prevFocus);
+}
+
+function kbRestoreTerminalFocus(prev) {
+  const ae = document.activeElement;
+  if (ae && ae !== document.body && ae.blur) ae.blur();
+  if (prev === msgInput) focusCompose();
+}
+
+function kbFocusables(el) {
+  return [...el.querySelectorAll('input, button')].filter(x => !x.disabled && x.offsetParent !== null);
+}
+
+function kbOverlayKeyDown(e) {
+  if (!kbOverlay || e.isComposing || e.keyCode === 229) return;
+  const k = e.key;
+  if (k === 'Escape') { e.preventDefault(); kbCloseOverlay(); return; }
+  if (k === 'Tab') {
+    // Trap: cycle among the sheet's own controls.
+    e.preventDefault();
+    const f = kbFocusables(kbOverlay.el);
+    if (!f.length) return;
+    const i = f.indexOf(document.activeElement);
+    f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+    return;
+  }
+  if (e.metaKey && !e.ctrlKey && (k === 'k' || k === 'K')) {
+    e.preventDefault();
+    if (kbOverlay.kind === 'switcher') kbCloseOverlay(); else openSwitcher();
+    return;
+  }
+  if (kbOverlay.kind !== 'switcher') return;
+  if (k === 'ArrowDown' || k === 'ArrowUp') {
+    e.preventDefault();
+    if (kswItems.length) kswSetIndex((kswIndex + (k === 'ArrowDown' ? 1 : -1) + kswItems.length) % kswItems.length);
+    return;
+  }
+  if (k === 'Enter') {
+    e.preventDefault();
+    if (kswIndex >= 0 && kswItems[kswIndex]) kswPick(kswItems[kswIndex].s.id);
+  }
+}
+
+// -- switcher --
+function kswHaystack(s) {
+  const a = s.agent || null;
+  const cwd = (a && a.cwd) || s.dir || '';
+  const cwdBase = baseName(cwd);
+  return [s.name, cwd, cwdBase, worktreeLabel(a && a.worktree, cwdBase),
+          (a && (a.title || a.agent)) || ''].join(' ').toLowerCase();
+}
+
+function kswRender() {
+  const terms = kswInput.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const hits = kbSessionOrder().filter(s => {
+    const h = kswHaystack(s);
+    return terms.every(t => h.includes(t));
+  });
+  kswList.textContent = '';
+  kswIndex = -1;
+  kswItems = hits.map(s => {
+    const status = sessionStatus(s);
+    const a = s.agent || null;
+    const cwdBase = baseName((a && a.cwd) || s.dir);
+    const title = (a && (a.title || a.agent)) || '';
+    const li = document.createElement('li');
+    li.className = 'kb-opt';
+    li.id = 'ksw-opt-' + s.id;
+    li.dataset.id = String(s.id);
+    li.dataset.status = status;
+    li.setAttribute('role', 'option');
+    li.setAttribute('aria-selected', 'false');
+    const state = document.createElement('span');
+    state.className = 'sp-state';
+    state.appendChild(svgUse('#s-' + status).svg);
+    const unseen = document.createElement('span');
+    unseen.className = 'sp-unseen';
+    state.appendChild(unseen);
+    const text = document.createElement('span');
+    text.className = 'kb-opt-text';
+    const name = document.createElement('span');
+    name.className = 'kb-opt-name';
+    name.textContent = s.name;
+    const meta = document.createElement('span');
+    meta.className = 'kb-opt-meta';
+    meta.textContent = cwdBase + (title ? '  -  ' + title : '');
+    text.append(name, meta);
+    li.append(state, text);
+    if (s.id === activeSession) {
+      const cur = document.createElement('span');
+      cur.className = 'kb-opt-cur';
+      cur.textContent = 'Current';
+      li.appendChild(cur);
+    }
+    li.setAttribute('aria-label', s.name + ', ' + SP_STATUS_TEXT[status]
+      + (cwdBase ? ', in ' + cwdBase : '') + (title ? ', ' + title : '')
+      + (s.id === activeSession ? ', current' : ''));
+    li.addEventListener('click', () => kswPick(s.id));
+    kswList.appendChild(li);
+    return { s, li };
+  });
+  kswEmpty.hidden = kswItems.length > 0;
+  // With no query the first pick is somewhere else to go; with one, the best hit.
+  let start = 0;
+  if (!terms.length && kswItems.length > 1 && kswItems[0].s.id === activeSession) start = 1;
+  kswSetIndex(kswItems.length ? start : -1);
+}
+
+function kswSetIndex(i) {
+  if (kswIndex >= 0 && kswItems[kswIndex]) kswItems[kswIndex].li.setAttribute('aria-selected', 'false');
+  kswIndex = i;
+  if (i >= 0 && kswItems[i]) {
+    kswItems[i].li.setAttribute('aria-selected', 'true');
+    kswInput.setAttribute('aria-activedescendant', kswItems[i].li.id);
+    kswItems[i].li.scrollIntoView({ block: 'nearest' });
+  } else {
+    kswInput.removeAttribute('aria-activedescendant');
+  }
+}
+
+// A pick lands on the terminal, whatever had focus before the switcher.
+function kswPick(id) {
+  kbCloseOverlay(false);
+  kbRestoreTerminalFocus(null);
+  selectSession(id);
+}
+
+function openSwitcher() {
+  if (!appIsVisible()) return;
+  kbOpenOverlay('switcher');
+  kswRender();
+}
+
+// -- key list (ctrl+b ?) --
+// Web keys first, then the herdr keys that pass through untouched (herdr's
+// default keymap). Filterable by key or description.
+const KB_HELP = [
+  { group: 'This app', rows: [
+    ['Cmd-K', 'Switch session: search by name, folder or title'],
+    ['Cmd-J', 'Compose box for long or multi-line prompts (Esc returns)'],
+    ['Cmd-/', 'Settings'],
+    ['Cmd-1 ... Cmd-9', 'Session by creation order'],
+    ['Cmd-Shift-Left / Right', 'Previous / next session'],
+    ['ctrl+b n', 'Next session (sessions-pane order)'],
+    ['ctrl+b p', 'Previous session'],
+    ['ctrl+b 1 ... 9', 'Session by its position in the sessions pane'],
+    ['ctrl+b a', 'Next session needing you: blocked first, then finished and unseen'],
+    ['ctrl+b ?', 'This list'],
+    ['ctrl+b s', 'Show or hide the sessions pane (portrait)'],
+    ['ctrl+b ctrl+b', 'Send one literal ctrl+b to the terminal'],
+  ] },
+  { group: 'herdr (passed through)', rows: [
+    ['ctrl+b v', 'Split pane vertically'],
+    ['ctrl+b minus', 'Split pane horizontally'],
+    ['ctrl+b h / j / k / l', 'Focus pane left / down / up / right'],
+    ['ctrl+b tab', 'Next pane (shift+tab: previous)'],
+    ['ctrl+b x', 'Close pane'],
+    ['ctrl+b z', 'Zoom pane'],
+    ['ctrl+b r', 'Resize mode'],
+    ['ctrl+b e', 'Edit scrollback'],
+    ['ctrl+b shift+p', 'Rename pane'],
+    ['ctrl+b c', 'New herdr tab'],
+    ['ctrl+b shift+t', 'Rename herdr tab'],
+    ['ctrl+b shift+x', 'Close herdr tab'],
+    ['ctrl+b b', 'Toggle herdr sidebar'],
+    ['ctrl+b w', 'Workspace picker'],
+    ['ctrl+b g', 'Go to'],
+    ['ctrl+b o', 'Open notification target'],
+    ['ctrl+b shift+n', 'New workspace'],
+    ['ctrl+b shift+g', 'New worktree'],
+    ['ctrl+b shift+w', 'Rename workspace'],
+    ['ctrl+b shift+d', 'Close workspace'],
+    ['ctrl+b shift+r', 'Reload herdr config'],
+    ['ctrl+b q', 'Detach the herdr client'],
+  ] },
+];
+const KB_HELP_NOTE = "herdr's own ctrl+b n / p / 1-9 (tabs), ? and s are answered by this app: "
+  + 'each session here is one herdr tab.';
+
+var khelpRows = null;   // [{ li, head, text }]
+var khelpNote = null;
+
+function khelpBuild() {
+  if (khelpRows) return;
+  khelpRows = [];
+  for (const g of KB_HELP) {
+    const head = document.createElement('li');
+    head.className = 'kb-group';
+    head.textContent = g.group;
+    khelpList.appendChild(head);
+    for (const [keys, desc] of g.rows) {
+      const li = document.createElement('li');
+      li.className = 'kb-row';
+      const kbd = document.createElement('kbd');
+      kbd.textContent = keys;
+      const d = document.createElement('span');
+      d.textContent = desc;
+      li.append(kbd, d);
+      khelpList.appendChild(li);
+      khelpRows.push({ li, head, text: (keys + ' ' + desc + ' ' + g.group).toLowerCase() });
+    }
+  }
+  khelpNote = document.createElement('li');
+  khelpNote.className = 'kb-note';
+  khelpNote.textContent = KB_HELP_NOTE;
+  khelpList.appendChild(khelpNote);
+}
+
+function khelpRender() {
+  const terms = khelpInput.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shownHeads = new Set();
+  let n = 0;
+  for (const r of khelpRows) {
+    const show = terms.every(t => r.text.includes(t));
+    r.li.hidden = !show;
+    if (show) { n++; shownHeads.add(r.head); }
+  }
+  for (const r of khelpRows) r.head.hidden = !shownHeads.has(r.head);
+  khelpNote.hidden = terms.length > 0;
+  khelpEmpty.hidden = n > 0;
+}
+
+function openHelp() {
+  if (!appIsVisible()) return;
+  khelpBuild();
+  kbOpenOverlay('help');
+  khelpRender();
+}
+
+kswInput.addEventListener('input', kswRender);
+khelpInput.addEventListener('input', khelpRender);
+for (const el of [kbSwitcherEl, kbHelpEl]) {
+  el.addEventListener('keydown', kbOverlayKeyDown);
+  el.querySelectorAll('[data-kb-close]').forEach(b => b.addEventListener('click', () => kbCloseOverlay()));
+}
+// Trap focus that arrives from outside (a pointer, an assistive technology).
+document.addEventListener('focusin', e => {
+  if (kbOverlay && !kbOverlay.el.contains(e.target)) kbOverlay.input.focus();
+});
+
+// -- Focus reporting (CSI ?1004h) --
+// Consistent with mouse reporting (T22): the server reads the mode off the
+// headless mirror, pushes each transition in the same mouse-mode message
+// (mouse.focus), and writes the bytes itself -- it re-checks the mode, so a
+// report racing a ?1004l is dropped there. The client only says which
+// session is focused, and only while that session's app asked to be told.
+// Focused = the page is visible AND the window has focus AND it is the
+// session on screen; switching sessions is out for one and in for the other.
+var kbWinFocused = typeof document.hasFocus === 'function' ? document.hasFocus() : true;
+var kbFocusSent = new Map();   // session id -> last report sent (true = in)
+
+function kbFocusTarget() {
+  if (document.visibilityState !== 'visible' || !kbWinFocused) return null;
+  return activeSession;
+}
+
+function syncFocusReport() {
+  if (RENDERER_MODE !== 'grid' || !ws || ws.readyState !== 1) return;
+  const target = kbFocusTarget();
+  for (const id of Object.keys(gridTerms)) {
+    const sid = Number(id);
+    const grid = gridTerms[id];
+    const on = !!(grid && grid.mouse && grid.mouse.focus);
+    if (!on) { kbFocusSent.delete(sid); continue; }
+    const want = sid === target;
+    const last = kbFocusSent.get(sid);
+    // In when it becomes focused (or the mode just turned on while it was);
+    // out only to a session that was last told in.
+    if (want ? last !== true : last === true) {
+      kbFocusSent.set(sid, want);
+      queueSend({ type: 'focus', session: sid, focused: want });
+    }
+  }
+}
+
+window.addEventListener('focus', () => { kbWinFocused = true; syncFocusReport(); });
+window.addEventListener('blur', () => { kbWinFocused = false; syncFocusReport(); });
+document.addEventListener('visibilitychange', () => syncFocusReport());
+// A key or a touch is proof the window has focus, whatever hasFocus() said at
+// load -- so a missed initial 'focus' event cannot leave a pane never told.
+for (const t of ['keydown', 'pointerdown']) {
+  document.addEventListener(t, () => {
+    if (!kbWinFocused) { kbWinFocused = true; syncFocusReport(); }
+  }, { capture: true, passive: true });
+}
 
 applyHwKeyboard();
 applyFontSize();

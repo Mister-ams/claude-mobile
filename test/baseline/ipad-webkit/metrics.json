@@ -53,6 +53,10 @@
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
         "#<button:button> \"HERDR, Needs input, in w\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
@@ -94,6 +98,14 @@
           "visible": false
         },
         "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
@@ -213,6 +225,10 @@
     },
     "auth": {
       "controlFonts": {
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
         "#<button:submit> \"Arrow down\"": {
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
           "visible": false
@@ -242,6 +258,14 @@
           "visible": false
         },
         "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
@@ -474,6 +498,10 @@
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
         "#<button:button> \"HERDR, Needs input, in w\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
@@ -515,6 +543,14 @@
           "visible": false
         },
         "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
@@ -642,6 +678,104 @@
         "under44": 12,
         "visible": 14
       }
+    },
+    "shortcuts": {
+      "afterTimeout": [
+        "x"
+      ],
+      "chip": "ctrl+b   n p 1-9 a ? s  --  any other key goes to herdr",
+      "focusReport": {
+        "afterOff": [],
+        "blur": [
+          [
+            4,
+            false
+          ]
+        ],
+        "focus": [
+          [
+            4,
+            true
+          ]
+        ],
+        "modeOff": [],
+        "modeOffAgain": [],
+        "modeOn": [
+          [
+            4,
+            true
+          ]
+        ],
+        "switchAway": [
+          [
+            4,
+            false
+          ]
+        ],
+        "switchBack": [
+          [
+            4,
+            true
+          ]
+        ]
+      },
+      "help": {
+        "filtered": [
+          "ctrl+b vSplit pane vertically",
+          "ctrl+b minusSplit pane horizontally"
+        ],
+        "total": 34
+      },
+      "literalPrefix": [
+        "\u0002"
+      ],
+      "passthroughV": [
+        "\u0002v"
+      ],
+      "plainKeys": "a\u0003\u001b\u001b[A\u001bx",
+      "s": {
+        "chip": "No sessions pane at this width",
+        "modal": false,
+        "opened": false
+      },
+      "switcherFilters": {
+        "loomi-api": [
+          4
+        ],
+        "mobile": [
+          2
+        ],
+        "side pane": [
+          2
+        ],
+        "zzq": []
+      },
+      "switcherPick": {
+        "active": 4,
+        "picked": 4
+      },
+      "switches": [
+        [
+          "n",
+          3
+        ],
+        [
+          "p",
+          1
+        ],
+        [
+          "2",
+          4
+        ],
+        [
+          "a#1",
+          3
+        ],
+        [
+          "a#2",
+          4
+        ]
+      ]
     },
     "sidepane": {
       "closed": {
@@ -774,6 +908,10 @@
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": true
         },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
         "#<button:button> \"HERDR, Needs input, in w\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": true
@@ -815,6 +953,14 @@
           "visible": false
         },
         "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
@@ -904,6 +1050,10 @@
     },
     "auth": {
       "controlFonts": {
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
         "#<button:submit> \"Arrow down\"": {
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
           "visible": false
@@ -933,6 +1083,14 @@
           "visible": false
         },
         "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
@@ -1165,6 +1323,10 @@
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": true
         },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
         "#<button:button> \"HERDR, Needs input, in w\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": true
@@ -1206,6 +1368,14 @@
           "visible": false
         },
         "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
@@ -1303,6 +1473,104 @@
         "under44": 6,
         "visible": 17
       }
+    },
+    "shortcuts": {
+      "afterTimeout": [
+        "x"
+      ],
+      "chip": "ctrl+b   n p 1-9 a ? s  --  any other key goes to herdr",
+      "focusReport": {
+        "afterOff": [],
+        "blur": [
+          [
+            4,
+            false
+          ]
+        ],
+        "focus": [
+          [
+            4,
+            true
+          ]
+        ],
+        "modeOff": [],
+        "modeOffAgain": [],
+        "modeOn": [
+          [
+            4,
+            true
+          ]
+        ],
+        "switchAway": [
+          [
+            4,
+            false
+          ]
+        ],
+        "switchBack": [
+          [
+            4,
+            true
+          ]
+        ]
+      },
+      "help": {
+        "filtered": [
+          "ctrl+b vSplit pane vertically",
+          "ctrl+b minusSplit pane horizontally"
+        ],
+        "total": 34
+      },
+      "literalPrefix": [
+        "\u0002"
+      ],
+      "passthroughV": [
+        "\u0002v"
+      ],
+      "plainKeys": "a\u0003\u001b\u001b[A\u001bx",
+      "s": {
+        "chip": "Sessions are pinned in landscape",
+        "modal": false,
+        "opened": false
+      },
+      "switcherFilters": {
+        "loomi-api": [
+          4
+        ],
+        "mobile": [
+          2
+        ],
+        "side pane": [
+          2
+        ],
+        "zzq": []
+      },
+      "switcherPick": {
+        "active": 4,
+        "picked": 4
+      },
+      "switches": [
+        [
+          "n",
+          3
+        ],
+        [
+          "p",
+          1
+        ],
+        [
+          "2",
+          4
+        ],
+        [
+          "a#1",
+          3
+        ],
+        [
+          "a#2",
+          4
+        ]
+      ]
     },
     "sidepane": {
       "afterPick": {
@@ -1569,6 +1837,10 @@
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
         "#<button:button> \"HERDR, Needs input, in w\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
@@ -1610,6 +1882,14 @@
           "visible": false
         },
         "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
@@ -1699,6 +1979,10 @@
     },
     "auth": {
       "controlFonts": {
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
         "#<button:submit> \"Arrow down\"": {
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
           "visible": false
@@ -1728,6 +2012,14 @@
           "visible": false
         },
         "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
@@ -1960,6 +2252,10 @@
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
         "#<button:button> \"HERDR, Needs input, in w\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
@@ -2001,6 +2297,14 @@
           "visible": false
         },
         "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
@@ -2098,6 +2402,104 @@
         "under44": 6,
         "visible": 9
       }
+    },
+    "shortcuts": {
+      "afterTimeout": [
+        "x"
+      ],
+      "chip": "ctrl+b   n p 1-9 a ? s  --  any other key goes to herdr",
+      "focusReport": {
+        "afterOff": [],
+        "blur": [
+          [
+            4,
+            false
+          ]
+        ],
+        "focus": [
+          [
+            4,
+            true
+          ]
+        ],
+        "modeOff": [],
+        "modeOffAgain": [],
+        "modeOn": [
+          [
+            4,
+            true
+          ]
+        ],
+        "switchAway": [
+          [
+            4,
+            false
+          ]
+        ],
+        "switchBack": [
+          [
+            4,
+            true
+          ]
+        ]
+      },
+      "help": {
+        "filtered": [
+          "ctrl+b vSplit pane vertically",
+          "ctrl+b minusSplit pane horizontally"
+        ],
+        "total": 34
+      },
+      "literalPrefix": [
+        "\u0002"
+      ],
+      "passthroughV": [
+        "\u0002v"
+      ],
+      "plainKeys": "a\u0003\u001b\u001b[A\u001bx",
+      "s": {
+        "chip": null,
+        "modal": true,
+        "opened": true
+      },
+      "switcherFilters": {
+        "loomi-api": [
+          4
+        ],
+        "mobile": [
+          2
+        ],
+        "side pane": [
+          2
+        ],
+        "zzq": []
+      },
+      "switcherPick": {
+        "active": 4,
+        "picked": 4
+      },
+      "switches": [
+        [
+          "n",
+          3
+        ],
+        [
+          "p",
+          1
+        ],
+        [
+          "2",
+          4
+        ],
+        [
+          "a#1",
+          3
+        ],
+        [
+          "a#2",
+          4
+        ]
+      ]
     },
     "sidepane": {
       "afterPick": {
@@ -2473,6 +2875,10 @@
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": true
         },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
         "#<button:button> \"HERDR, Needs input, in w\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": true
@@ -2514,6 +2920,14 @@
           "visible": false
         },
         "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
@@ -2603,6 +3017,10 @@
     },
     "auth": {
       "controlFonts": {
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
         "#<button:submit> \"Arrow down\"": {
           "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
           "visible": false
@@ -2632,6 +3050,14 @@
           "visible": false
         },
         "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
@@ -2864,6 +3290,10 @@
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": true
         },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
         "#<button:button> \"HERDR, Needs input, in w\"": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": true
@@ -2905,6 +3335,14 @@
           "visible": false
         },
         "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
           "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
           "visible": false
         },
@@ -3002,6 +3440,104 @@
         "under44": 6,
         "visible": 17
       }
+    },
+    "shortcuts": {
+      "afterTimeout": [
+        "x"
+      ],
+      "chip": "ctrl+b   n p 1-9 a ? s  --  any other key goes to herdr",
+      "focusReport": {
+        "afterOff": [],
+        "blur": [
+          [
+            4,
+            false
+          ]
+        ],
+        "focus": [
+          [
+            4,
+            true
+          ]
+        ],
+        "modeOff": [],
+        "modeOffAgain": [],
+        "modeOn": [
+          [
+            4,
+            true
+          ]
+        ],
+        "switchAway": [
+          [
+            4,
+            false
+          ]
+        ],
+        "switchBack": [
+          [
+            4,
+            true
+          ]
+        ]
+      },
+      "help": {
+        "filtered": [
+          "ctrl+b vSplit pane vertically",
+          "ctrl+b minusSplit pane horizontally"
+        ],
+        "total": 34
+      },
+      "literalPrefix": [
+        "\u0002"
+      ],
+      "passthroughV": [
+        "\u0002v"
+      ],
+      "plainKeys": "a\u0003\u001b\u001b[A\u001bx",
+      "s": {
+        "chip": "Sessions are pinned in landscape",
+        "modal": false,
+        "opened": false
+      },
+      "switcherFilters": {
+        "loomi-api": [
+          4
+        ],
+        "mobile": [
+          2
+        ],
+        "side pane": [
+          2
+        ],
+        "zzq": []
+      },
+      "switcherPick": {
+        "active": 4,
+        "picked": 4
+      },
+      "switches": [
+        [
+          "n",
+          3
+        ],
+        [
+          "p",
+          1
+        ],
+        [
+          "2",
+          4
+        ],
+        [
+          "a#1",
+          3
+        ],
+        [
+          "a#2",
+          4
+        ]
+      ]
     },
     "sidepane": {
       "afterPick": {

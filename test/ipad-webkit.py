@@ -25,7 +25,16 @@ persisted); a server broadcast applied as a keyed diff (MutationObserver: no
 row rebuilt, only the changed row written, one move); every pane target
 >= 44px; portrait slide-over opened by the toolbar button, closed by the scrim
 and by a pick (<profile>-sidepane-open.png); and terminal area >= the pinned
-pre-T07 floor. The only tolerated console error is listed by EXACT text in
+pre-T07 floor. T08 adds the keyboard layer, driven by real key presses:
+ctrl+b then n/p/2/a/a/s/?/v/ctrl+b (the web keys switch sessions in side-pane
+order, a jumps blocked-then-done, v leaves as the exact bytes \x02v, ctrl+b
+ctrl+b as one \x02), the prefix timing out so the next key is plain again,
+plain keys (a, ctrl+c, Esc, arrows, alt) reaching the terminal byte for byte,
+the ? list filtering, the Cmd-K switcher filtering by name/cwd/title and
+picking with arrows + Enter, focus trapped in both and handed back on close,
+>= 44px targets (<profile>-help.png, <profile>-switcher.png), and focus
+reports (CSI ?1004h) sent in/out on window focus, blur and session switch
+only while the mode is on. The only tolerated console error is listed by EXACT text in
 BENIGN_CONSOLE below -- never add a pattern there, and never add a message
 that describes a real defect.
 
@@ -37,7 +46,8 @@ purpose.
 SELF-TEST: --self-test injects one fault of each gated kind (an inline script
 the CSP must refuse, a console.error, an uncaught exception, a stock-yellow
 ANSI 3 below AA, a cell model 10% off the laid-out glyphs) into the first
-profile. Expected exit: 1 with all of them caught. Exit 2 means the gate missed
+profile, plus (T08) a prefix passthrough that drops the \x02. Expected exit:
+1 with all of them caught. Exit 2 means the gate missed
 an injected fault -- the gate itself is broken.
 
 Windows note (D5): WebKit on Windows reports navigator.maxTouchPoints = 0 even
@@ -491,6 +501,304 @@ def check_sidepane(page, slug, out, pngs, findings, self_test):
     return rec
 
 
+# -- T08: keyboard layer --------------------------------------------------------
+# Every check drives REAL key presses through the page (Playwright keyboard ->
+# the client's own keydown listeners) and reads what the ARM's queueSend stub
+# captured, so "reaches the terminal" means the exact bytes the server would
+# have been sent.
+KB_STATE = """() => {
+  const vis = el => !!el && !el.closest('[hidden]') && getComputedStyle(el).display !== 'none'
+    && el.getBoundingClientRect().width > 0;
+  const box = el => { const r = el.getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) }; };
+  const ov = id => {
+    const el = document.getElementById(id);
+    const dlg = el.querySelector('[role=dialog]');
+    return { open: !el.hidden, dialog: !!dlg && dlg.getAttribute('aria-modal') === 'true',
+             focusInside: el.contains(document.activeElement),
+             targets: [...el.querySelectorAll('button, input, [role=option]')].filter(vis)
+               .map(x => Object.assign({ el: x.id || x.className }, box(x))) };
+  };
+  const ae = document.activeElement;
+  return {
+    active: activeSession, armed: kbPrefixArmed,
+    chip: vis(document.getElementById('kb-chip')) ? document.getElementById('kb-chip').textContent : null,
+    sidepaneOpen: sidepaneOpen(), modal: sidepaneIsModal(),
+    terminalKeys: terminalHasKeyboardFocus(),
+    focused: ae ? (ae.id || ae.tagName.toLowerCase()) : null,
+    switcher: ov('kb-switcher'), help: ov('kb-help'),
+    options: [...document.querySelectorAll('#ksw-list [role=option]')].map(li => +li.dataset.id),
+    selected: [...document.querySelectorAll('#ksw-list [role=option][aria-selected=true]')].map(li => +li.dataset.id),
+    helpRows: [...document.querySelectorAll('#khelp-list .kb-row')].filter(vis).map(li => li.textContent),
+    helpTotal: document.querySelectorAll('#khelp-list .kb-row').length,
+    sent: window.__sent.filter(m => m.type === 'input').map(m => m.data),
+  };
+}"""
+
+KB_RESET = """(sessions) => {
+  if (kbOverlayOpen()) kbCloseOverlay();
+  closeSettings(); closeSidepane(); kbDisarmPrefix(); kbChipHide();
+  handle({ type: 'sessions', sessions });
+  if (activeSession !== 1) switchTo(1);
+  const ae = document.activeElement;
+  if (ae && ae !== document.body) ae.blur();
+  window.__sent = [];
+  return activeSession;
+}"""
+
+# Focus reporting, driven through the real message handler (mouse-mode is how
+# the server tells the client the pane asked for CSI ?1004h) and real window
+# focus/blur events.
+FOCUS_REPORT = """() => {
+  const got = () => { const f = window.__sent.filter(m => m.type === 'focus')
+    .map(m => [m.session, m.focused]); window.__sent = []; return f; };
+  const sid = activeSession;
+  const other = sessionList.find(s => s.id !== sid).id;
+  const mode = on => handle({ type: 'mouse-mode', session: sid,
+    mouse: { tracking: 'any', encoding: 'sgr', focus: on } });
+  const out = { sid };
+  window.__sent = [];
+  window.dispatchEvent(new Event('focus'));
+  window.dispatchEvent(new Event('blur'));
+  window.dispatchEvent(new Event('focus'));
+  out.modeOff = got();
+  mode(true);                                   out.modeOn = got();
+  window.dispatchEvent(new Event('blur'));      out.blur = got();
+  window.dispatchEvent(new Event('focus'));     out.focus = got();
+  selectSession(other);                         out.switchAway = got();
+  selectSession(sid);                           out.switchBack = got();
+  mode(false);                                  out.modeOffAgain = got();
+  window.dispatchEvent(new Event('blur'));
+  window.dispatchEvent(new Event('focus'));     out.afterOff = got();
+  return out;
+}"""
+
+
+def check_shortcuts(page, slug, out, pngs, findings, self_test):
+    """T08 gate. Returns the metrics record."""
+    rec = {}
+
+    def fail(text):
+        findings.append((slug, "shortcuts", text))
+
+    def st():
+        return page.evaluate(KB_STATE)
+
+    def clear():
+        page.evaluate("() => { window.__sent = []; }")
+
+    def keys(*ks):
+        for k in ks:
+            page.keyboard.press(k)
+        page.wait_for_timeout(60)   # the 4ms printable coalescing tick
+
+    page.evaluate(KB_RESET, SESSIONS)
+    page.wait_for_timeout(150)
+    order = priority_order(SESSIONS)   # [3, 4, 2, 1]: blocked, done, working, idle
+    status = dict((x["id"], x["agent"]["status"]) for x in SESSIONS)
+
+    # 1. no prefix: plain keys reach the terminal byte for byte. Compared as
+    #    one stream: a printable may share a write with the key after it (T12's
+    #    atomic flush), which is the same bytes in the same order.
+    keys("a", "Control+c", "Escape", "ArrowUp", "Alt+x")
+    s = st()
+    want = "a\x03\x1b\x1b[A\x1bx"
+    rec["plainKeys"] = "".join(s["sent"])
+    if "".join(s["sent"]) != want:
+        fail("plain keys sent %r, want %r" % (s["sent"], want))
+
+    # 2. ctrl+b arms (chip shown, nothing sent); n/p/2/a switch sessions
+    clear()
+    page.keyboard.press("Control+b")
+    s = st()
+    rec["chip"] = s["chip"]
+    if not s["armed"] or not s["chip"] or s["sent"]:
+        fail("ctrl+b: armed=%s chip=%r sent=%r" % (s["armed"], s["chip"], s["sent"]))
+    steps = []
+
+    def after(label, want_active):
+        page.wait_for_timeout(80)
+        s = st()
+        steps.append((label, s["active"]))
+        if s["active"] != want_active or s["sent"] or s["armed"]:
+            fail("ctrl+b %s: active %s (want %s), sent %r, still armed=%s"
+                 % (label, s["active"], want_active, s["sent"], s["armed"]))
+
+    page.keyboard.press("n")
+    after("n", order[(order.index(1) + 1) % len(order)])
+    for key, want_active in (("p", 1), ("2", order[1])):
+        clear()
+        keys("Control+b", key)
+        after(key, want_active)
+    # a: blocked first, then the unseen finish, cycling from the active one
+    queue = [i for i in order if status[i] in ("blocked", "done")]
+    cur = order[1]
+    for n in range(2):
+        nxt = queue[(queue.index(cur) + 1) % len(queue)] if cur in queue else queue[0]
+        clear()
+        keys("Control+b", "a")
+        after("a#%d" % (n + 1), nxt)
+        cur = nxt
+    rec["switches"] = steps
+
+    # 3. s: the portrait sheet opens; elsewhere consumed with a notice
+    clear()
+    keys("Control+b", "s")
+    s = st()
+    rec["s"] = {"modal": s["modal"], "opened": s["sidepaneOpen"], "chip": s["chip"]}
+    if s["sent"]:
+        fail("ctrl+b s sent %r" % s["sent"])
+    if s["modal"]:
+        if not s["sidepaneOpen"]:
+            fail("ctrl+b s did not open the portrait sheet")
+        keys("Escape")
+        s2 = st()
+        if s2["sidepaneOpen"] or not s2["terminalKeys"]:
+            fail("Esc after ctrl+b s: open=%s terminal keys=%s" % (s2["sidepaneOpen"], s2["terminalKeys"]))
+        page.wait_for_timeout(300)
+    elif s["sidepaneOpen"] or not s["chip"]:
+        fail("ctrl+b s (not portrait): open=%s chip=%r" % (s["sidepaneOpen"], s["chip"]))
+
+    # 4. passthrough: any other key leaves as ctrl+b + key, in one write
+    fault = self_test and slug == PROFILES[0][0]
+    if fault:
+        page.evaluate("() => { window.__realPass = kbPrefixPassthrough;"
+                      " kbPrefixPassthrough = (seq) => kbFlush(seq); }")
+    clear()
+    keys("Control+b", "v")
+    s = st()
+    rec["passthroughV"] = s["sent"]
+    if s["sent"] != ["\x02v"]:
+        fail("prefix passthrough: ctrl+b v sent %r, want ['\\x02v']" % s["sent"])
+    if fault:
+        page.evaluate("() => { kbPrefixPassthrough = window.__realPass; }")
+    clear()
+    keys("Control+b", "Control+b")
+    s = st()
+    rec["literalPrefix"] = s["sent"]
+    if s["sent"] != ["\x02"] or s["armed"]:
+        fail("ctrl+b ctrl+b sent %r (want ['\\x02']), armed=%s" % (s["sent"], s["armed"]))
+    clear()
+    keys("Control+b", "Shift+Minus")   # shifted punctuation passes through too
+    s = st()
+    if s["sent"] != ["\x02_"]:
+        fail("ctrl+b _ sent %r, want ['\\x02_']" % s["sent"])
+
+    # 5. timeout: the prefix lapses, sends nothing, the next key is plain
+    clear()
+    page.keyboard.press("Control+b")
+    page.wait_for_timeout(1800)
+    s = st()
+    if s["armed"] or s["chip"] or s["sent"]:
+        fail("prefix did not lapse cleanly: armed=%s chip=%r sent=%r" % (s["armed"], s["chip"], s["sent"]))
+    keys("x")
+    s = st()
+    rec["afterTimeout"] = s["sent"]
+    if s["sent"] != ["x"]:
+        fail("key after the prefix lapsed sent %r, want ['x']" % s["sent"])
+
+    # 6. ctrl+b ? : the key list, filterable, focus trapped, Esc restores
+    clear()
+    keys("Control+b", "Shift+Slash")
+    page.wait_for_timeout(250)
+    s = st()
+    h = s["help"]
+    if not (h["open"] and h["dialog"] and s["focused"] == "khelp-input"):
+        fail("ctrl+b ?: open=%s dialog=%s focus=%s" % (h["open"], h["dialog"], s["focused"]))
+    shot = "%s-help.png" % slug
+    page.screenshot(path=os.path.join(out, shot))
+    pngs.append(shot)
+    total = s["helpTotal"]
+    page.keyboard.type("split")
+    page.wait_for_timeout(80)
+    s = st()
+    rows = s["helpRows"]
+    rec["help"] = {"total": total, "filtered": rows}
+    if not rows or len(rows) >= total or any("split" not in r.lower() for r in rows):
+        fail("? filter 'split': %d of %d rows %r" % (len(rows), total, rows))
+    for _ in range(3):
+        page.keyboard.press("Tab")
+    s = st()
+    if not s["help"]["focusInside"]:
+        fail("? overlay: Tab let focus escape to %s" % s["focused"])
+    small = [t for t in s["help"]["targets"] if t["w"] < MIN_TAP or t["h"] < MIN_TAP]
+    if small:
+        fail("? overlay targets under %dpx: %s" % (MIN_TAP, small))
+    keys("Escape")
+    s = st()
+    if s["help"]["open"] or not s["terminalKeys"] or s["sent"]:
+        fail("? overlay Esc: open=%s terminal keys=%s sent=%r (typing leaked?)"
+             % (s["help"]["open"], s["terminalKeys"], s["sent"]))
+
+    # 7. Cmd-K: the switcher, filtered by name / cwd / title, picked by Enter
+    active0 = st()["active"]
+    clear()
+    keys("Meta+k")
+    page.wait_for_timeout(250)
+    s = st()
+    w = s["switcher"]
+    if not (w["open"] and w["dialog"] and s["focused"] == "ksw-input"):
+        fail("Cmd-K: open=%s dialog=%s focus=%s" % (w["open"], w["dialog"], s["focused"]))
+    if s["options"] != order:
+        fail("switcher options %s != side-pane order %s" % (s["options"], order))
+    first = next((i for i in order if i != active0), None)
+    if s["selected"] != [first]:
+        fail("switcher preselected %s, want the first non-current %s" % (s["selected"], first))
+    shot = "%s-switcher.png" % slug
+    page.screenshot(path=os.path.join(out, shot))
+    pngs.append(shot)
+    small = [t for t in w["targets"] if t["w"] < MIN_TAP or t["h"] < MIN_TAP]
+    if small:
+        fail("switcher targets under %dpx: %s" % (MIN_TAP, small))
+    filters = {}
+    for q, want_ids in (("mobile", [2]), ("loomi-api", [4]), ("side pane", [2]), ("zzq", [])):
+        page.fill("#ksw-input", q)
+        page.wait_for_timeout(50)
+        got = st()["options"]
+        filters[q] = got
+        if got != want_ids:
+            fail("switcher filter %r -> %s, want %s" % (q, got, want_ids))
+    rec["switcherFilters"] = filters
+    page.fill("#ksw-input", "")
+    keys("ArrowDown")
+    s = st()
+    pick = s["selected"][0] if s["selected"] else None
+    want_pick = order[(order.index(first) + 1) % len(order)]
+    if pick != want_pick:
+        fail("ArrowDown selected %s, want %s" % (pick, want_pick))
+    for _ in range(3):
+        page.keyboard.press("Tab")
+    if not st()["switcher"]["focusInside"]:
+        fail("switcher: Tab let focus escape")
+    page.focus("#ksw-input")
+    keys("Enter")
+    page.wait_for_timeout(150)
+    s = st()
+    rec["switcherPick"] = {"picked": pick, "active": s["active"]}
+    if s["active"] != pick or s["switcher"]["open"] or not s["terminalKeys"] or s["sent"]:
+        fail("switcher Enter: active %s (want %s), open=%s, terminal keys=%s, sent=%r"
+             % (s["active"], pick, s["switcher"]["open"], s["terminalKeys"], s["sent"]))
+    keys("Meta+k")
+    page.wait_for_timeout(150)
+    keys("Escape")
+    s = st()
+    if s["switcher"]["open"] or s["active"] != pick or not s["terminalKeys"]:
+        fail("switcher Esc: open=%s active=%s terminal keys=%s"
+             % (s["switcher"]["open"], s["active"], s["terminalKeys"]))
+
+    # 8. focus reports: only while the pane asked, in/out on focus/blur/switch
+    fr = page.evaluate(FOCUS_REPORT)
+    sid = fr["sid"]
+    want_fr = {"modeOff": [], "modeOn": [[sid, True]], "blur": [[sid, False]],
+               "focus": [[sid, True]], "switchAway": [[sid, False]], "switchBack": [[sid, True]],
+               "modeOffAgain": [], "afterOff": []}
+    rec["focusReport"] = {k: fr.get(k) for k in want_fr}
+    for k, v in want_fr.items():
+        if fr.get(k) != v:
+            fail("focus report %s: %s, want %s" % (k, fr.get(k), v))
+    page.evaluate(KB_RESET, SESSIONS)
+    return rec
+
+
 ROWS = """() => {
   const g = gridTerms[activeSession];
   const d = g ? computeGridDims(g) : null;
@@ -895,6 +1203,9 @@ def main():
                 page.wait_for_timeout(200)
                 entry["sidepane"] = check_sidepane(page, slug, out, pngs, findings, self_test)
 
+                # -- keyboard layer (T08): prefix, overlays, focus reports -------
+                entry["shortcuts"] = check_shortcuts(page, slug, out, pngs, findings, self_test)
+
                 # -- gate ----------------------------------------------------------
                 for v in page.evaluate("() => window.__cspv"):
                     findings.append((slug, "csp-violation", v))
@@ -933,6 +1244,8 @@ def main():
                 print("   sidepane  %s; rows %s; targets <44: %d"
                       % (sp.get("mode"), (sp.get("closed") or {}).get("order"),
                          len((sp.get("targets") or {}).get("under44", []))))
+                n_sc = len([f for f in findings if f[0] == slug and f[1] == "shortcuts"])
+                print("   keys      %s" % ("ok" if not n_sc else "%d finding(s)" % n_sc))
                 print("   <44px     auth %d/%d   app %d/%d   settings %d/%d"
                       % (entry["auth"]["tapTargets"]["under44"], entry["auth"]["tapTargets"]["visible"],
                          a["tapTargets"]["under44"], a["tapTargets"]["visible"],
@@ -990,15 +1303,18 @@ def main():
         print("GATE PASSED: no console errors, page errors or CSP violations; CSP matches server.js;"
               " terminal palette AA, single-source, opaque, monospace;"
               " grid cell geometry + cursor match layout (incl. after a font-size change);"
-              " side pane rows/order/diff/targets/open-close; terminal area >= pre-T07")
+              " side pane rows/order/diff/targets/open-close; terminal area >= pre-T07;"
+              " ctrl+b prefix + passthrough bytes, Cmd-K switcher, ? list, focus reports")
 
     if self_test:
         kinds = {k for s, k, t in findings
                  if SELF_TEST_MARK in t or (k == "csp-violation" and "script-src" in t)
                  or (k == "contrast" and "#FFCC00" in t)
                  or (k == "geometry" and s == PROFILES[0][0] and t.startswith("base:"))
-                 or (k == "sidepane" and s == PROFILES[0][0] and "rebuilt rows" in t)}
-        want = {"csp-violation", "console-error", "pageerror", "contrast", "geometry", "sidepane"}
+                 or (k == "sidepane" and s == PROFILES[0][0] and "rebuilt rows" in t)
+                 or (k == "shortcuts" and s == PROFILES[0][0] and "prefix passthrough" in t)}
+        want = {"csp-violation", "console-error", "pageerror", "contrast", "geometry", "sidepane",
+                "shortcuts"}
         missed = want - kinds
         if missed:
             print("SELF-TEST BROKEN: gate did not catch %s" % sorted(missed))
