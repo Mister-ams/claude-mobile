@@ -282,6 +282,46 @@ function feedFor(pipe, extra = {}) {
   t2.feed.stop();
   await race.close();
 
+  // --- a finish while the subscription is down ---------------------
+  // herdr stays up; only the subscription drops. The turn ending must still
+  // read as an unseen finish once the poll (or the resubscribe) sees idle --
+  // and an idle that was already seen must stay plain idle across the same.
+  console.log('\n=== finish across a dropped subscription ===');
+  const dropPipe = pipeName();
+  const dh = fakeHerdr(dropPipe);
+  dh.state = { panes: ['w1:p1'], agents: [agentInfo('w1:p1', 'working')] };
+  await dh.listen();
+  const t5 = feedFor(dropPipe);
+  t5.feed.start();
+  await until(() => t5.last() && t5.last().feed === 'events' && t5.last().status === 'working');
+  dh.rejectSubscribe = true;
+  dh.dropSubs();
+  await until(() => t5.views.some(v => v.feed === 'down'));
+  dh.state.agents[0].agent_status = 'idle';
+  await until(() => t5.last().feed === 'poll' && t5.last().herdrStatus === 'idle');
+  check('working -> (drop) -> idle seen by the poll reads done, unseen',
+    t5.last().feed === 'poll' && t5.last().status === 'done' && t5.last().seen === false,
+    JSON.stringify({ feed: t5.last().feed, status: t5.last().status, seen: t5.last().seen }));
+  dh.rejectSubscribe = false;
+  await until(() => t5.last().feed === 'events');
+  check('the unseen finish survives the resubscribe',
+    t5.last().feed === 'events' && t5.last().status === 'done' && t5.last().seen === false,
+    JSON.stringify({ feed: t5.last().feed, status: t5.last().status }));
+  t5.feed.markSeen();
+  check('viewed -> idle', t5.last().status === 'idle' && t5.last().seen === true);
+  dh.rejectSubscribe = true;
+  const mark5 = t5.views.length;
+  dh.dropSubs();
+  await until(() => t5.views.slice(mark5).some(v => v.feed === 'poll'));
+  dh.rejectSubscribe = false;
+  await until(() => t5.views.slice(mark5).some(v => v.feed === 'poll') && t5.last().feed === 'events');
+  check('an already-seen idle stays idle across a drop, poll and reconnect',
+    t5.views.slice(mark5).every(v => v.status !== 'done') && t5.last().feed === 'events'
+      && t5.last().status === 'idle',
+    t5.views.slice(mark5).map(v => `${v.feed}:${v.status}`).join(' '));
+  t5.feed.stop();
+  await dh.close();
+
   // --- onChange throwing never escapes -----------------------------
   console.log('\n=== containment ===');
   const audits3 = [];
