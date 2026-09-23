@@ -2288,10 +2288,12 @@ function onSwipeMove(e) {
   // New session pull indicator (swipe left past last tab)
   if (dx < -20 && idx === sessionList.length - 1) {
     const pull = Math.min(Math.abs(dx), 200);
-    newHint.style.width = pull + 'px';
+    // T09: revealed by transform (compositor only), never by width. The
+    // hint is 200px wide and rests at translateX(100%), off the right edge.
+    newHint.style.transform = `translateX(${200 - pull}px)`;
     newHint.classList.toggle('ready', pull >= NEW_SESSION_THRESHOLD);
   } else {
-    newHint.style.width = '0';
+    newHint.style.transform = '';
     newHint.classList.remove('ready');
   }
 }
@@ -2299,7 +2301,7 @@ function onSwipeMove(e) {
 function endSwipe() {
   hintL.classList.remove('flash');
   hintR.classList.remove('flash');
-  newHint.style.width = '0';
+  newHint.style.transform = '';
   newHint.classList.remove('ready');
   if (!swipeActive) return;
   swipeActive = false;
@@ -2465,8 +2467,8 @@ function sendMsg() {
   autoGrow();
   updateSendBtn();
   userScrolled = false; // auto-follow new output after sending
-  msgInput.style.borderColor = 'var(--intent-ok)';
-  setTimeout(() => { msgInput.style.borderColor = ''; }, 300);
+  msgInput.classList.add('sent');
+  setTimeout(() => { msgInput.classList.remove('sent'); }, 300);
 }
 
 function editLast() {
@@ -2495,8 +2497,9 @@ imgBtn.addEventListener('click', (e) => {
 imgInput.addEventListener('change', async () => {
   const file = imgInput.files[0];
   if (!file) return;
-  imgBtn.textContent = '...';
-  imgBtn.disabled = true;
+  imgBtn.classList.remove('err');
+  imgBtn.classList.add('busy');
+  imgBtn.setAttribute('aria-busy', 'true');
   try {
     const res = await fetch('/api/upload', {
       method: 'POST',
@@ -2512,15 +2515,14 @@ imgInput.addEventListener('change', async () => {
     imgName.textContent = data.filename;
     imgPreview.classList.add('show');
     imgBtn.classList.add('has-img');
-    imgBtn.textContent = 'Img';
   } catch (e) {
     console.error('Upload failed:', e);
     showStatus('Upload failed: ' + (e.message || 'unknown error'), 'var(--intent-danger-text)');
-    imgBtn.style.borderColor = 'var(--intent-danger)';
-    imgBtn.style.color = 'var(--intent-danger-text)';
-    setTimeout(() => { imgBtn.textContent = 'Img'; imgBtn.style.borderColor = ''; imgBtn.style.color = ''; }, 3000);
+    imgBtn.classList.add('err');
+    setTimeout(() => { imgBtn.classList.remove('err'); }, 3000);
   }
-  imgBtn.disabled = false;
+  imgBtn.classList.remove('busy');
+  imgBtn.removeAttribute('aria-busy');
   imgInput.value = '';
 });
 
@@ -2531,7 +2533,12 @@ imgClear.addEventListener('click', () => {
 });
 
 function updateSendBtn() {
-  $('send').textContent = msgInput.value.trim() ? 'Send' : 'Enter';
+  // T09: the button is a glyph (return when empty, arrow.up with text); the
+  // accessible name carries what the old text label said.
+  const has = !!msgInput.value.trim();
+  const btn = $('send');
+  btn.classList.toggle('has-text', has);
+  btn.setAttribute('aria-label', has ? 'Send message' : 'Send Enter');
 }
 
 let lastMsgHeight = 0;
@@ -2549,7 +2556,8 @@ function autoGrow() {
   if (len === lastMsgHeight) return;
   lastMsgHeight = len;
   msgInput.style.height = '0';
-  msgInput.style.height = Math.min(msgInput.scrollHeight, 64) + 'px';
+  // CSS max-height caps it per layout (64px phone, 132px tablet).
+  msgInput.style.height = Math.min(msgInput.scrollHeight, 132) + 'px';
 }
 
 function qsend(k) {
@@ -2801,7 +2809,7 @@ function applyHwKeyboard() {
   document.body.classList.toggle('hwkb', on);
   const box = $('set-hwkb');
   if (box) box.checked = on;
-  msgInput.placeholder = on ? 'Compose (Cmd-J)...' : 'Type a message...';
+  msgInput.placeholder = on ? 'Compose (Cmd-J)' : 'Type a message...';
 }
 
 // ── T14: terminal font size ─────────────────────────────────────────
@@ -3131,6 +3139,7 @@ $('srv-update')?.addEventListener('click', async () => {
 });
 
 $('settings-btn').addEventListener('click', e => { e.preventDefault(); toggleSettings(); });
+$('set-done').addEventListener('click', () => { closeSettings(); $('settings-btn').focus(); });
 $('set-hwkb').addEventListener('change', e => setHwKeyboard(e.target.checked));
 $('set-font').addEventListener('input', e => setFontSize(e.target.value));
 document.addEventListener('click', e => {
@@ -3852,6 +3861,12 @@ sendBtn.addEventListener('click', e => {
   e.preventDefault();
   sendMsg();
 });
+// T09: a POINTER press on Send must not take focus from the compose box.
+// mousedown's default action is to move focus; in hardware-keyboard mode
+// losing it collapses the bar (:focus-within), so the layout moved under the
+// pointer between mousedown and mouseup and the click was lost. Same guard
+// the autocomplete rows use. Touch goes through touchend above.
+sendBtn.addEventListener('mousedown', e => { e.preventDefault(); });
 
 // ── Pull-up on tab count = new session ──
 (function() {

@@ -13,14 +13,14 @@ entries for its `cm-N` sessions. A change there is a FAIL, whatever else
 passed.
 
   npm run sim:up            # prints TOTP_SECRET_FILE=<path>, never the secret
-  npm run test:ipad-live    # the line below, with --known-defects send-pointer
+  npm run test:ipad-live    # the line below (no known defects since T09)
   npm run sim:down
 
   py test/ipad-webkit-live.py --port 3457 \
-      --totp-secret-file .totp-secret [--known-defects send-pointer]
+      --totp-secret-file .totp-secret [--known-defects <step,...>]
 
 --known-defects names steps that fail because of a real, TRACKED client defect
-(send-pointer: T09). The run exits 0 only when every failure is on that list,
+(send-pointer was one until T09 fixed it). The run exits 0 only when every failure is on that list,
 and prints each one loudly; without the flag any failure exits 1. A listed
 step that starts passing is reported so the entry can be removed.
 

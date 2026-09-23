@@ -10,6 +10,11 @@
 <!-- Every colour below is a token from style.css's :root block;
      `npm run lint:colors` fails on a literal here. -->
 <style>
+  /* T09: style.css pins html/body to the viewport with overflow:hidden for
+     the app shell (the terminal scrolls, the page never does). This page is
+     a normal document, and a tall one (QR + two steps) must scroll. Scoped
+     here, so the app keeps its fixed shell. */
+  html, body { height: auto; min-height: 100%; overflow: auto; overscroll-behavior: auto; }
   body {
     font-family: system-ui, -apple-system, sans-serif;
     background: var(--bg);

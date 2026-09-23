@@ -93,18 +93,42 @@
   --shadow-up:    0 -6px 18px rgba(0, 0, 0, 0.08);
   --shadow-field: inset 0 1px 2px rgba(0, 0, 0, 0.06);
 
-  /* Motion */
+  /* Motion (T09). Only transform and opacity ever animate (compositor
+     only); test/ipad-webkit.py asserts it, and that prefers-reduced-motion
+     takes every duration to 0. Springs are approximated by cubic-beziers:
+     --ease-sheet is the critically damped curve UIKit uses for sheets,
+     --ease-spring overshoots slightly (switch knob, press release). */
   --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
   --ease-out:      cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-sheet:    cubic-bezier(0.32, 0.72, 0, 1);
   --ease-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
   --dur-fast:      0.12s;
   --dur-med:       0.24s;
+  --dur-slow:      0.36s;
   --transition:    var(--ease-standard);
+
+  /* Layout (T09): the landscape pane column. 226px keeps both iPad
+     landscape terminals at or above the pinned T07 floor with the compose
+     bar docked in the pane (test/ipad-webkit.py TERMINAL_FLOOR). */
+  --pane-col:      226px;
+  --tap:           44px;   /* HIG minimum target */
+
+  /* Controls (T09) */
+  --switch-on:          var(--system-green);
+  --switch-off:         rgba(120, 120, 128, 0.16);
+  --switch-knob-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 3px 1px rgba(0, 0, 0, 0.06);
 
   /* Liquid Glass (chrome only -- D3) */
   --glass-bg:          rgba(255, 255, 255, 0.62);
   --glass-bg-thick:    rgba(255, 255, 255, 0.8);
   --glass-bg-fallback: rgba(255, 255, 255, 0.95);
+  /* A sheet of TEXT over live terminal text is not translucent (T09):
+     headless WebKit on Windows claims backdrop-filter and draws no blur, and
+     a real iPad under load can drop it too, so a tint alone lets terminal
+     text read through. The side-pane sheet is opaque; the scrim gives the
+     depth. The settings sheet is glass, but thick, with opaque grouped rows. */
+  --sheet-bg:          var(--system-background);
+  --glass-bg-sheet:    rgba(242, 242, 247, 0.97);
   --glass-chip-bg:     rgba(255, 255, 255, 0.72);
   --glass-blur:        20px;
   --glass-saturate:    180%;
@@ -154,6 +178,7 @@
   --ansi-14: #007A7A;  /* bright cyan      5.0 */
   --ansi-15: #3A3A3C;  /* bright white -> dark grey 11.0 */
   --font-mono:     ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-ui:       -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', 'Helvetica Neue', sans-serif;
   /* T14: terminal font size. Set from localStorage by applyFontSize() --
      13px is the phone default, tablets start at 16px. The cell grid reads
      it directly; the xterm fallback gets it through term.options.fontSize. */
@@ -163,7 +188,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body {
   height: 100%; overflow: hidden; background: var(--bg); color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', 'Helvetica Neue', sans-serif;
+  font-family: var(--font-ui);
   font-size: 14px; line-height: 1.286;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;
@@ -173,7 +198,10 @@ html, body {
 button, input, textarea, select { font: inherit; }
 /* The app's own backdrop is the terminal layer's colour: chrome glass floats
    over the content layer, never over a second surface. */
-#app { display: none; flex-direction: column; height: 100dvh; position: relative; overflow: hidden; background: var(--term-bg); }
+/* overflow: clip, not just hidden: the pull hint rests translated off the
+   right edge, and a hidden (still scrollable) box let a focus/scrollIntoView
+   shift the whole shell sideways. clip is not a scroll container at all. */
+#app { display: none; flex-direction: column; height: 100dvh; position: relative; overflow: hidden; overflow: clip; background: var(--term-bg); }
 /* Visibility is a CLASS, not an inline style. An inline `display:flex` beats
    every stylesheet rule, so the landscape rail at the bottom of this file
    could never take effect while app.js assigned display directly. */
@@ -191,7 +219,8 @@ button, input, textarea, select { font: inherit; }
   -webkit-backdrop-filter: var(--glass-filter);
   backdrop-filter: var(--glass-filter);
 }
-#settings-panel, #autocomplete, #tab-switcher, .auth-card { background: var(--glass-bg-thick); }
+#autocomplete, #tab-switcher, .auth-card { background: var(--glass-bg-thick); }
+#settings-panel { background: var(--glass-bg-sheet); }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   #header, #tabs, #input-bar, #qbar, #img-preview,
   #settings-panel, #autocomplete, #tab-switcher, .auth-card, .kb-sheet, .kb-chip { background: var(--glass-bg-fallback); }
@@ -238,11 +267,11 @@ button, input, textarea, select { font: inherit; }
   width: 300px;
 }
 .auth-primary {
-  display: none; width: 100%; padding: 12px; font-size: 14px; font-weight: 600;
+  display: none; width: 100%; min-height: var(--tap); padding: 12px; font-size: 15px; font-weight: 600;
   background: var(--accent-fill); color: var(--on-tint); border: none;
   border-radius: var(--radius-md); cursor: pointer;
   box-shadow: var(--shadow-1);
-  transition: transform var(--dur-fast) var(--transition), opacity var(--dur-fast) var(--transition);
+  transition: transform var(--dur-fast) var(--ease-spring), opacity var(--dur-fast) var(--transition);
 }
 .auth-primary:active { transform: scale(0.98); opacity: 0.9; }
 #totp-section { display: none; text-align: center; width: 100%; }
@@ -255,11 +284,11 @@ button, input, textarea, select { font: inherit; }
 }
 .totp-input:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
 .auth-btn {
-  width: 100%; padding: 10px; margin-top: 8px; font-size: 14px; font-weight: 600;
+  width: 100%; min-height: var(--tap); padding: 10px; margin-top: 8px; font-size: 15px; font-weight: 600;
   background: var(--accent-fill); color: var(--on-tint); border: none;
   border-radius: var(--radius-md); cursor: pointer;
   box-shadow: var(--shadow-1);
-  transition: transform var(--dur-fast) var(--transition), background var(--dur-fast) var(--transition);
+  transition: transform var(--dur-fast) var(--ease-spring);
 }
 .auth-btn:active { background: var(--accent-pressed); transform: scale(0.98); }
 #auth-error { color: var(--intent-danger-text); font-size: 12px; display: none; font-weight: 500; }
@@ -275,8 +304,8 @@ button, input, textarea, select { font: inherit; }
   box-shadow: var(--glass-highlight);
   padding-top: max(6px, env(safe-area-inset-top));
   gap: 8px;
-  position: relative;  /* containing block for #settings-panel */
-  z-index: 30;         /* the settings sheet hangs over the terminal */
+  position: relative;  /* stacking context above the terminal */
+  z-index: 30;         /* over the terminal layer */
 }
 .sess-name {
   font-size: 16px; font-weight: 600;
@@ -299,7 +328,6 @@ button, input, textarea, select { font: inherit; }
   display: flex; align-items: center; justify-content: center;
   background: none; border: 1px solid transparent; border-radius: var(--radius);
   color: var(--text-sec); cursor: pointer; padding: 0;
-  transition: color var(--dur-fast) var(--transition), background var(--dur-fast) var(--transition);
 }
 .tb-btn .ico { width: 20px; height: 20px; display: block; }
 .tb-btn:active, #settings-btn[aria-expanded="true"], #sp-toggle[aria-expanded="true"] {
@@ -313,79 +341,138 @@ button, input, textarea, select { font: inherit; }
 #sp-toggle, #new-btn, #app-title { display: none; }
 .hdr-sess { display: flex; align-items: center; }
 #hdr-id { min-width: 0; }
-/* ── Settings (T12) ── */
+/* ── Settings (T12; T09: a grouped-list glass sheet) ──
+   A thick glass sheet (popover beside the pane in landscape, a centred form
+   sheet over a scrim in portrait, a popover under the gear on the phone)
+   holding inset grouped rows: opaque white rows on the glass, so every line
+   of text sits on a solid surface whether or not the blur is drawn. Every
+   row and control is >= 44px. It lives at #app level (not inside #header)
+   so its backdrop samples the terminal, not the toolbar's own glass. */
 #settings-panel {
-  display: none; position: absolute; z-index: 60;
-  top: calc(100% + 6px); right: max(8px, env(safe-area-inset-right));
-  width: 280px; max-width: calc(100vw - 16px);
-  padding: 12px 14px;
+  display: none; position: absolute; z-index: 80;
+  top: calc(max(6px, env(safe-area-inset-top)) + 48px);
+  right: max(8px, env(safe-area-inset-right));
+  width: 320px; max-width: calc(100% - 16px);
+  max-height: calc(100% - 72px); overflow-y: auto; overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 16px 16px;
   border: 1px solid var(--glass-hairline);
   border-radius: var(--radius-lg);
   box-shadow: var(--glass-highlight), var(--glass-shadow);
+  color: var(--text);
 }
-#settings-panel.open { display: block; }
+#settings-panel.open { display: block; animation: sheet-rise var(--dur-med) var(--ease-sheet); }
+#settings-panel .set-head {
+  display: flex; align-items: center; justify-content: space-between;
+  min-height: 52px; padding: 0 0 0 4px;
+}
+#settings-panel .set-title { font-size: 17px; font-weight: 600; }
+#settings-panel .set-done {
+  min-height: var(--tap); min-width: var(--tap); padding: 0 6px; margin-right: -6px;
+  background: none; border: none; border-radius: var(--radius);
+  color: var(--accent-text); font-size: 17px; font-weight: 600; cursor: pointer;
+}
+#settings-panel .set-done:active { opacity: 0.5; }
+#settings-panel .set-done:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+#settings-panel .set-group {
+  background: var(--secondary-grouped-background);
+  border-radius: var(--radius-sm); overflow: hidden;
+}
+#settings-panel .set-grouphead {
+  padding: 18px 16px 6px; font-size: 13px; font-weight: 400;
+  letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-sec);
+}
 #settings-panel .set-row {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; min-height: 32px;
+  gap: 12px; min-height: var(--tap); padding: 0 16px;
+  font-size: 16px; line-height: 1.25; color: var(--text);
 }
-#settings-panel label {
-  font-size: 12px; color: var(--text); font-family: var(--font-mono);
+/* Inset separator, as in iOS grouped lists: from the text edge, not the row edge. */
+#settings-panel .set-row + .set-row {
+  background-image: linear-gradient(var(--separator), var(--separator));
+  background-size: calc(100% - 16px) 0.5px; background-position: 16px 0; background-repeat: no-repeat;
 }
+#settings-panel .set-label { flex: 1 1 auto; min-width: 0; }
+#settings-panel .set-val { flex: 0 0 auto; font-size: 16px; color: var(--text-sec); font-variant-numeric: tabular-nums; }
 #settings-panel .set-note {
-  font-size: 11px; color: var(--dim); line-height: 1.4; margin-top: 4px;
+  padding: 6px 16px 0; font-size: 13px; line-height: 1.35; color: var(--text-sec);
 }
-#settings-panel input[type="checkbox"] {
-  width: 20px; height: 20px; accent-color: var(--accent); flex-shrink: 0;
-}
+#settings-panel .set-note:empty { display: none; }
+/* Text-size slider row: small A, the track, large A (iOS Display settings). */
+#settings-panel .set-slider { gap: 10px; }
+#settings-panel .set-slider .a-sm { font-size: 13px; color: var(--text-sec); }
+#settings-panel .set-slider .a-lg { font-size: 21px; color: var(--text-sec); }
 #settings-panel input[type="range"] {
-  width: 100%; accent-color: var(--accent); margin: 2px 0;
+  flex: 1 1 auto; min-width: 0; height: var(--tap); margin: 0;
+  accent-color: var(--accent); background: none; cursor: pointer;
 }
-#settings-panel .set-val {
-  font-size: 12px; color: var(--text-sec);
-  font-family: var(--font-mono);
+#settings-panel input[type="range"]:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius); }
+/* Plain and destructive action rows (Update, Restart). */
+#settings-panel .set-action {
+  width: 100%; border: none; background-color: transparent; text-align: left;
+  color: var(--accent-text); cursor: pointer;
 }
-
-/* ── Server control ──
-   Restart and Update. Shapes borrowed from .qb rather than invented: these are
-   the same kind of control, and a second button vocabulary inside a 280px
-   panel would read as a different app. */
-#settings-panel .set-sep {
-  height: 0.5px; background: var(--border);
-  margin: 12px -14px 10px;
-}
-#settings-panel .srv-actions { display: flex; gap: 6px; margin-top: 8px; }
-#settings-panel .srv-btn {
-  flex: 1; padding: 6px; font-size: 11px; min-height: 32px;
-  background: var(--glass-chip-bg); border: 1px solid var(--glass-border);
-  border-radius: var(--radius); color: var(--text-sec); cursor: pointer;
-  font-family: var(--font-mono);
-  box-shadow: var(--glass-chip-shadow);
-}
-#settings-panel .srv-btn:active { background: var(--accent-fill); color: var(--on-tint); border-color: var(--accent-fill); }
-#settings-panel .srv-btn[disabled] { opacity: 0.4; cursor: default; }
+#settings-panel .set-action.destructive { color: var(--intent-danger-text); }
+#settings-panel .set-action:active { background-color: var(--surface-hover); }
+#settings-panel .set-action:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }
+#settings-panel .set-action[disabled] { color: var(--dim); cursor: default; background-color: transparent; }
 /* Armed is the second tap of a two-step confirm. It has to be unmistakable at
    a glance, because the next tap restarts the server. */
-#settings-panel .srv-btn.armed {
-  background: var(--intent-warn-text); border-color: var(--intent-warn-text); color: var(--on-tint);
-}
-#settings-panel .srv-btn.busy { opacity: 0.6; cursor: progress; }
+#settings-panel .set-action.armed { background-color: var(--intent-warn-text); color: var(--on-tint); }
+#settings-panel .set-action.busy { opacity: 0.6; cursor: progress; }
 #settings-panel #srv-note.avail { color: var(--accent-text); }
 #settings-panel #srv-result.ok { color: var(--intent-ok-text); }
 #settings-panel #srv-result.bad { color: var(--intent-danger-text); }
 
+/* iOS switch: a real checkbox (role=switch, keyboard operable) laid over a
+   drawn track. The input IS the 51x44 hit target; the 51x31 track and knob
+   are drawn behind it. On state: a green layer fades in (opacity) and the
+   knob slides (transform) -- nothing else animates. */
+.switch { position: relative; flex: 0 0 auto; width: 51px; height: var(--tap); display: inline-flex; align-items: center; }
+.switch input {
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
+  opacity: 0; cursor: pointer; z-index: 1;
+}
+.switch-track {
+  position: relative; width: 51px; height: 31px; border-radius: 16px;
+  background: var(--switch-off);
+}
+.switch-track::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: var(--switch-on); opacity: 0;
+  transition: opacity var(--dur-med) var(--ease-standard);
+}
+.switch-track::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 27px; height: 27px; border-radius: 50%;
+  background: var(--on-tint); box-shadow: var(--switch-knob-shadow);
+  transition: transform var(--dur-med) var(--ease-spring);
+}
+.switch input:checked + .switch-track::before { opacity: 1; }
+.switch input:checked + .switch-track::after { transform: translateX(20px); }
+.switch input:focus-visible + .switch-track { box-shadow: var(--focus-ring); }
+
 /* ── T14: full-screen terminal on a hardware keyboard ──
    Direct keystrokes make the compose box the exception rather than the
    primary input path, so it collapses to a slim bar and the terminal keeps
-   the space. Focus (Cmd-K, or a tap) expands it again -- :focus-within
+   the space. Focus (Cmd-J, or a tap) expands it again -- :focus-within
    rather than a JS class so there is no state to desynchronise.
    #msg keeps its 16px font even when collapsed: iOS zooms the viewport
-   when a field smaller than 16px takes focus. */
-body.hwkb #input-bar:not(:focus-within) { padding-top: 1px; padding-bottom: 1px; }
+   when a field smaller than 16px takes focus.
+   T09: Send stays laid out in every state. It used to be display:none
+   whenever the bar lost focus, and a POINTER click on it blurs #msg on
+   mousedown -- so the button vanished before mouseup and the click never
+   landed (touch was spared by its touchend handler). app.js also keeps
+   focus in #msg on mousedown, so the layout does not move under the click.
+   Phone sizes stay compact (phone-layout polish is a no-go); the 820px
+   block raises every one of these to 44px. */
+body.hwkb #input-bar:not(:focus-within) { padding-top: 1px; padding-bottom: 1px; align-items: center; }
 body.hwkb #input-bar:not(:focus-within) #msg {
-  min-height: 22px; height: 22px; padding: 1px 8px;
-  color: var(--dim); overflow: hidden;
+  min-height: 22px; height: 22px; padding: 1px 10px;
+  color: var(--dim); overflow: hidden; white-space: nowrap;
 }
-body.hwkb #input-bar:not(:focus-within) #send,
+body.hwkb #input-bar:not(:focus-within) #send { width: 22px; min-width: 22px; height: 22px; min-height: 22px; }
+body.hwkb #input-bar:not(:focus-within) #send .ico { width: 13px; height: 13px; }
 body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 /* ── Notification pulse on pill ── */
 #tab-pill .pill-notify {
@@ -566,23 +653,25 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 #diag.show { display: block; }
 
 /* ── Quick Actions (glass chips) ── */
+/* T09: 44px capsules. The bar drops its 4px vertical padding and the tab
+   strip below gives back 4px of its top padding, so the phone's terminal
+   keeps its height. */
 #qbar {
-  display: flex; gap: 6px; padding: 4px 10px; overflow-x: auto;
+  display: flex; gap: 6px; padding: 0 10px; overflow-x: auto;
   border-top: 0.5px solid var(--glass-hairline);
   -webkit-overflow-scrolling: touch;
 }
 #qbar::-webkit-scrollbar { display: none; }
 .qb {
-  flex: 1; padding: 4px 6px; font-size: 11px;
-  min-height: 32px;
+  flex: 1; padding: 0 12px; font-size: 13px; font-weight: 500;
+  min-height: var(--tap);
   display: flex; align-items: center; justify-content: center;
   background: var(--glass-chip-bg); border: 1px solid var(--glass-border);
-  border-radius: var(--radius); color: var(--text-sec); cursor: pointer;
-  font-family: var(--font-mono);
+  border-radius: calc(var(--tap) / 2); color: var(--text); cursor: pointer;
   box-shadow: var(--glass-chip-shadow);
-  transition: background var(--dur-fast) var(--transition), color var(--dur-fast) var(--transition);
-  letter-spacing: 0.3px;
+  transition: transform var(--dur-fast) var(--ease-spring);
 }
+.qb:active { transform: scale(0.96); }
 .qb:active { background: var(--accent-fill); color: var(--on-tint); border-color: var(--accent-fill); }
 
 /* ── Image Preview ── */
@@ -604,49 +693,58 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   box-shadow: var(--glass-chip-shadow);
 }
 
-/* ── Input (glass bar) ── */
+/* ── Input (glass compose bar, T09) ──
+   iOS Messages shape: a glass bar holding a capsule field and a filled
+   circular Send with an SF-style glyph (arrow.up with text, return when
+   empty -- an empty Send is Enter). Phone sizes stay compact; the 820px
+   block raises the field and buttons to 44px. */
 #input-bar {
-  display: flex; gap: 6px; padding: 3px 10px;
+  display: flex; gap: 8px; padding: 3px 10px;
   border-top: 0.5px solid var(--glass-hairline);
   box-shadow: var(--glass-highlight);
   align-items: flex-end;
 }
-#img-btn {
+#img-btn, #send {
+  flex: 0 0 auto; width: 32px; height: 32px; padding: 0;
   display: flex; align-items: center; justify-content: center;
-  padding: 4px; min-height: 32px; min-width: 32px;
-  background: var(--glass-chip-bg); color: var(--text-sec);
-  border: 1px solid var(--glass-border); border-radius: var(--radius);
-  font-weight: 600; font-size: 11px; cursor: pointer;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  box-shadow: var(--glass-chip-shadow);
-  transition: background var(--dur-fast) var(--transition), color var(--dur-fast) var(--transition);
+  border-radius: 50%; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  transition: transform var(--dur-fast) var(--ease-spring);
 }
-#img-btn:active { background: var(--accent-fill); color: var(--on-tint); border-color: var(--accent-fill); }
+#img-btn .ico, #send .ico { width: 18px; height: 18px; display: block; pointer-events: none; }
+#img-btn {
+  background: var(--glass-chip-bg); color: var(--text-sec);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-chip-shadow);
+}
+#img-btn:active, #send:active { transform: scale(0.92); }
 #img-btn.has-img { background: var(--accent-muted); color: var(--accent-text); border-color: var(--accent); }
+#img-btn.busy { opacity: 0.5; cursor: progress; }
+#img-btn.err { color: var(--intent-danger-text); border-color: var(--intent-danger); }
 #msg {
-  flex: 1; padding: 6px 10px; font-size: 16px;
+  flex: 1; min-width: 0; padding: 6px 12px; font-size: 16px;
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); color: var(--text); outline: none;
+  border-radius: 16px; color: var(--text); outline: none;
   font-family: var(--font-mono);
   resize: none; min-height: 32px; max-height: 64px;
   line-height: 1.4; overflow-y: auto;
   box-shadow: var(--shadow-field);
 }
 #msg:focus { border-color: var(--accent); box-shadow: var(--focus-ring); }
+/* The prompt is chrome text, not terminal text: system font, one line. */
+#msg::placeholder { font-family: var(--font-ui); color: var(--dim); }
+#msg.sent { border-color: var(--intent-ok); }
 #send {
-  padding: 4px 10px; min-height: 32px; min-width: 44px;
-  background: var(--accent-fill); color: var(--on-tint);
-  border: none; border-radius: var(--radius); font-weight: 600; font-size: 13px;
-  cursor: pointer; white-space: nowrap;
+  background: var(--accent-fill); color: var(--on-tint); border: none;
   box-shadow: var(--shadow-1);
-  transition: transform var(--dur-fast) var(--transition), background var(--dur-fast) var(--transition);
   touch-action: manipulation;
   -webkit-touch-callout: none;
   -webkit-user-select: none; user-select: none;
 }
-#send:active { background: var(--accent-pressed); transform: scale(0.98); }
+#send .ico-send { display: none; }
+#send.has-text .ico-send { display: block; }
+#send.has-text .ico-return { display: none; }
+#send:focus-visible, #img-btn:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 /* ── Autocomplete (glass sheet) ── */
 #autocomplete {
@@ -663,7 +761,6 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   cursor: pointer; border-bottom: 0.5px solid var(--border);
   font-family: var(--font-mono);
   min-height: 44px;
-  transition: background 0.1s;
 }
 .ac-item:active { background: var(--accent-muted); }
 .ac-item .ac-cmd { font-weight: 600; color: var(--accent-text); }
@@ -672,7 +769,7 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 /* ── Tab Strip (glass bar) ── */
 #tabs {
   display: flex; align-items: center; gap: 6px;
-  padding: 6px 10px; padding-bottom: calc(6px + max(12px, env(safe-area-inset-bottom)));
+  padding: 2px 10px; padding-bottom: calc(6px + max(12px, env(safe-area-inset-bottom)));
   border-top: 0.5px solid var(--glass-hairline);
   box-shadow: var(--glass-highlight);
   min-height: 46px; position: relative;
@@ -684,7 +781,6 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   border-radius: var(--radius-md); padding: 0 10px;
   height: 44px; min-width: 0; cursor: pointer;
   box-shadow: var(--glass-chip-shadow);
-  transition: border-color 0.15s var(--transition);
   overflow: hidden;
 }
 #tab-pill:active { border-color: var(--accent); }
@@ -708,7 +804,6 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   font-size: 12px; font-weight: 700; cursor: pointer;
   font-family: var(--font-mono);
   box-shadow: var(--glass-chip-shadow);
-  transition: border-color var(--dur-fast) var(--transition), color var(--dur-fast) var(--transition);
   position: relative;
 }
 #tab-count-btn:active { border-color: var(--accent); color: var(--accent-text); }
@@ -739,7 +834,6 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   font-family: var(--font-mono);
   border-bottom: 0.5px solid var(--border);
   min-height: 44px;
-  transition: background 0.1s;
 }
 .switcher-item:active { background: var(--surface-hover); }
 .switcher-item.active { background: var(--accent-muted); border-left: 2px solid var(--accent); }
@@ -756,7 +850,6 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   background: none; border: 1px solid var(--border);
   border-radius: var(--radius); color: var(--dim); font-size: 11px;
   font-weight: 600; cursor: pointer;
-  transition: background var(--dur-fast) var(--transition), color var(--dur-fast) var(--transition);
 }
 .switcher-item .sw-close:active { background: var(--intent-danger-text); color: var(--on-tint); border-color: var(--intent-danger-text); }
 /* -- T07: sessions side pane (herdr's Agents list) --
@@ -800,7 +893,6 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   width: 100%; min-height: 52px; padding: 7px 44px 7px 8px;
   background: none; border: none; border-radius: var(--radius-md);
   text-align: left; color: var(--text); cursor: pointer;
-  transition: background var(--dur-fast) var(--transition);
 }
 .sp-main:active { background: var(--surface-hover); }
 .sp-row.active .sp-main { background: var(--accent-muted); }
@@ -825,7 +917,13 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 .sp-row[data-status="done"] .sp-unseen, .kb-opt[data-status="done"] .sp-unseen { display: block; }
 .sp-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .sp-name, .sp-meta, .sp-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sp-name { font-size: 13px; font-weight: 600; line-height: 18px; }
+/* T09: a name wraps to a second line (at a hyphen or space first) before
+   it is ever cut; one line at typical lengths in the 226px pane. */
+.sp-name {
+  font-size: 13px; font-weight: 600; line-height: 18px;
+  white-space: normal; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+}
 .sp-meta {
   display: flex; align-items: center; gap: 4px; min-width: 0;
   font-size: 11px; line-height: 15px; color: var(--text-sec);
@@ -844,7 +942,6 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   display: flex; align-items: center; justify-content: center;
   background: none; border: none; border-radius: var(--radius);
   color: var(--dim); cursor: pointer;
-  transition: color var(--dur-fast) var(--transition), background var(--dur-fast) var(--transition);
 }
 .sp-close svg { width: 11px; height: 11px; display: block; }
 .sp-close:active { color: var(--intent-danger-text); background: var(--surface-hover); }
@@ -945,6 +1042,10 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 .kb-group[hidden], .kb-row[hidden], .kb-note[hidden], .kb-empty[hidden] { display: none; }
 .kb-empty { padding: 12px 10px; font-size: 13px; color: var(--dim); }
 @keyframes kb-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheet-rise {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
 @keyframes kb-rise {
   from { opacity: 0; transform: translateY(-8px) scale(0.98); }
   to { opacity: 1; transform: none; }
@@ -952,23 +1053,26 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 /* Swipe hint edges */
 #swipe-hint-left, #swipe-hint-right {
   position: absolute; top: 0; bottom: 0; width: 4px;
-  opacity: 0; transition: opacity 0.15s;
+  opacity: 0; transition: opacity 0.15s var(--ease-standard);
   pointer-events: none; z-index: 20;
 }
 #swipe-hint-left { left: 0; background: linear-gradient(to right, var(--accent), transparent); }
 #swipe-hint-right { right: 0; background: linear-gradient(to left, var(--accent), transparent); }
 #swipe-hint-left.flash, #swipe-hint-right.flash { opacity: 1; }
 /* New session pull indicator */
+/* T09: slides in by transform (compositor only) instead of animating width.
+   app.js sets translateX(200px - pull); the resting state is off-screen. */
 #new-session-hint {
-  position: absolute; right: 0; top: 0; bottom: 0; width: 0;
+  position: absolute; right: 0; top: 0; bottom: 0; width: 200px;
   background: var(--accent-muted); display: flex;
   align-items: center; justify-content: center;
-  overflow: hidden; transition: width 0.1s; z-index: 15;
+  transform: translateX(100%);
+  transition: transform 0.1s var(--ease-out); z-index: 15;
   pointer-events: none;
 }
 #new-session-hint span {
   color: var(--accent-text); font-size: 18px; font-weight: 700;
-  opacity: 0; transition: opacity 0.15s;
+  opacity: 0; transition: opacity 0.15s var(--ease-standard);
 }
 #new-session-hint.ready { background: var(--accent-strong-tint); }
 #new-session-hint.ready span { opacity: 1; }
@@ -977,11 +1081,16 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   50% { opacity:0.6; transform:scale(0.8); }
 }
 /* Reduced motion support */
+/* T09: reduced motion removes motion outright -- every animation and
+   transition, including the delayed visibility flip, so state changes are
+   instant. test/ipad-webkit.py asserts every duration computes to 0s. The
+   working spinner stops; its arc glyph alone still marks the state, and the
+   grid cursor stays solid instead of blinking. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
-  /* An infinite 0.01ms spin is still a spin; the arc alone marks working. */
-  .sp-row[data-status="working"] .sp-state svg,
-  .kb-opt[data-status="working"] .sp-state svg { animation: none; }
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }
 
 /* ══ T13: responsive breakpoints ════════════════════════════════════
@@ -1008,6 +1117,38 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   #header { padding: 8px 16px; padding-top: max(8px, env(safe-area-inset-top)); }
   .tb-btn { width: 44px; height: 44px; }
   #new-btn { display: flex; }
+  /* T09: the rename field is a 44px target too. */
+  .sess-name { height: var(--tap); padding: 0; }
+
+  /* -- T09: compose bar at 44px: capsule field, circular buttons -- */
+  #input-bar, body.hwkb #input-bar:not(:focus-within) {
+    padding: 6px 12px; padding-bottom: max(6px, env(safe-area-inset-bottom));
+    gap: 10px; align-items: flex-end;
+  }
+  #msg, body.hwkb #input-bar:not(:focus-within) #msg {
+    min-height: var(--tap); padding: 10px 16px; line-height: 22px;
+    border-radius: calc(var(--tap) / 2);
+  }
+  #msg { max-height: 132px; }
+  body.hwkb #input-bar:not(:focus-within) #msg { height: var(--tap); }
+  #img-btn, #send,
+  body.hwkb #input-bar:not(:focus-within) #send {
+    width: var(--tap); min-width: var(--tap); height: var(--tap); min-height: var(--tap);
+  }
+  #img-btn .ico, #send .ico,
+  body.hwkb #input-bar:not(:focus-within) #send .ico { width: 20px; height: 20px; }
+
+  /* Settings: a form sheet centred over a scrim (portrait); the landscape
+     block below turns it into a popover beside the pane. The scrim is the
+     sheet's own spread shadow, so it needs no element and no handler: a tap
+     outside the sheet is already the close gesture (app.js). */
+  #settings-panel {
+    top: calc(max(8px, env(safe-area-inset-top)) + 72px);
+    left: 0; right: 0; margin: 0 auto;
+    width: min(440px, calc(100% - 32px)); max-width: none;
+    max-height: calc(100% - 120px);
+    box-shadow: var(--glass-highlight), var(--glass-shadow), 0 0 0 100vmax var(--scrim);
+  }
   .term-wrap {
     left: max(10px, env(safe-area-inset-left));
     right: max(10px, env(safe-area-inset-right));
@@ -1034,7 +1175,6 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   .sess-name { max-width: 600px; }
   .auth-card { width: 400px; }
   #header { padding: 10px 20px; padding-top: max(10px, env(safe-area-inset-top)); }
-  #input-bar { padding: 4px 20px; }
 }
 
 /* -- T07 portrait iPad: toolbar + slide-over sheet --------------------------
@@ -1059,20 +1199,31 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
     padding-top: 4px;
     border: 1px solid var(--glass-hairline);
     border-radius: var(--radius-lg);
-    /* A sheet of TEXT over live terminal text: the thickest material, so the
-       rows stay legible even where the blur is not rendered. */
-    background: var(--glass-bg-fallback);
-    -webkit-backdrop-filter: var(--glass-filter);
-    backdrop-filter: var(--glass-filter);
+    /* T09: a sheet of TEXT over live terminal text is OPAQUE (--sheet-bg).
+       A 0.95 tint let the terminal read through wherever the blur was not
+       drawn -- headless WebKit on Windows claims backdrop-filter and never
+       draws it, so an @supports fallback cannot catch it. The scrim carries
+       the depth; the rim and highlight keep the glass edge. The harness
+       samples the sheet over known terminal text and fails on any contrast. */
+    background: var(--sheet-bg);
     box-shadow: var(--glass-highlight), var(--glass-shadow);
     transform: translateX(calc(-100% - 24px));
     visibility: hidden;
-    transition: transform var(--dur-med) var(--ease-out), visibility 0s linear var(--dur-med);
+    transition: transform var(--dur-slow) var(--ease-sheet), visibility 0s linear var(--dur-slow);
+  }
+  #sidepane::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    border-radius: inherit; padding: 1px;
+    background: var(--glass-rim);
+    -webkit-mask: var(--mask-solid) content-box, var(--mask-solid);
+    -webkit-mask-composite: xor;
+    mask: var(--mask-solid) content-box, var(--mask-solid);
+    mask-composite: exclude;
   }
   #sidepane:focus { outline: none; }
   #sidepane.open {
     transform: none; visibility: visible;
-    transition: transform var(--dur-med) var(--ease-out), visibility 0s;
+    transition: transform var(--dur-slow) var(--ease-sheet), visibility 0s;
   }
   #sp-scrim {
     display: block; position: absolute; inset: 0; z-index: 65;
@@ -1081,9 +1232,6 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
     transition: opacity var(--dur-med) var(--ease-standard);
   }
   #sp-scrim.open { opacity: 1; pointer-events: auto; }
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    #sidepane { background: var(--glass-bg-fallback); }
-  }
 }
 
 /* -- T07 landscape iPad: pinned floating side pane --------------------------
@@ -1103,7 +1251,7 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
 @media (min-width: 820px) and (orientation: landscape) {
   #app.shown {
     display: grid;
-    grid-template-columns: 200px 1fr;
+    grid-template-columns: var(--pane-col) 1fr;
     grid-template-rows: 1fr auto auto;
     grid-template-areas:
       "pane term"
@@ -1113,7 +1261,7 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   #chrome-col {
     grid-area: pane;
     display: flex; flex-direction: column; min-height: 0;
-    position: relative; z-index: 30;  /* the settings sheet hangs over the terminal */
+    position: relative; z-index: 30;  /* over the terminal layer */
     margin: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom))
             max(8px, env(safe-area-inset-left));
     border: 1px solid var(--glass-hairline);
@@ -1156,14 +1304,36 @@ body.hwkb #input-bar:not(:focus-within) #img-btn { display: none; }
   .sess-dir {
     font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  /* 280px cannot fit the pane; the sheet hangs to its right, over the terminal. */
-  #settings-panel { top: 0; left: calc(100% + 10px); right: auto; }
+  /* The pane cannot hold the sheet; it is a popover to its right, over the
+     terminal, with no scrim (the terminal stays readable beside it). */
+  #settings-panel {
+    top: max(8px, env(safe-area-inset-top)); left: calc(var(--pane-col) + 2px); right: auto;
+    margin: 0; width: 360px; max-height: calc(100% - 16px);
+    box-shadow: var(--glass-highlight), var(--glass-shadow);
+  }
 
   #sidepane { flex: 1 1 auto; border-top: 0.5px solid var(--glass-hairline); }
 
   /* The pane's own 8px right margin is the gap to the text, so the terminal
-     starts at the column edge: 1194 - 200 - 10 = 984 px wide, the same as
-     the rail it replaces. */
+     starts at the column edge: 1194 - 226 - 10 = 958 px wide (T09 widened
+     the pane from 200px so typical session names fit on one line).
+
+     T09 compose bar: while the hardware keyboard drives the terminal and the
+     compose box is not in use, the bar docks at the foot of the pane, so the
+     terminal takes the full height -- that height is what pays for the wider
+     pane (958 x 826 >= the T07 floor of 984 x 802). Focus (Cmd-J or a tap)
+     moves it under the terminal at full width while composing. */
+  body.hwkb #chrome-col { padding-bottom: 57px; }
+  body.hwkb #input-wrap:not(:focus-within) {
+    grid-area: pane; align-self: end; z-index: 31;
+    margin: 0 9px calc(max(8px, env(safe-area-inset-bottom)) + 1px)
+            calc(max(8px, env(safe-area-inset-left)) + 1px);
+  }
+  body.hwkb #input-wrap:not(:focus-within) #input-bar {
+    background: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+    box-shadow: none; border-top: 0.5px solid var(--glass-hairline);
+    padding: 6px 8px;
+  }
   .term-wrap { left: 0; }
   #term-area  { grid-area: term; }
   #diag       { grid-area: diag; }

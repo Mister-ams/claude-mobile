@@ -60,6 +60,9 @@
   <symbol id="i-gear" viewBox="0 0 20 20"><path d="M16.2 8.5 L18.3 9.0 L18.3 11.0 L16.2 11.5 L15.5 13.3 L16.6 15.2 L15.2 16.6 L13.3 15.5 L11.5 16.2 L11.0 18.3 L9.0 18.3 L8.5 16.2 L6.7 15.5 L4.8 16.6 L3.4 15.2 L4.5 13.3 L3.8 11.5 L1.7 11.0 L1.7 9.0 L3.8 8.5 L4.5 6.7 L3.4 4.8 L4.8 3.4 L6.7 4.5 L8.5 3.8 L9.0 1.7 L11.0 1.7 L11.5 3.8 L13.3 4.5 L15.2 3.4 L16.6 4.8 L15.5 6.7 Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="10" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
   <symbol id="i-sort" viewBox="0 0 20 20"><path d="M6.5 16V4M3.5 7l3-3 3 3M13.5 4v12M10.5 13l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
   <symbol id="i-xmark" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 20 20"><path d="M10 16.5V4M4.8 9.2 10 4l5.2 5.2" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-return" viewBox="0 0 20 20"><path d="M15.5 4.5v5.5a2.5 2.5 0 0 1-2.5 2.5H4.8M8.3 9 4.8 12.5 8.3 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-photo" viewBox="0 0 20 20"><rect x="2.5" y="4.5" width="15" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7" cy="8.5" r="1.4" fill="currentColor"/><path d="M3 14.2l4-3.7 3 2.7 2.6-2.4 4.4 3.9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
   <symbol id="i-branch" viewBox="0 0 20 20"><circle cx="6" cy="4.5" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="6" cy="15.5" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="14" cy="6.5" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 6.5v7M14 8.5c0 3-8 2-8 5" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
   <!-- status: blocked = exclamation disc, working = spinning arc, done = check
        disc, idle = small dot, unknown = hollow ring. Cut-outs are even-odd
@@ -92,34 +95,6 @@
       </div>
       <button type="button" id="new-btn" class="tb-btn" aria-label="New session"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg></button>
       <button id="settings-btn" class="tb-btn" aria-label="Settings" aria-expanded="false" aria-controls="settings-panel"><svg class="ico" aria-hidden="true"><use href="#i-gear"/></svg></button>
-      <!-- T12: client settings. Wired with addEventListener in app.js rather
-           than inline onclick so the panel survives the T04 CSP tightening
-           that drops 'unsafe-inline' from script-src. -->
-      <div id="settings-panel" role="group" aria-label="Client settings">
-        <div class="set-row">
-          <label for="set-hwkb">Hardware keyboard</label>
-          <input type="checkbox" id="set-hwkb">
-        </div>
-        <p class="set-note">Keys go straight to the terminal unless the compose box has focus. Cmd-J composes, Esc returns. Cmd-K switches session; ctrl+b ? lists every key.</p>
-        <div class="set-row">
-          <label for="set-font">Terminal font</label>
-          <span class="set-val"><span id="set-font-val">13</span>px</span>
-        </div>
-        <input type="range" id="set-font" min="10" max="24" step="1" aria-label="Terminal font size">
-        <p class="set-note" id="set-cols"></p>
-
-        <div class="set-sep" role="separator"></div>
-        <div class="set-row">
-          <label>Server</label>
-          <span class="set-val" id="srv-version">&mdash;</span>
-        </div>
-        <p class="set-note" id="srv-note">Checking...</p>
-        <div class="srv-actions">
-          <button type="button" id="srv-restart" class="srv-btn">Restart</button>
-          <button type="button" id="srv-update" class="srv-btn" disabled>Update</button>
-        </div>
-        <p class="set-note" id="srv-result"></p>
-      </div>
     </div>
 
     <!-- T07: sessions side pane (herdr's Agents list). Rows are keyed by
@@ -136,6 +111,50 @@
     </aside>
   </div>
   <div id="sp-scrim" aria-hidden="true"></div>
+
+  <!-- T12: client settings; T09: a grouped-list glass sheet at #app level
+       (not inside #header, so its backdrop samples the terminal). Wired with
+       addEventListener in app.js -- no inline on* (CSP). -->
+  <div id="settings-panel" role="dialog" aria-labelledby="set-title">
+    <div class="set-head">
+      <h2 id="set-title" class="set-title">Settings</h2>
+      <button type="button" id="set-done" class="set-done">Done</button>
+    </div>
+    <div class="set-group">
+      <div class="set-row">
+        <label class="set-label" for="set-hwkb">Hardware keyboard</label>
+        <span class="switch"><input type="checkbox" role="switch" id="set-hwkb"><span class="switch-track" aria-hidden="true"></span></span>
+      </div>
+    </div>
+    <p class="set-note">Keys go straight to the terminal unless the compose box has focus. Cmd-J composes, Esc returns. Cmd-K switches session; ctrl+b ? lists every key.</p>
+
+    <h3 class="set-grouphead" id="set-font-head">Terminal text</h3>
+    <div class="set-group" role="group" aria-labelledby="set-font-head">
+      <div class="set-row">
+        <span class="set-label">Size</span>
+        <span class="set-val"><span id="set-font-val">13</span> px</span>
+      </div>
+      <div class="set-row set-slider">
+        <span class="a-sm" aria-hidden="true">A</span>
+        <input type="range" id="set-font" min="10" max="24" step="1" aria-label="Terminal font size">
+        <span class="a-lg" aria-hidden="true">A</span>
+      </div>
+    </div>
+    <p class="set-note" id="set-cols"></p>
+
+    <h3 class="set-grouphead" id="set-srv-head">Server</h3>
+    <div class="set-group" role="group" aria-labelledby="set-srv-head">
+      <div class="set-row">
+        <span class="set-label">Version</span>
+        <span class="set-val" id="srv-version">&mdash;</span>
+      </div>
+      <button type="button" id="srv-update" class="set-row set-action srv-btn" disabled>Update</button>
+      <button type="button" id="srv-restart" class="set-row set-action destructive srv-btn">Restart</button>
+    </div>
+    <p class="set-note" id="srv-note">Checking...</p>
+    <p class="set-note" id="srv-result"></p>
+  </div>
+
 
   <div id="term-area">
     <div id="scroll-zones">
@@ -171,12 +190,13 @@
     <div id="input-bar">
       <input type="file" id="img-input" accept="image/*,image/heic"
              style="position:absolute;width:0;height:0;opacity:0;overflow:hidden">
-      <label id="img-btn" for="img-input" role="button" aria-label="Attach image">Img</label>
+      <label id="img-btn" for="img-input" role="button" aria-label="Attach image"><svg class="ico" aria-hidden="true"><use href="#i-photo"/></svg></label>
       <textarea id="msg" rows="1" placeholder="Type a message..."
                 autocomplete="off" autocorrect="off" autocapitalize="none"
                 spellcheck="false" inputmode="text" data-gramm="false"
                 aria-label="Message input"></textarea>
-      <button id="send" aria-label="Send message">Enter</button>
+      <!-- T09: a filled circle; return glyph when empty (sends Enter), arrow.up with text. -->
+      <button type="button" id="send" aria-label="Send Enter"><svg class="ico ico-return" aria-hidden="true"><use href="#i-return"/></svg><svg class="ico ico-send" aria-hidden="true"><use href="#i-arrow-up"/></svg></button>
     </div>
   </div>
 

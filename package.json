@@ -16,7 +16,7 @@
     "test:herdr-events": "node test/herdr-events-verify.js",
     "sim:up": "node scripts/throwaway-instance.js up",
     "sim:down": "node scripts/throwaway-instance.js down",
-    "test:ipad-live": "py test/ipad-webkit-live.py --port 3457 --totp-secret-file .totp-secret --known-defects send-pointer"
+    "test:ipad-live": "py test/ipad-webkit-live.py --port 3457 --totp-secret-file .totp-secret"
   },
   "dependencies": {
     "@simplewebauthn/server": "^10.0.1",
