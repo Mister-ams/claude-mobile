@@ -1,0 +1,3956 @@
+{
+  "benignConsoleAllowlist": [
+    "Viewport argument key \"interactive-widget\" not recognized and ignored."
+  ],
+  "cspParity": {
+    "match": true,
+    "served": "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    "serverJs": "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: blob:; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+  },
+  "ipad-gen-11": {
+    "app": {
+      "bars": {
+        "header": {
+          "h": 76,
+          "w": 656
+        },
+        "input-bar": {
+          "h": 56,
+          "w": 656
+        },
+        "input-wrap": {
+          "h": 56,
+          "w": 656
+        },
+        "qbar": "hidden",
+        "tab-switcher": "hidden",
+        "tabs": "hidden"
+      },
+      "controlFonts": {
+        "#<button:button> \"CLAUDE-MOBILE, Working, \"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close CLAUDE-MOBILE\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close HERDR\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close LOOMI API\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close LOOMI OS\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"HERDR, Needs input, in w\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"LOOMI API, Done, not yet\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"LOOMI OS, Idle, in loomi\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow down\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#new-btn<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#send<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-done<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#sp-toggle<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#srv-restart<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        }
+      },
+      "layout": "flex",
+      "tapTargets": {
+        "small": [],
+        "under44": 0,
+        "visible": 6
+      },
+      "terminal": {
+        "areaPctOfViewport": 82.5,
+        "areaPx": 510847,
+        "h": 803,
+        "heightPct": 85.1,
+        "left": 10,
+        "top": 80,
+        "w": 636
+      }
+    },
+    "auth": {
+      "controlFonts": {
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow down\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#img-clear<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#new-btn<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#send<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-done<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#sname<input:text>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#sp-toggle<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-restart<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        }
+      },
+      "tapTargets": {
+        "small": [],
+        "under44": 0,
+        "visible": 2
+      },
+      "visibleText": [
+        "CLAUDE MOBILE",
+        "Enter verification code",
+        "Verify"
+      ]
+    },
+    "consoleErrorsAllowlisted": [
+      "Viewport argument key \"interactive-widget\" not recognized and ignored."
+    ],
+    "consoleOther": [
+      "warning: Wake lock: Permission was denied"
+    ],
+    "device": "iPad (gen 11)",
+    "device_facts": {
+      "dpr": 2.5,
+      "maxTouchPoints": 0,
+      "pointerCoarse": true,
+      "tapsArriveAs": "mouse",
+      "touchEventsSupported": true,
+      "viewport": {
+        "h": 944,
+        "w": 656
+      }
+    },
+    "geometry": {
+      "base": {
+        "bad": [],
+        "charWidth": 9.609375,
+        "checked": 81,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.02,
+          "dTop": 0
+        },
+        "rowHeight": 20.5625
+      },
+      "font+3": {
+        "bad": [],
+        "charWidth": 11.40625,
+        "checked": 45,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.01,
+          "dTop": 0
+        },
+        "rowHeight": 24.421875
+      }
+    },
+    "motion": {
+      "animatedTransitions": 22,
+      "keyframes": [
+        "fadeIn",
+        "grid-cursor-blink",
+        "sp-spin",
+        "kb-fade",
+        "sheet-rise",
+        "kb-rise",
+        "pulse"
+      ],
+      "violations": []
+    },
+    "palette": {
+      "bg": "#FBFBFD",
+      "colors": [
+        {
+          "color": "#1D1D1F",
+          "name": "ansi-0",
+          "ratio": 16.28
+        },
+        {
+          "color": "#C62828",
+          "name": "ansi-1",
+          "ratio": 5.44
+        },
+        {
+          "color": "#1A7F37",
+          "name": "ansi-2",
+          "ratio": 4.91
+        },
+        {
+          "color": "#8A6100",
+          "name": "ansi-3",
+          "ratio": 5.36
+        },
+        {
+          "color": "#0055BF",
+          "name": "ansi-4",
+          "ratio": 6.66
+        },
+        {
+          "color": "#A626A4",
+          "name": "ansi-5",
+          "ratio": 5.92
+        },
+        {
+          "color": "#0E7490",
+          "name": "ansi-6",
+          "ratio": 5.18
+        },
+        {
+          "color": "#5F6368",
+          "name": "ansi-7",
+          "ratio": 5.85
+        },
+        {
+          "color": "#6E6E73",
+          "name": "ansi-8",
+          "ratio": 4.91
+        },
+        {
+          "color": "#D70015",
+          "name": "ansi-9",
+          "ratio": 5.21
+        },
+        {
+          "color": "#3A7D00",
+          "name": "ansi-10",
+          "ratio": 4.94
+        },
+        {
+          "color": "#A05A00",
+          "name": "ansi-11",
+          "ratio": 5.13
+        },
+        {
+          "color": "#0066CC",
+          "name": "ansi-12",
+          "ratio": 5.39
+        },
+        {
+          "color": "#9A3FC4",
+          "name": "ansi-13",
+          "ratio": 5.23
+        },
+        {
+          "color": "#007A7A",
+          "name": "ansi-14",
+          "ratio": 5.0
+        },
+        {
+          "color": "#3A3A3C",
+          "name": "ansi-15",
+          "ratio": 10.98
+        },
+        {
+          "color": "#1D1D1F",
+          "name": "fg",
+          "ratio": 16.28
+        }
+      ],
+      "min": 4.91
+    },
+    "settings": {
+      "controlFonts": {
+        "#<button:button> \"CLAUDE-MOBILE, Working, \"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close CLAUDE-MOBILE\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close HERDR\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close LOOMI API\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close LOOMI OS\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"HERDR, Needs input, in w\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"LOOMI API, Done, not yet\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"LOOMI OS, Idle, in loomi\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow down\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#new-btn<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#send<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-done<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-font<input:range>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#settings-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#sp-toggle<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#srv-restart<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#srv-update<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        }
+      },
+      "opened": true,
+      "tapTargets": {
+        "small": [],
+        "under44": 0,
+        "visible": 11
+      }
+    },
+    "shortcuts": {
+      "afterTimeout": [
+        "x"
+      ],
+      "chip": "ctrl+b   n p 1-9 a ? s  --  any other key goes to herdr",
+      "focusReport": {
+        "afterOff": [],
+        "blur": [
+          [
+            4,
+            false
+          ]
+        ],
+        "focus": [
+          [
+            4,
+            true
+          ]
+        ],
+        "modeOff": [],
+        "modeOffAgain": [],
+        "modeOn": [
+          [
+            4,
+            true
+          ]
+        ],
+        "switchAway": [
+          [
+            4,
+            false
+          ]
+        ],
+        "switchBack": [
+          [
+            4,
+            true
+          ]
+        ]
+      },
+      "help": {
+        "filtered": [
+          "ctrl+b vSplit pane vertically",
+          "ctrl+b minusSplit pane horizontally"
+        ],
+        "total": 34
+      },
+      "literalPrefix": [
+        "\u0002"
+      ],
+      "passthroughV": [
+        "\u0002v"
+      ],
+      "plainKeys": "a\u0003\u001b\u001b[A\u001bx",
+      "s": {
+        "chip": null,
+        "modal": true,
+        "opened": true
+      },
+      "switcherFilters": {
+        "loomi-api": [
+          4
+        ],
+        "mobile": [
+          2
+        ],
+        "side pane": [
+          2
+        ],
+        "zzq": []
+      },
+      "switcherPick": {
+        "active": 4,
+        "picked": 4
+      },
+      "switches": [
+        [
+          "n",
+          3
+        ],
+        [
+          "p",
+          1
+        ],
+        [
+          "2",
+          4
+        ],
+        [
+          "a#1",
+          3
+        ],
+        [
+          "a#2",
+          4
+        ]
+      ]
+    },
+    "sidepane": {
+      "afterPick": {
+        "active": 4,
+        "connectSent": [
+          {
+            "renderer": "grid",
+            "session": 4,
+            "type": "connect"
+          }
+        ],
+        "open": false,
+        "visible": false
+      },
+      "afterScrim": {
+        "open": false,
+        "visible": false
+      },
+      "closed": {
+        "active": 1,
+        "open": false,
+        "order": [
+          3,
+          4,
+          2,
+          1
+        ],
+        "pillVisible": false,
+        "rect": {
+          "bottom": 936,
+          "left": -356,
+          "right": -16,
+          "top": 8,
+          "w": 340
+        },
+        "rows": [
+          {
+            "branch": null,
+            "branchGlyph": true,
+            "closeLabel": "Close HERDR",
+            "current": null,
+            "cwd": "work",
+            "glyph": "#s-blocked",
+            "id": 3,
+            "label": "HERDR, Needs input, in work, Claude Code",
+            "name": "HERDR",
+            "status": "blocked",
+            "title": "Claude Code",
+            "unseenShown": false,
+            "worktree": null
+          },
+          {
+            "branch": "0123456",
+            "branchGlyph": true,
+            "closeLabel": "Close LOOMI API",
+            "current": null,
+            "cwd": "loomi-api",
+            "glyph": "#s-done",
+            "id": 4,
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
+            "name": "LOOMI API",
+            "status": "done",
+            "title": "Claude Code",
+            "unseenShown": true,
+            "worktree": null
+          },
+          {
+            "branch": "feat/claude-mobile-next",
+            "branchGlyph": true,
+            "closeLabel": "Close CLAUDE-MOBILE",
+            "current": null,
+            "cwd": "cm-next",
+            "glyph": "#s-working",
+            "id": 2,
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
+            "name": "CLAUDE-MOBILE",
+            "status": "working",
+            "title": "Claude Code - side pane",
+            "unseenShown": false,
+            "worktree": "claude-mobile"
+          },
+          {
+            "branch": "master",
+            "branchGlyph": true,
+            "closeLabel": "Close LOOMI OS",
+            "current": "true",
+            "cwd": "loomi-os",
+            "glyph": "#s-idle",
+            "id": 1,
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
+            "name": "LOOMI OS",
+            "status": "idle",
+            "title": "Claude Code",
+            "unseenShown": false,
+            "worktree": null
+          }
+        ],
+        "scrimOpen": false,
+        "sortControl": false,
+        "targets": [
+          {
+            "el": "sp-toggle",
+            "h": 44,
+            "label": "Show sessions",
+            "w": 44
+          },
+          {
+            "el": "new-btn",
+            "h": 44,
+            "label": "New session",
+            "w": 44
+          },
+          {
+            "el": "settings-btn",
+            "h": 44,
+            "label": "Settings",
+            "w": 44
+          }
+        ],
+        "terminalLeft": 10,
+        "toggleExpanded": "false",
+        "toggleVisible": true,
+        "visible": false
+      },
+      "legibility": {
+        "probe": {
+          "height": 569,
+          "width": 292,
+          "x": 32,
+          "y": 343
+        },
+        "sheetHidden": {
+          "max": 209,
+          "min": 24,
+          "range": 185
+        },
+        "sheetOpen": {
+          "max": 255,
+          "min": 255,
+          "range": 0
+        }
+      },
+      "mode": "slide-over",
+      "names": {
+        "names": [
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "HERDR"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "LOOMI API"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "CLAUDE-MOBILE"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "LOOMI OS"
+          }
+        ],
+        "probe": {
+          "clipped": false,
+          "lines": 1,
+          "text": "LOOMI-PAYMENTS-2"
+        }
+      },
+      "open": {
+        "active": 1,
+        "open": true,
+        "order": [
+          3,
+          4,
+          2,
+          1
+        ],
+        "pillVisible": false,
+        "rect": {
+          "bottom": 936,
+          "left": 8,
+          "right": 348,
+          "top": 8,
+          "w": 340
+        },
+        "rows": [
+          {
+            "branch": null,
+            "branchGlyph": true,
+            "closeLabel": "Close HERDR",
+            "current": null,
+            "cwd": "work",
+            "glyph": "#s-blocked",
+            "id": 3,
+            "label": "HERDR, Needs input, in work, Claude Code",
+            "name": "HERDR",
+            "status": "blocked",
+            "title": "Claude Code",
+            "unseenShown": false,
+            "worktree": null
+          },
+          {
+            "branch": "0123456",
+            "branchGlyph": true,
+            "closeLabel": "Close LOOMI API",
+            "current": null,
+            "cwd": "loomi-api",
+            "glyph": "#s-done",
+            "id": 4,
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
+            "name": "LOOMI API",
+            "status": "done",
+            "title": "Claude Code",
+            "unseenShown": true,
+            "worktree": null
+          },
+          {
+            "branch": "feat/claude-mobile-next",
+            "branchGlyph": true,
+            "closeLabel": "Close CLAUDE-MOBILE",
+            "current": null,
+            "cwd": "cm-next",
+            "glyph": "#s-working",
+            "id": 2,
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
+            "name": "CLAUDE-MOBILE",
+            "status": "working",
+            "title": "Claude Code - side pane",
+            "unseenShown": false,
+            "worktree": "claude-mobile"
+          },
+          {
+            "branch": "master",
+            "branchGlyph": true,
+            "closeLabel": "Close LOOMI OS",
+            "current": "true",
+            "cwd": "loomi-os",
+            "glyph": "#s-idle",
+            "id": 1,
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
+            "name": "LOOMI OS",
+            "status": "idle",
+            "title": "Claude Code",
+            "unseenShown": false,
+            "worktree": null
+          }
+        ],
+        "scrimOpen": true,
+        "sortControl": false,
+        "targets": [
+          {
+            "el": "sp-toggle",
+            "h": 44,
+            "label": "Hide sessions",
+            "w": 44
+          },
+          {
+            "el": "new-btn",
+            "h": 44,
+            "label": "New session",
+            "w": 44
+          },
+          {
+            "el": "settings-btn",
+            "h": 44,
+            "label": "Settings",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "HERDR, Needs input, in work, Claude Code",
+            "w": 330
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close HERDR",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
+            "w": 330
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close LOOMI API",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
+            "w": 330
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close CLAUDE-MOBILE",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
+            "w": 330
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close LOOMI OS",
+            "w": 44
+          }
+        ],
+        "terminalLeft": 10,
+        "toggleExpanded": "true",
+        "toggleVisible": true,
+        "visible": true
+      },
+      "targets": {
+        "under44": [],
+        "visible": 11
+      },
+      "viewedUpdate": {
+        "created": 0,
+        "moved": 1,
+        "order": [
+          3,
+          2,
+          1,
+          4
+        ],
+        "reused": true,
+        "status": {
+          "1": "idle",
+          "2": "working",
+          "3": "blocked",
+          "4": "idle"
+        },
+        "touched": [
+          4
+        ]
+      }
+    }
+  },
+  "ipad-gen-11-landscape": {
+    "app": {
+      "bars": {
+        "header": {
+          "h": 109,
+          "w": 208
+        },
+        "input-bar": {
+          "h": 56,
+          "w": 208
+        },
+        "input-wrap": {
+          "h": 56,
+          "w": 208
+        },
+        "qbar": "hidden",
+        "tab-switcher": "hidden",
+        "tabs": "hidden"
+      },
+      "controlFonts": {
+        "#<button:button> \"CLAUDE-MOBILE, Working, \"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close CLAUDE-MOBILE\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close HERDR\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close LOOMI API\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close LOOMI OS\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"HERDR, Needs input, in w\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"LOOMI API, Done, not yet\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"LOOMI OS, Idle, in loomi\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:submit> \"Arrow down\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#new-btn<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#send<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-done<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#sp-toggle<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-restart<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        }
+      },
+      "layout": "grid",
+      "tapTargets": {
+        "small": [],
+        "under44": 0,
+        "visible": 13
+      },
+      "terminal": {
+        "areaPctOfViewport": 74.1,
+        "areaPx": 458784,
+        "h": 648,
+        "heightPct": 98.8,
+        "left": 226,
+        "top": 4,
+        "w": 708
+      }
+    },
+    "auth": {
+      "controlFonts": {
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow down\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#img-clear<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#new-btn<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#send<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-done<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#sname<input:text>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#sp-toggle<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-restart<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        }
+      },
+      "tapTargets": {
+        "small": [],
+        "under44": 0,
+        "visible": 2
+      },
+      "visibleText": [
+        "CLAUDE MOBILE",
+        "Enter verification code",
+        "Verify"
+      ]
+    },
+    "consoleErrorsAllowlisted": [
+      "Viewport argument key \"interactive-widget\" not recognized and ignored."
+    ],
+    "consoleOther": [
+      "warning: Wake lock: Permission was denied"
+    ],
+    "device": "iPad (gen 11) landscape",
+    "device_facts": {
+      "dpr": 2.5,
+      "maxTouchPoints": 0,
+      "pointerCoarse": true,
+      "tapsArriveAs": "mouse",
+      "touchEventsSupported": true,
+      "viewport": {
+        "h": 656,
+        "w": 944
+      }
+    },
+    "geometry": {
+      "base": {
+        "bad": [],
+        "charWidth": 9.609375,
+        "checked": 81,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.02,
+          "dTop": 0
+        },
+        "rowHeight": 20.5625
+      },
+      "font+3": {
+        "bad": [],
+        "charWidth": 11.40625,
+        "checked": 81,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.01,
+          "dTop": 0
+        },
+        "rowHeight": 24.421875
+      }
+    },
+    "motion": {
+      "animatedTransitions": 20,
+      "keyframes": [
+        "fadeIn",
+        "grid-cursor-blink",
+        "sp-spin",
+        "kb-fade",
+        "sheet-rise",
+        "kb-rise",
+        "pulse"
+      ],
+      "violations": []
+    },
+    "palette": {
+      "bg": "#FBFBFD",
+      "colors": [
+        {
+          "color": "#1D1D1F",
+          "name": "ansi-0",
+          "ratio": 16.28
+        },
+        {
+          "color": "#C62828",
+          "name": "ansi-1",
+          "ratio": 5.44
+        },
+        {
+          "color": "#1A7F37",
+          "name": "ansi-2",
+          "ratio": 4.91
+        },
+        {
+          "color": "#8A6100",
+          "name": "ansi-3",
+          "ratio": 5.36
+        },
+        {
+          "color": "#0055BF",
+          "name": "ansi-4",
+          "ratio": 6.66
+        },
+        {
+          "color": "#A626A4",
+          "name": "ansi-5",
+          "ratio": 5.92
+        },
+        {
+          "color": "#0E7490",
+          "name": "ansi-6",
+          "ratio": 5.18
+        },
+        {
+          "color": "#5F6368",
+          "name": "ansi-7",
+          "ratio": 5.85
+        },
+        {
+          "color": "#6E6E73",
+          "name": "ansi-8",
+          "ratio": 4.91
+        },
+        {
+          "color": "#D70015",
+          "name": "ansi-9",
+          "ratio": 5.21
+        },
+        {
+          "color": "#3A7D00",
+          "name": "ansi-10",
+          "ratio": 4.94
+        },
+        {
+          "color": "#A05A00",
+          "name": "ansi-11",
+          "ratio": 5.13
+        },
+        {
+          "color": "#0066CC",
+          "name": "ansi-12",
+          "ratio": 5.39
+        },
+        {
+          "color": "#9A3FC4",
+          "name": "ansi-13",
+          "ratio": 5.23
+        },
+        {
+          "color": "#007A7A",
+          "name": "ansi-14",
+          "ratio": 5.0
+        },
+        {
+          "color": "#3A3A3C",
+          "name": "ansi-15",
+          "ratio": 10.98
+        },
+        {
+          "color": "#1D1D1F",
+          "name": "fg",
+          "ratio": 16.28
+        }
+      ],
+      "min": 4.91
+    },
+    "settings": {
+      "controlFonts": {
+        "#<button:button> \"CLAUDE-MOBILE, Working, \"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close CLAUDE-MOBILE\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close HERDR\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close LOOMI API\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close LOOMI OS\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"HERDR, Needs input, in w\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"LOOMI API, Done, not yet\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"LOOMI OS, Idle, in loomi\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:submit> \"Arrow down\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#new-btn<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#send<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-done<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-font<input:range>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#settings-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#sp-toggle<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-restart<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#srv-update<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        }
+      },
+      "opened": true,
+      "tapTargets": {
+        "small": [],
+        "under44": 0,
+        "visible": 18
+      }
+    },
+    "shortcuts": {
+      "afterTimeout": [
+        "x"
+      ],
+      "chip": "ctrl+b   n p 1-9 a ? s  --  any other key goes to herdr",
+      "focusReport": {
+        "afterOff": [],
+        "blur": [
+          [
+            4,
+            false
+          ]
+        ],
+        "focus": [
+          [
+            4,
+            true
+          ]
+        ],
+        "modeOff": [],
+        "modeOffAgain": [],
+        "modeOn": [
+          [
+            4,
+            true
+          ]
+        ],
+        "switchAway": [
+          [
+            4,
+            false
+          ]
+        ],
+        "switchBack": [
+          [
+            4,
+            true
+          ]
+        ]
+      },
+      "help": {
+        "filtered": [
+          "ctrl+b vSplit pane vertically",
+          "ctrl+b minusSplit pane horizontally"
+        ],
+        "total": 34
+      },
+      "literalPrefix": [
+        "\u0002"
+      ],
+      "passthroughV": [
+        "\u0002v"
+      ],
+      "plainKeys": "a\u0003\u001b\u001b[A\u001bx",
+      "s": {
+        "chip": "Sessions are pinned in landscape",
+        "modal": false,
+        "opened": false
+      },
+      "switcherFilters": {
+        "loomi-api": [
+          4
+        ],
+        "mobile": [
+          2
+        ],
+        "side pane": [
+          2
+        ],
+        "zzq": []
+      },
+      "switcherPick": {
+        "active": 4,
+        "picked": 4
+      },
+      "switches": [
+        [
+          "n",
+          3
+        ],
+        [
+          "p",
+          1
+        ],
+        [
+          "2",
+          4
+        ],
+        [
+          "a#1",
+          3
+        ],
+        [
+          "a#2",
+          4
+        ]
+      ]
+    },
+    "sidepane": {
+      "afterPick": {
+        "active": 4,
+        "connectSent": [
+          {
+            "renderer": "grid",
+            "session": 4,
+            "type": "connect"
+          }
+        ],
+        "open": false,
+        "visible": true
+      },
+      "closed": {
+        "active": 1,
+        "open": false,
+        "order": [
+          3,
+          4,
+          2,
+          1
+        ],
+        "pillVisible": false,
+        "rect": {
+          "bottom": 590,
+          "left": 9,
+          "right": 217,
+          "top": 118,
+          "w": 208
+        },
+        "rows": [
+          {
+            "branch": null,
+            "branchGlyph": true,
+            "closeLabel": "Close HERDR",
+            "current": null,
+            "cwd": "work",
+            "glyph": "#s-blocked",
+            "id": 3,
+            "label": "HERDR, Needs input, in work, Claude Code",
+            "name": "HERDR",
+            "status": "blocked",
+            "title": "Claude Code",
+            "unseenShown": false,
+            "worktree": null
+          },
+          {
+            "branch": "0123456",
+            "branchGlyph": true,
+            "closeLabel": "Close LOOMI API",
+            "current": null,
+            "cwd": "loomi-api",
+            "glyph": "#s-done",
+            "id": 4,
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
+            "name": "LOOMI API",
+            "status": "done",
+            "title": "Claude Code",
+            "unseenShown": true,
+            "worktree": null
+          },
+          {
+            "branch": "feat/claude-mobile-next",
+            "branchGlyph": true,
+            "closeLabel": "Close CLAUDE-MOBILE",
+            "current": null,
+            "cwd": "cm-next",
+            "glyph": "#s-working",
+            "id": 2,
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
+            "name": "CLAUDE-MOBILE",
+            "status": "working",
+            "title": "Claude Code - side pane",
+            "unseenShown": false,
+            "worktree": "claude-mobile"
+          },
+          {
+            "branch": "master",
+            "branchGlyph": true,
+            "closeLabel": "Close LOOMI OS",
+            "current": "true",
+            "cwd": "loomi-os",
+            "glyph": "#s-idle",
+            "id": 1,
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
+            "name": "LOOMI OS",
+            "status": "idle",
+            "title": "Claude Code",
+            "unseenShown": false,
+            "worktree": null
+          }
+        ],
+        "scrimOpen": false,
+        "sortControl": false,
+        "targets": [
+          {
+            "el": "new-btn",
+            "h": 44,
+            "label": "New session",
+            "w": 44
+          },
+          {
+            "el": "settings-btn",
+            "h": 44,
+            "label": "Settings",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "HERDR, Needs input, in work, Claude Code",
+            "w": 200
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close HERDR",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
+            "w": 200
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close LOOMI API",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
+            "w": 200
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close CLAUDE-MOBILE",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
+            "w": 200
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close LOOMI OS",
+            "w": 44
+          }
+        ],
+        "terminalLeft": 226,
+        "toggleExpanded": "false",
+        "toggleVisible": false,
+        "visible": true
+      },
+      "mode": "pinned",
+      "names": {
+        "names": [
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "HERDR"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "LOOMI API"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "CLAUDE-MOBILE"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "LOOMI OS"
+          }
+        ],
+        "probe": {
+          "clipped": false,
+          "lines": 2,
+          "text": "LOOMI-PAYMENTS-2"
+        }
+      },
+      "targets": {
+        "under44": [],
+        "visible": 10
+      },
+      "viewedUpdate": {
+        "created": 0,
+        "moved": 1,
+        "order": [
+          3,
+          2,
+          1,
+          4
+        ],
+        "reused": true,
+        "status": {
+          "1": "idle",
+          "2": "working",
+          "3": "blocked",
+          "4": "idle"
+        },
+        "touched": [
+          4
+        ]
+      }
+    }
+  },
+  "ipad-pro-11": {
+    "app": {
+      "bars": {
+        "header": {
+          "h": 77,
+          "w": 834
+        },
+        "input-bar": {
+          "h": 57,
+          "w": 834
+        },
+        "input-wrap": {
+          "h": 57,
+          "w": 834
+        },
+        "qbar": "hidden",
+        "tab-switcher": "hidden",
+        "tabs": "hidden"
+      },
+      "controlFonts": {
+        "#<button:button> \"CLAUDE-MOBILE, Working, \"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close CLAUDE-MOBILE\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close HERDR\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close LOOMI API\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close LOOMI OS\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"HERDR, Needs input, in w\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"LOOMI API, Done, not yet\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"LOOMI OS, Idle, in loomi\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow down\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#new-btn<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#send<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-done<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#sp-toggle<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#srv-restart<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        }
+      },
+      "layout": "flex",
+      "tapTargets": {
+        "small": [],
+        "under44": 0,
+        "visible": 6
+      },
+      "terminal": {
+        "areaPctOfViewport": 86.1,
+        "areaPx": 857142,
+        "h": 1053,
+        "heightPct": 88.2,
+        "left": 10,
+        "top": 81,
+        "w": 814
+      }
+    },
+    "auth": {
+      "controlFonts": {
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow down\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#img-clear<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#new-btn<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#send<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-done<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#sname<input:text>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#sp-toggle<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-restart<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        }
+      },
+      "tapTargets": {
+        "small": [],
+        "under44": 0,
+        "visible": 2
+      },
+      "visibleText": [
+        "CLAUDE MOBILE",
+        "Enter verification code",
+        "Verify"
+      ]
+    },
+    "consoleErrorsAllowlisted": [
+      "Viewport argument key \"interactive-widget\" not recognized and ignored."
+    ],
+    "consoleOther": [
+      "warning: Wake lock: Permission was denied"
+    ],
+    "device": "iPad Pro 11",
+    "device_facts": {
+      "dpr": 2,
+      "maxTouchPoints": 0,
+      "pointerCoarse": true,
+      "tapsArriveAs": "mouse",
+      "touchEventsSupported": true,
+      "viewport": {
+        "h": 1194,
+        "w": 834
+      }
+    },
+    "geometry": {
+      "base": {
+        "bad": [],
+        "charWidth": 9.609375,
+        "checked": 81,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.02,
+          "dTop": 0
+        },
+        "rowHeight": 20.5625
+      },
+      "font+3": {
+        "bad": [],
+        "charWidth": 11.40625,
+        "checked": 72,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.01,
+          "dTop": 0
+        },
+        "rowHeight": 24.421875
+      }
+    },
+    "motion": {
+      "animatedTransitions": 22,
+      "keyframes": [
+        "fadeIn",
+        "grid-cursor-blink",
+        "sp-spin",
+        "kb-fade",
+        "sheet-rise",
+        "kb-rise",
+        "pulse"
+      ],
+      "violations": []
+    },
+    "palette": {
+      "bg": "#FBFBFD",
+      "colors": [
+        {
+          "color": "#1D1D1F",
+          "name": "ansi-0",
+          "ratio": 16.28
+        },
+        {
+          "color": "#C62828",
+          "name": "ansi-1",
+          "ratio": 5.44
+        },
+        {
+          "color": "#1A7F37",
+          "name": "ansi-2",
+          "ratio": 4.91
+        },
+        {
+          "color": "#8A6100",
+          "name": "ansi-3",
+          "ratio": 5.36
+        },
+        {
+          "color": "#0055BF",
+          "name": "ansi-4",
+          "ratio": 6.66
+        },
+        {
+          "color": "#A626A4",
+          "name": "ansi-5",
+          "ratio": 5.92
+        },
+        {
+          "color": "#0E7490",
+          "name": "ansi-6",
+          "ratio": 5.18
+        },
+        {
+          "color": "#5F6368",
+          "name": "ansi-7",
+          "ratio": 5.85
+        },
+        {
+          "color": "#6E6E73",
+          "name": "ansi-8",
+          "ratio": 4.91
+        },
+        {
+          "color": "#D70015",
+          "name": "ansi-9",
+          "ratio": 5.21
+        },
+        {
+          "color": "#3A7D00",
+          "name": "ansi-10",
+          "ratio": 4.94
+        },
+        {
+          "color": "#A05A00",
+          "name": "ansi-11",
+          "ratio": 5.13
+        },
+        {
+          "color": "#0066CC",
+          "name": "ansi-12",
+          "ratio": 5.39
+        },
+        {
+          "color": "#9A3FC4",
+          "name": "ansi-13",
+          "ratio": 5.23
+        },
+        {
+          "color": "#007A7A",
+          "name": "ansi-14",
+          "ratio": 5.0
+        },
+        {
+          "color": "#3A3A3C",
+          "name": "ansi-15",
+          "ratio": 10.98
+        },
+        {
+          "color": "#1D1D1F",
+          "name": "fg",
+          "ratio": 16.28
+        }
+      ],
+      "min": 4.91
+    },
+    "reducedMotion": {
+      "matches": true,
+      "nonZero": {
+        "app": 0,
+        "settings": 0,
+        "sidepane": 0
+      },
+      "sheetOpenAtOnce": true
+    },
+    "settings": {
+      "controlFonts": {
+        "#<button:button> \"CLAUDE-MOBILE, Working, \"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close CLAUDE-MOBILE\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close HERDR\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close LOOMI API\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close LOOMI OS\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"HERDR, Needs input, in w\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"LOOMI API, Done, not yet\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"LOOMI OS, Idle, in loomi\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow down\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#new-btn<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#send<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-done<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-font<input:range>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#settings-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#sp-toggle<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#srv-restart<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#srv-update<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        }
+      },
+      "opened": true,
+      "tapTargets": {
+        "small": [],
+        "under44": 0,
+        "visible": 11
+      }
+    },
+    "shortcuts": {
+      "afterTimeout": [
+        "x"
+      ],
+      "chip": "ctrl+b   n p 1-9 a ? s  --  any other key goes to herdr",
+      "focusReport": {
+        "afterOff": [],
+        "blur": [
+          [
+            4,
+            false
+          ]
+        ],
+        "focus": [
+          [
+            4,
+            true
+          ]
+        ],
+        "modeOff": [],
+        "modeOffAgain": [],
+        "modeOn": [
+          [
+            4,
+            true
+          ]
+        ],
+        "switchAway": [
+          [
+            4,
+            false
+          ]
+        ],
+        "switchBack": [
+          [
+            4,
+            true
+          ]
+        ]
+      },
+      "help": {
+        "filtered": [
+          "ctrl+b vSplit pane vertically",
+          "ctrl+b minusSplit pane horizontally"
+        ],
+        "total": 34
+      },
+      "literalPrefix": [
+        "\u0002"
+      ],
+      "passthroughV": [
+        "\u0002v"
+      ],
+      "plainKeys": "a\u0003\u001b\u001b[A\u001bx",
+      "s": {
+        "chip": null,
+        "modal": true,
+        "opened": true
+      },
+      "switcherFilters": {
+        "loomi-api": [
+          4
+        ],
+        "mobile": [
+          2
+        ],
+        "side pane": [
+          2
+        ],
+        "zzq": []
+      },
+      "switcherPick": {
+        "active": 4,
+        "picked": 4
+      },
+      "switches": [
+        [
+          "n",
+          3
+        ],
+        [
+          "p",
+          1
+        ],
+        [
+          "2",
+          4
+        ],
+        [
+          "a#1",
+          3
+        ],
+        [
+          "a#2",
+          4
+        ]
+      ]
+    },
+    "sidepane": {
+      "afterPick": {
+        "active": 4,
+        "connectSent": [
+          {
+            "renderer": "grid",
+            "session": 4,
+            "type": "connect"
+          }
+        ],
+        "open": false,
+        "visible": false
+      },
+      "afterScrim": {
+        "open": false,
+        "visible": false
+      },
+      "closed": {
+        "active": 1,
+        "open": false,
+        "order": [
+          3,
+          4,
+          2,
+          1
+        ],
+        "pillVisible": false,
+        "rect": {
+          "bottom": 1186,
+          "left": -356,
+          "right": -16,
+          "top": 8,
+          "w": 340
+        },
+        "rows": [
+          {
+            "branch": null,
+            "branchGlyph": true,
+            "closeLabel": "Close HERDR",
+            "current": null,
+            "cwd": "work",
+            "glyph": "#s-blocked",
+            "id": 3,
+            "label": "HERDR, Needs input, in work, Claude Code",
+            "name": "HERDR",
+            "status": "blocked",
+            "title": "Claude Code",
+            "unseenShown": false,
+            "worktree": null
+          },
+          {
+            "branch": "0123456",
+            "branchGlyph": true,
+            "closeLabel": "Close LOOMI API",
+            "current": null,
+            "cwd": "loomi-api",
+            "glyph": "#s-done",
+            "id": 4,
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
+            "name": "LOOMI API",
+            "status": "done",
+            "title": "Claude Code",
+            "unseenShown": true,
+            "worktree": null
+          },
+          {
+            "branch": "feat/claude-mobile-next",
+            "branchGlyph": true,
+            "closeLabel": "Close CLAUDE-MOBILE",
+            "current": null,
+            "cwd": "cm-next",
+            "glyph": "#s-working",
+            "id": 2,
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
+            "name": "CLAUDE-MOBILE",
+            "status": "working",
+            "title": "Claude Code - side pane",
+            "unseenShown": false,
+            "worktree": "claude-mobile"
+          },
+          {
+            "branch": "master",
+            "branchGlyph": true,
+            "closeLabel": "Close LOOMI OS",
+            "current": "true",
+            "cwd": "loomi-os",
+            "glyph": "#s-idle",
+            "id": 1,
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
+            "name": "LOOMI OS",
+            "status": "idle",
+            "title": "Claude Code",
+            "unseenShown": false,
+            "worktree": null
+          }
+        ],
+        "scrimOpen": false,
+        "sortControl": false,
+        "targets": [
+          {
+            "el": "sp-toggle",
+            "h": 44,
+            "label": "Show sessions",
+            "w": 44
+          },
+          {
+            "el": "new-btn",
+            "h": 44,
+            "label": "New session",
+            "w": 44
+          },
+          {
+            "el": "settings-btn",
+            "h": 44,
+            "label": "Settings",
+            "w": 44
+          }
+        ],
+        "terminalLeft": 10,
+        "toggleExpanded": "false",
+        "toggleVisible": true,
+        "visible": false
+      },
+      "legibility": {
+        "probe": {
+          "height": 819,
+          "width": 292,
+          "x": 32,
+          "y": 343
+        },
+        "sheetHidden": {
+          "max": 209,
+          "min": 24,
+          "range": 185
+        },
+        "sheetOpen": {
+          "max": 255,
+          "min": 255,
+          "range": 0
+        }
+      },
+      "mode": "slide-over",
+      "names": {
+        "names": [
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "HERDR"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "LOOMI API"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "CLAUDE-MOBILE"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "LOOMI OS"
+          }
+        ],
+        "probe": {
+          "clipped": false,
+          "lines": 1,
+          "text": "LOOMI-PAYMENTS-2"
+        }
+      },
+      "open": {
+        "active": 1,
+        "open": true,
+        "order": [
+          3,
+          4,
+          2,
+          1
+        ],
+        "pillVisible": false,
+        "rect": {
+          "bottom": 1186,
+          "left": 8,
+          "right": 348,
+          "top": 8,
+          "w": 340
+        },
+        "rows": [
+          {
+            "branch": null,
+            "branchGlyph": true,
+            "closeLabel": "Close HERDR",
+            "current": null,
+            "cwd": "work",
+            "glyph": "#s-blocked",
+            "id": 3,
+            "label": "HERDR, Needs input, in work, Claude Code",
+            "name": "HERDR",
+            "status": "blocked",
+            "title": "Claude Code",
+            "unseenShown": false,
+            "worktree": null
+          },
+          {
+            "branch": "0123456",
+            "branchGlyph": true,
+            "closeLabel": "Close LOOMI API",
+            "current": null,
+            "cwd": "loomi-api",
+            "glyph": "#s-done",
+            "id": 4,
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
+            "name": "LOOMI API",
+            "status": "done",
+            "title": "Claude Code",
+            "unseenShown": true,
+            "worktree": null
+          },
+          {
+            "branch": "feat/claude-mobile-next",
+            "branchGlyph": true,
+            "closeLabel": "Close CLAUDE-MOBILE",
+            "current": null,
+            "cwd": "cm-next",
+            "glyph": "#s-working",
+            "id": 2,
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
+            "name": "CLAUDE-MOBILE",
+            "status": "working",
+            "title": "Claude Code - side pane",
+            "unseenShown": false,
+            "worktree": "claude-mobile"
+          },
+          {
+            "branch": "master",
+            "branchGlyph": true,
+            "closeLabel": "Close LOOMI OS",
+            "current": "true",
+            "cwd": "loomi-os",
+            "glyph": "#s-idle",
+            "id": 1,
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
+            "name": "LOOMI OS",
+            "status": "idle",
+            "title": "Claude Code",
+            "unseenShown": false,
+            "worktree": null
+          }
+        ],
+        "scrimOpen": true,
+        "sortControl": false,
+        "targets": [
+          {
+            "el": "sp-toggle",
+            "h": 44,
+            "label": "Hide sessions",
+            "w": 44
+          },
+          {
+            "el": "new-btn",
+            "h": 44,
+            "label": "New session",
+            "w": 44
+          },
+          {
+            "el": "settings-btn",
+            "h": 44,
+            "label": "Settings",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "HERDR, Needs input, in work, Claude Code",
+            "w": 330
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close HERDR",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
+            "w": 330
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close LOOMI API",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
+            "w": 330
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close CLAUDE-MOBILE",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
+            "w": 330
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close LOOMI OS",
+            "w": 44
+          }
+        ],
+        "terminalLeft": 10,
+        "toggleExpanded": "true",
+        "toggleVisible": true,
+        "visible": true
+      },
+      "targets": {
+        "under44": [],
+        "visible": 11
+      },
+      "viewedUpdate": {
+        "created": 0,
+        "moved": 1,
+        "order": [
+          3,
+          2,
+          1,
+          4
+        ],
+        "reused": true,
+        "status": {
+          "1": "idle",
+          "2": "working",
+          "3": "blocked",
+          "4": "idle"
+        },
+        "touched": [
+          4
+        ]
+      }
+    }
+  },
+  "ipad-pro-11-landscape": {
+    "app": {
+      "bars": {
+        "header": {
+          "h": 109,
+          "w": 208
+        },
+        "input-bar": {
+          "h": 57,
+          "w": 208
+        },
+        "input-wrap": {
+          "h": 57,
+          "w": 208
+        },
+        "qbar": "hidden",
+        "tab-switcher": "hidden",
+        "tabs": "hidden"
+      },
+      "controlFonts": {
+        "#<button:button> \"CLAUDE-MOBILE, Working, \"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close CLAUDE-MOBILE\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close HERDR\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close LOOMI API\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close LOOMI OS\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"HERDR, Needs input, in w\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"LOOMI API, Done, not yet\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"LOOMI OS, Idle, in loomi\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:submit> \"Arrow down\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#new-btn<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#send<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-done<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#sp-toggle<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-restart<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        }
+      },
+      "layout": "grid",
+      "tapTargets": {
+        "small": [],
+        "under44": 0,
+        "visible": 13
+      },
+      "terminal": {
+        "areaPctOfViewport": 79.5,
+        "areaPx": 791308,
+        "h": 826,
+        "heightPct": 99,
+        "left": 226,
+        "top": 4,
+        "w": 958
+      }
+    },
+    "auth": {
+      "controlFonts": {
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow down\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#img-clear<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#new-btn<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#send<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-done<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-font<input:range>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#settings-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#sname<input:text>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#sp-toggle<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-restart<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-update<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        }
+      },
+      "tapTargets": {
+        "small": [],
+        "under44": 0,
+        "visible": 2
+      },
+      "visibleText": [
+        "CLAUDE MOBILE",
+        "Enter verification code",
+        "Verify"
+      ]
+    },
+    "consoleErrorsAllowlisted": [
+      "Viewport argument key \"interactive-widget\" not recognized and ignored."
+    ],
+    "consoleOther": [
+      "warning: Wake lock: Permission was denied"
+    ],
+    "device": "iPad Pro 11 landscape",
+    "device_facts": {
+      "dpr": 2,
+      "maxTouchPoints": 0,
+      "pointerCoarse": true,
+      "tapsArriveAs": "mouse",
+      "touchEventsSupported": true,
+      "viewport": {
+        "h": 834,
+        "w": 1194
+      }
+    },
+    "geometry": {
+      "base": {
+        "bad": [],
+        "charWidth": 9.609375,
+        "checked": 72,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.02,
+          "dTop": 0
+        },
+        "rowHeight": 20.5625
+      },
+      "font+3": {
+        "bad": [],
+        "charWidth": 11.40625,
+        "checked": 45,
+        "cursor": {
+          "dHeight": 0,
+          "dLeft": 0.01,
+          "dTop": 0
+        },
+        "rowHeight": 24.421875
+      }
+    },
+    "motion": {
+      "animatedTransitions": 20,
+      "keyframes": [
+        "fadeIn",
+        "grid-cursor-blink",
+        "sp-spin",
+        "kb-fade",
+        "sheet-rise",
+        "kb-rise",
+        "pulse"
+      ],
+      "violations": []
+    },
+    "palette": {
+      "bg": "#FBFBFD",
+      "colors": [
+        {
+          "color": "#1D1D1F",
+          "name": "ansi-0",
+          "ratio": 16.28
+        },
+        {
+          "color": "#C62828",
+          "name": "ansi-1",
+          "ratio": 5.44
+        },
+        {
+          "color": "#1A7F37",
+          "name": "ansi-2",
+          "ratio": 4.91
+        },
+        {
+          "color": "#8A6100",
+          "name": "ansi-3",
+          "ratio": 5.36
+        },
+        {
+          "color": "#0055BF",
+          "name": "ansi-4",
+          "ratio": 6.66
+        },
+        {
+          "color": "#A626A4",
+          "name": "ansi-5",
+          "ratio": 5.92
+        },
+        {
+          "color": "#0E7490",
+          "name": "ansi-6",
+          "ratio": 5.18
+        },
+        {
+          "color": "#5F6368",
+          "name": "ansi-7",
+          "ratio": 5.85
+        },
+        {
+          "color": "#6E6E73",
+          "name": "ansi-8",
+          "ratio": 4.91
+        },
+        {
+          "color": "#D70015",
+          "name": "ansi-9",
+          "ratio": 5.21
+        },
+        {
+          "color": "#3A7D00",
+          "name": "ansi-10",
+          "ratio": 4.94
+        },
+        {
+          "color": "#A05A00",
+          "name": "ansi-11",
+          "ratio": 5.13
+        },
+        {
+          "color": "#0066CC",
+          "name": "ansi-12",
+          "ratio": 5.39
+        },
+        {
+          "color": "#9A3FC4",
+          "name": "ansi-13",
+          "ratio": 5.23
+        },
+        {
+          "color": "#007A7A",
+          "name": "ansi-14",
+          "ratio": 5.0
+        },
+        {
+          "color": "#3A3A3C",
+          "name": "ansi-15",
+          "ratio": 10.98
+        },
+        {
+          "color": "#1D1D1F",
+          "name": "fg",
+          "ratio": 16.28
+        }
+      ],
+      "min": 4.91
+    },
+    "reducedMotion": {
+      "matches": true,
+      "nonZero": {
+        "app": 0,
+        "settings": 0
+      }
+    },
+    "settings": {
+      "controlFonts": {
+        "#<button:button> \"CLAUDE-MOBILE, Working, \"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close CLAUDE-MOBILE\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close HERDR\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close LOOMI API\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close LOOMI OS\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"Close\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:button> \"HERDR, Needs input, in w\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"LOOMI API, Done, not yet\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:button> \"LOOMI OS, Idle, in loomi\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#<button:submit> \"Arrow down\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Arrow up\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Clear prompt\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Edit last message\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#<button:submit> \"Escape\"": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#auth-submit-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-clear<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#img-input<input:file>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#khelp-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#ksw-input<input:text>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#msg<textarea:textarea>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#new-btn<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#passkey-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#send<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-done<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-font<input:range>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#set-hwkb<input:checkbox>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#settings-btn<button:submit>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#sname<input:text>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": true
+        },
+        "#sp-toggle<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        },
+        "#srv-restart<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#srv-update<button:button>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": true
+        },
+        "#tab-count-btn<button:submit>": {
+          "family": "ui-monospace, \"SF Mono\", Menlo, monospace",
+          "visible": false
+        },
+        "#totp-input<input:tel>": {
+          "family": "-apple-system, BlinkMacSystemFont, \"SF Pro Text\", system-ui, \"Segoe UI\", \"Helvetica Neue\", sans-serif",
+          "visible": false
+        }
+      },
+      "opened": true,
+      "tapTargets": {
+        "small": [],
+        "under44": 0,
+        "visible": 18
+      }
+    },
+    "shortcuts": {
+      "afterTimeout": [
+        "x"
+      ],
+      "chip": "ctrl+b   n p 1-9 a ? s  --  any other key goes to herdr",
+      "focusReport": {
+        "afterOff": [],
+        "blur": [
+          [
+            4,
+            false
+          ]
+        ],
+        "focus": [
+          [
+            4,
+            true
+          ]
+        ],
+        "modeOff": [],
+        "modeOffAgain": [],
+        "modeOn": [
+          [
+            4,
+            true
+          ]
+        ],
+        "switchAway": [
+          [
+            4,
+            false
+          ]
+        ],
+        "switchBack": [
+          [
+            4,
+            true
+          ]
+        ]
+      },
+      "help": {
+        "filtered": [
+          "ctrl+b vSplit pane vertically",
+          "ctrl+b minusSplit pane horizontally"
+        ],
+        "total": 34
+      },
+      "literalPrefix": [
+        "\u0002"
+      ],
+      "passthroughV": [
+        "\u0002v"
+      ],
+      "plainKeys": "a\u0003\u001b\u001b[A\u001bx",
+      "s": {
+        "chip": "Sessions are pinned in landscape",
+        "modal": false,
+        "opened": false
+      },
+      "switcherFilters": {
+        "loomi-api": [
+          4
+        ],
+        "mobile": [
+          2
+        ],
+        "side pane": [
+          2
+        ],
+        "zzq": []
+      },
+      "switcherPick": {
+        "active": 4,
+        "picked": 4
+      },
+      "switches": [
+        [
+          "n",
+          3
+        ],
+        [
+          "p",
+          1
+        ],
+        [
+          "2",
+          4
+        ],
+        [
+          "a#1",
+          3
+        ],
+        [
+          "a#2",
+          4
+        ]
+      ]
+    },
+    "sidepane": {
+      "afterPick": {
+        "active": 4,
+        "connectSent": [
+          {
+            "renderer": "grid",
+            "session": 4,
+            "type": "connect"
+          }
+        ],
+        "open": false,
+        "visible": true
+      },
+      "closed": {
+        "active": 1,
+        "open": false,
+        "order": [
+          3,
+          4,
+          2,
+          1
+        ],
+        "pillVisible": false,
+        "rect": {
+          "bottom": 768,
+          "left": 9,
+          "right": 217,
+          "top": 118,
+          "w": 208
+        },
+        "rows": [
+          {
+            "branch": null,
+            "branchGlyph": true,
+            "closeLabel": "Close HERDR",
+            "current": null,
+            "cwd": "work",
+            "glyph": "#s-blocked",
+            "id": 3,
+            "label": "HERDR, Needs input, in work, Claude Code",
+            "name": "HERDR",
+            "status": "blocked",
+            "title": "Claude Code",
+            "unseenShown": false,
+            "worktree": null
+          },
+          {
+            "branch": "0123456",
+            "branchGlyph": true,
+            "closeLabel": "Close LOOMI API",
+            "current": null,
+            "cwd": "loomi-api",
+            "glyph": "#s-done",
+            "id": 4,
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
+            "name": "LOOMI API",
+            "status": "done",
+            "title": "Claude Code",
+            "unseenShown": true,
+            "worktree": null
+          },
+          {
+            "branch": "feat/claude-mobile-next",
+            "branchGlyph": true,
+            "closeLabel": "Close CLAUDE-MOBILE",
+            "current": null,
+            "cwd": "cm-next",
+            "glyph": "#s-working",
+            "id": 2,
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
+            "name": "CLAUDE-MOBILE",
+            "status": "working",
+            "title": "Claude Code - side pane",
+            "unseenShown": false,
+            "worktree": "claude-mobile"
+          },
+          {
+            "branch": "master",
+            "branchGlyph": true,
+            "closeLabel": "Close LOOMI OS",
+            "current": "true",
+            "cwd": "loomi-os",
+            "glyph": "#s-idle",
+            "id": 1,
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
+            "name": "LOOMI OS",
+            "status": "idle",
+            "title": "Claude Code",
+            "unseenShown": false,
+            "worktree": null
+          }
+        ],
+        "scrimOpen": false,
+        "sortControl": false,
+        "targets": [
+          {
+            "el": "new-btn",
+            "h": 44,
+            "label": "New session",
+            "w": 44
+          },
+          {
+            "el": "settings-btn",
+            "h": 44,
+            "label": "Settings",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "HERDR, Needs input, in work, Claude Code",
+            "w": 200
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close HERDR",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "LOOMI API, Done, not yet viewed, in loomi-api, branch 0123456, Claude Code",
+            "w": 200
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close LOOMI API",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "CLAUDE-MOBILE, Working, in cm-next, branch feat/claude-mobile-next, worktree claude-mobile, Claude Code - side pane",
+            "w": 200
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close CLAUDE-MOBILE",
+            "w": 44
+          },
+          {
+            "el": "sp-main",
+            "h": 64,
+            "label": "LOOMI OS, Idle, in loomi-os, branch master, Claude Code, current",
+            "w": 200
+          },
+          {
+            "el": "sp-close",
+            "h": 44,
+            "label": "Close LOOMI OS",
+            "w": 44
+          }
+        ],
+        "terminalLeft": 226,
+        "toggleExpanded": "false",
+        "toggleVisible": false,
+        "visible": true
+      },
+      "mode": "pinned",
+      "names": {
+        "names": [
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "HERDR"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "LOOMI API"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "CLAUDE-MOBILE"
+          },
+          {
+            "clipped": false,
+            "lines": 1,
+            "text": "LOOMI OS"
+          }
+        ],
+        "probe": {
+          "clipped": false,
+          "lines": 2,
+          "text": "LOOMI-PAYMENTS-2"
+        }
+      },
+      "targets": {
+        "under44": [],
+        "visible": 10
+      },
+      "viewedUpdate": {
+        "created": 0,
+        "moved": 1,
+        "order": [
+          3,
+          2,
+          1,
+          4
+        ],
+        "reused": true,
+        "status": {
+          "1": "idle",
+          "2": "working",
+          "3": "blocked",
+          "4": "idle"
+        },
+        "touched": [
+          4
+        ]
+      }
+    }
+  },
+  "layoutSweep": [
+    {
+      "bodyWide": false,
+      "cssModal": false,
+      "cssWide": false,
+      "jsModal": false,
+      "jsWide": false,
+      "mode": "phone",
+      "size": "390x844"
+    },
+    {
+      "bodyWide": false,
+      "cssModal": false,
+      "cssWide": false,
+      "jsModal": false,
+      "jsWide": false,
+      "mode": "phone",
+      "size": "440x956"
+    },
+    {
+      "bodyWide": false,
+      "cssModal": false,
+      "cssWide": false,
+      "jsModal": false,
+      "jsWide": false,
+      "mode": "phone",
+      "size": "599x900"
+    },
+    {
+      "bodyWide": false,
+      "cssModal": false,
+      "cssWide": false,
+      "jsModal": false,
+      "jsWide": false,
+      "mode": "phone",
+      "size": "667x375"
+    },
+    {
+      "bodyWide": false,
+      "cssModal": false,
+      "cssWide": false,
+      "jsModal": false,
+      "jsWide": false,
+      "mode": "phone",
+      "size": "700x500"
+    },
+    {
+      "bodyWide": true,
+      "cssModal": true,
+      "cssWide": true,
+      "jsModal": true,
+      "jsWide": true,
+      "mode": "slide-over",
+      "size": "600x900"
+    },
+    {
+      "bodyWide": true,
+      "cssModal": true,
+      "cssWide": true,
+      "jsModal": true,
+      "jsWide": true,
+      "mode": "slide-over",
+      "size": "656x944"
+    },
+    {
+      "bodyWide": true,
+      "cssModal": true,
+      "cssWide": true,
+      "jsModal": true,
+      "jsWide": true,
+      "mode": "slide-over",
+      "size": "694x1024"
+    },
+    {
+      "bodyWide": true,
+      "cssModal": true,
+      "cssWide": true,
+      "jsModal": true,
+      "jsWide": true,
+      "mode": "slide-over",
+      "size": "819x1000"
+    },
+    {
+      "bodyWide": true,
+      "cssModal": true,
+      "cssWide": true,
+      "jsModal": true,
+      "jsWide": true,
+      "mode": "slide-over",
+      "size": "834x1194"
+    },
+    {
+      "bodyWide": true,
+      "cssModal": false,
+      "cssWide": true,
+      "jsModal": false,
+      "jsWide": true,
+      "mode": "pinned",
+      "size": "944x656"
+    },
+    {
+      "bodyWide": true,
+      "cssModal": false,
+      "cssWide": true,
+      "jsModal": false,
+      "jsWide": true,
+      "mode": "pinned",
+      "size": "1194x834"
+    }
+  ],
+  "note": "static tier; synthetic session; WebKit on Windows",
+  "setupScroll": {
+    "h": 765,
+    "overflow": "auto/auto",
+    "scrollY": 149,
+    "vh": 656
+  },
+  "transitionAllInSource": []
+}

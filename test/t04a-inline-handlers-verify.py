@@ -323,17 +323,17 @@ def main():
                      page.evaluate("() => msgInput.value"), "ls -la")
             page.evaluate("() => { msgInput.value = ''; msgInput.blur(); }")
 
-            # ── theme / pill / count button ──
-            before = page.evaluate(
-                "() => document.documentElement.classList.contains('light')")
-            page.click("#theme-toggle")
+            # ── settings / pill / count button ──
+            # (The theme toggle this used to click was deleted with the dark
+            # theme -- D1 of .planning/ipad-apple-redesign.md. The settings
+            # sheet's open/Done pair is the nearest converted control.)
+            page.click("#settings-btn")
             page.wait_for_timeout(80)
-            c.add("#theme-toggle click -> theme flips + persists", page.evaluate(
-                """(b) => document.documentElement.classList.contains('light') !== b
-                     && localStorage.getItem('cm-theme') ===
-                        (b ? 'dark' : 'light')""", before))
-            page.click("#theme-toggle")
+            opened = page.evaluate("() => settingsOpen()")
+            page.click("#set-done")
             page.wait_for_timeout(80)
+            c.add("#settings-btn click opens settings, #set-done closes it",
+                  opened is True and page.evaluate("() => settingsOpen()") is False)
 
             page.evaluate("() => { userScrolled = true; }")
             page.click("#tab-pill")
@@ -430,9 +430,22 @@ def main():
             page.mouse.up()
             c.add("mousedown on the quick bar keeps compose focus", held)
 
+            # T09: Send is guarded the same way -- a pointer press on it must
+            # not blur the compose box (hardware-keyboard mode collapses the
+            # bar on blur, which lost the click).
+            page.evaluate("() => msgInput.focus()")
+            sx, sy = centre(page, "#send")
+            page.mouse.move(sx, sy)
+            page.mouse.down()
+            page.wait_for_timeout(80)
+            held = page.evaluate(focused)
+            page.mouse.up()
+            page.wait_for_timeout(80)
+            c.add("mousedown on Send keeps compose focus", held)
+
             # control: the check above can actually detect focus loss
             page.evaluate("() => msgInput.focus()")
-            tx, ty = centre(page, "#theme-toggle")
+            tx, ty = centre(page, "#settings-btn")
             page.mouse.move(tx, ty)
             page.mouse.down()
             page.wait_for_timeout(80)

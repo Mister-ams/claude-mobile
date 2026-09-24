@@ -67,22 +67,22 @@ function base64urlDecode(s) {
 }
 
 async function handleKeyExchange(msg) {
-  showStatus('Key exchange...', 'var(--accent)');
+  showStatus('Key exchange...', 'var(--accent-text)');
   try {
     // Import server identity pubkey for signature verification
-    showStatus('Importing identity key...', 'var(--accent)');
+    showStatus('Importing identity key...', 'var(--accent-text)');
     const identityDer = hexToBytes(msg.identity);
     const identityKey = await crypto.subtle.importKey('spki', identityDer,
       { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
 
     // Verify ECDSA signature on ephemeral pubkey
-    showStatus('Verifying signature...', 'var(--accent)');
+    showStatus('Verifying signature...', 'var(--accent-text)');
     const ephBytes = hexToBytes(msg.ephemeral);
     const sigBytes = hexToBytes(msg.sig);
     const valid = await crypto.subtle.verify(
       { name: 'ECDSA', hash: 'SHA-256' }, identityKey, sigBytes, ephBytes);
     if (!valid) {
-      showStatus('SIGNATURE INVALID', 'var(--intent-danger)');
+      showStatus('SIGNATURE INVALID', 'var(--intent-danger-text)');
       ws.close(); return;
     }
 
@@ -112,7 +112,7 @@ async function handleKeyExchange(msg) {
     }
 
     // Generate client ephemeral ECDH keypair
-    showStatus('Generating keys...', 'var(--accent)');
+    showStatus('Generating keys...', 'var(--accent-text)');
     const clientKP = await crypto.subtle.generateKey(
       { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
 
@@ -121,7 +121,7 @@ async function handleKeyExchange(msg) {
       { name: 'ECDH', namedCurve: 'P-256' }, false, []);
 
     // Derive shared secret
-    showStatus('Deriving secret...', 'var(--accent)');
+    showStatus('Deriving secret...', 'var(--accent-text)');
     const sharedBits = await crypto.subtle.deriveBits(
       { name: 'ECDH', public: serverEphKey }, clientKP.privateKey, 256);
 
@@ -130,7 +130,7 @@ async function handleKeyExchange(msg) {
     const clientPubHex = bytesToHex(clientPubRaw);
 
     // HKDF: derive AES key
-    showStatus('Deriving session key...', 'var(--accent)');
+    showStatus('Deriving session key...', 'var(--accent-text)');
     const salt = hexToBytes(msg.salt);
     const info = new Uint8Array([
       ...new TextEncoder().encode('cm-e2e'),
@@ -149,10 +149,10 @@ async function handleKeyExchange(msg) {
 
     // Send client ephemeral pubkey (plaintext -- last unencrypted message)
     ws.send(JSON.stringify({ type: 'key-exchange', ephemeral: clientPubHex }));
-    showStatus('Secure channel established', 'var(--intent-ok)');
+    showStatus('Secure channel established', 'var(--intent-ok-text)');
   } catch (err) {
     console.error('Key exchange error:', err);
-    showStatus('Key exchange failed: ' + err.message, 'var(--intent-danger)');
+    showStatus('Key exchange failed: ' + err.message, 'var(--intent-danger-text)');
     ws.close();
   }
 }
@@ -250,14 +250,14 @@ async function secureReceive(rawData) {
     } catch (err) {
       clientLog('DECRYPT FAILED: ' + err.message + ' payload:' + (parsed.e?.length || '?') + 'bytes seq:' + parsed.n);
       decryptFailCount++;
-      if (decryptFailCount === 1) showStatus('Decrypt error -- retrying...', 'var(--intent-warn)');
+      if (decryptFailCount === 1) showStatus('Decrypt error -- retrying...', 'var(--intent-warn-text)');
       if (decryptFailCount >= 3) {
         decryptReconnectCount++;
         if (decryptReconnectCount <= 3) {
-          showStatus('Encryption error -- reconnecting...', 'var(--intent-danger)');
+          showStatus('Encryption error -- reconnecting...', 'var(--intent-danger-text)');
           setTimeout(() => doConnect('reconnect'), 500);
         } else {
-          showStatus('Persistent encryption error. Reload the page.', 'var(--intent-danger)');
+          showStatus('Persistent encryption error. Reload the page.', 'var(--intent-danger-text)');
         }
       }
       return null;
@@ -393,7 +393,7 @@ function submitTotp() {
   const code = $('totp-input').value.trim();
   if (!code || code.length !== 6) return;
   authError.style.display = 'none';
-  showStatus('Verifying code...', 'var(--accent)');
+  showStatus('Verifying code...', 'var(--accent-text)');
   doConnect('totp', code);
 }
 
@@ -460,18 +460,18 @@ async function doPasskeyAuth() {
 }
 
 async function loginPasskey() {
-  showStatus('Requesting passkey...', 'var(--accent)');
+  showStatus('Requesting passkey...', 'var(--accent-text)');
   try {
     const token = await doPasskeyAuth();
     if (token) {
       sessionToken = token;
-      showStatus('Authenticated via passkey', 'var(--intent-ok)');
+      showStatus('Authenticated via passkey', 'var(--intent-ok-text)');
       doConnect('passkey');
     } else {
-      showStatus('Passkey verification failed', 'var(--intent-danger)');
+      showStatus('Passkey verification failed', 'var(--intent-danger-text)');
     }
   } catch (e) {
-    showStatus('Passkey error: ' + e.message, 'var(--intent-danger)');
+    showStatus('Passkey error: ' + e.message, 'var(--intent-danger-text)');
   }
 }
 
@@ -517,7 +517,7 @@ async function registerPasskey() {
       $('passkey-btn').style.display = 'block';
     }
   } catch (e) {
-    showStatus('Passkey registration failed: ' + e.message, 'var(--intent-danger)');
+    showStatus('Passkey registration failed: ' + e.message, 'var(--intent-danger-text)');
   }
 }
 
@@ -561,7 +561,7 @@ async function setupTotp() {
       await verifyCode();
     }
   } catch (e) {
-    showStatus('TOTP setup failed: ' + e.message, 'var(--intent-danger)');
+    showStatus('TOTP setup failed: ' + e.message, 'var(--intent-danger-text)');
   }
 }
 
@@ -576,16 +576,16 @@ function doConnect(method, totpCode) {
   ws = new WebSocket(`${proto}//${location.host}`);
   ws.onopen = () => {
     reconnectDelay = 1000; dot.className = 'dot on';
-    showStatus('Connecting securely...', 'var(--accent)');
+    showStatus('Connecting securely...', 'var(--accent-text)');
     // Wait for server key-exchange -- auth deferred until E2E ready
   };
   ws.onclose = () => {
     dot.className = 'dot off'; e2eReady = false;
-    if (sessionToken) { showStatus('Reconnecting...', 'var(--intent-warn)'); clearTimeout(reconnectTimer); reconnectTimer = setTimeout(() => doConnect('reconnect'), reconnectDelay); }
+    if (sessionToken) { showStatus('Reconnecting...', 'var(--intent-warn-text)'); clearTimeout(reconnectTimer); reconnectTimer = setTimeout(() => doConnect('reconnect'), reconnectDelay); }
     reconnectDelay = Math.min(reconnectDelay * 2, 30000);
   };
   ws.onerror = (ev) => {
-    showStatus('Connection error', 'var(--intent-danger)');
+    showStatus('Connection error', 'var(--intent-danger-text)');
   };
   ws.onmessage = async (e) => {
     // Safari may deliver WebSocket data as Blob instead of string
@@ -681,8 +681,8 @@ function handle(m) {
         setAuthMode('login'); authScreen.style.display = 'flex'; appEl.classList.remove('shown');
         $('totp-input').value = '';
         authError.style.display = 'block'; sessionToken = null;
-        if (m.locked) showStatus('Too many attempts. Locked out.', 'var(--intent-danger)');
-        if (m.reason) showStatus(m.reason, 'var(--intent-danger)');
+        if (m.locked) showStatus('Too many attempts. Locked out.', 'var(--intent-danger-text)');
+        if (m.reason) showStatus(m.reason, 'var(--intent-danger-text)');
         checkAuthStatus();
       }
       break;
@@ -691,7 +691,7 @@ function handle(m) {
       sessionToken = null;
       $('totp-input').value = '';
       authError.style.display = 'none';
-      showStatus('Session expired. Re-authenticate.', 'var(--intent-warn)');
+      showStatus('Session expired. Re-authenticate.', 'var(--intent-warn-text)');
       checkAuthStatus();
       break;
     case 'refreshed':
@@ -725,7 +725,7 @@ function handle(m) {
       }
       break;
     case 'snapshot':
-      if (gridTerms[m.session]) applyGridSnapshot(gridTerms[m.session], m);
+      if (gridTerms[m.session]) queueGridSnapshot(gridTerms[m.session], m);
       break;
     case 'frame':
       if (gridTerms[m.session]) queueGridFrame(gridTerms[m.session], m);
@@ -734,6 +734,7 @@ function handle(m) {
       if (gridTerms[m.session] && m.mouse) {
         gridTerms[m.session].mouse = m.mouse;
         applyGridMouseMode(gridTerms[m.session]);
+        syncFocusReport();   // T08: mouse.focus carries CSI ?1004h/l
       }
       break;
     case 'scrollback':
@@ -767,7 +768,7 @@ function handle(m) {
     case 'error':
       // Ignore lock/auth errors (handled by lock screen) -- don't block with alert()
       if (/locked|re-authenticate|not authenticated/i.test(m.message)) break;
-      showStatus(m.message, 'var(--intent-danger)');
+      showStatus(m.message, 'var(--intent-danger-text)');
       break;
   }
 }
@@ -782,25 +783,42 @@ async function loadProjects() {
   }
 }
 
-function getTermTheme() {
-  const isLight = document.documentElement.classList.contains('light');
-  return isLight ? {
-    background: '#f6f7f9', foreground: '#1c2127', cursor: '#2d72d2',
-    selectionBackground: '#d6e4f7',
-    black: '#1c2127', red: '#cd4246', green: '#238551', yellow: '#c87619',
-    blue: '#2d72d2', magenta: '#9d3f9d', cyan: '#147eb3', white: '#8a9ba8',
-    brightBlack: '#5c7080', brightRed: '#e76a6e', brightGreen: '#32a467',
-    brightYellow: '#ec9a3c', brightBlue: '#4c90f0', brightMagenta: '#bd6bbd',
-    brightCyan: '#3fa6da', brightWhite: '#1c2127'
-  } : {
-    background: '#111418', foreground: '#f6f7f9', cursor: '#2d72d2',
-    selectionBackground: '#184a90',
-    black: '#404854', red: '#cd4246', green: '#238551', yellow: '#c87619',
-    blue: '#2d72d2', magenta: '#9d3f9d', cyan: '#147eb3', white: '#abb3bf',
-    brightBlack: '#5f6b7c', brightRed: '#e76a6e', brightGreen: '#32a467',
-    brightYellow: '#ec9a3c', brightBlue: '#4c90f0', brightMagenta: '#bd6bbd',
-    brightCyan: '#3fa6da', brightWhite: '#f6f7f9'
+// T05: ONE terminal palette. The colours live in style.css's :root token
+// block (--term-*, --ansi-0..15, --font-mono) and nowhere else; this reads
+// them once and both renderers -- the grid (sgrColorToHex/applySgr) and the
+// xterm fallback (getTermTheme) -- take them from here, so JS and CSS cannot
+// drift. The stylesheet is render-blocking in <head> and app.js loads at the
+// end of <body>, so the computed values exist on first call.
+let termPaletteCache = null;
+function termPalette() {
+  if (termPaletteCache) return termPaletteCache;
+  const cs = getComputedStyle(document.documentElement);
+  const v = name => cs.getPropertyValue(name).trim();
+  const ansi = [];
+  for (let i = 0; i < 16; i++) ansi.push(v('--ansi-' + i));
+  termPaletteCache = {
+    bg: v('--term-bg'), fg: v('--term-fg'),
+    cursor: v('--term-cursor'), selection: v('--term-selection'),
+    fontMono: v('--font-mono'),
+    ansi,
   };
+  return termPaletteCache;
+}
+
+const XTERM_ANSI_NAMES = [
+  'black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white',
+  'brightBlack', 'brightRed', 'brightGreen', 'brightYellow',
+  'brightBlue', 'brightMagenta', 'brightCyan', 'brightWhite'
+];
+
+function getTermTheme() {
+  const p = termPalette();
+  const theme = {
+    background: p.bg, foreground: p.fg, cursor: p.cursor,
+    selectionBackground: p.selection,
+  };
+  XTERM_ANSI_NAMES.forEach((name, i) => { theme[name] = p.ansi[i]; });
+  return theme;
 }
 
 // T08 of W3 (render-pipeline): shared rAF scheduler. scheduleOnce(fn) runs
@@ -884,15 +902,9 @@ function scheduleTerminalFlush() {
 // produces the cell grid; this side only renders styled cells.
 //
 // Colour encoding mirrors server cellToSgr:
-//   0..15            = ANSI palette (matches xterm dark theme)
-//   16..255          = extended palette, deferred to W7 polish
+//   0..15            = ANSI palette: termPalette().ansi (style.css --ansi-N)
+//   16..255          = xterm cube + grayscale, computed (not themed)
 //   0x1000000+rrggbb = 24-bit RGB
-const ANSI_PALETTE = [
-  '#111418', '#cd4246', '#238551', '#c87619',
-  '#2d72d2', '#9d3f9d', '#147eb3', '#abb3bf',
-  '#5f6b7c', '#e76a6e', '#32a467', '#ec9a3c',
-  '#4c90f0', '#bd6bbd', '#3fa6da', '#f6f7f9'
-];
 // Standard xterm 256-color cube levels for indexes 16..231 (6x6x6).
 const XTERM_CUBE_LEVELS = [0, 95, 135, 175, 215, 255];
 const SGR_RGB_FLAG = 0x1000000;
@@ -903,7 +915,7 @@ function hex2(n) { return n.toString(16).padStart(2, '0'); }
 
 function sgrColorToHex(value) {
   if (value >= SGR_RGB_FLAG) return '#' + (value & 0xFFFFFF).toString(16).padStart(6, '0');
-  if (value >= 0 && value < 16) return ANSI_PALETTE[value];
+  if (value >= 0 && value < 16) return termPalette().ansi[value];
   if (value >= 16 && value < 232) {
     // 6x6x6 color cube: index = 16 + 36*r + 6*g + b
     const i = value - 16;
@@ -927,16 +939,19 @@ function applySgr(span, sgr) {
   // SGR 7: reverse swaps fg/bg, defaults filled from theme so the swap is
   // visible even when both sides were "default".
   if (sgr.reverse) {
-    const newFg = bg !== null ? bg : 'var(--bg, #111418)';
-    const newBg = fg !== null ? fg : 'var(--text, #f6f7f9)';
+    const newFg = bg !== null ? bg : termPalette().bg;
+    const newBg = fg !== null ? fg : termPalette().fg;
     fg = newFg;
     bg = newBg;
   }
-  if (fg !== null) span.style.color = fg;
-  if (bg !== null) span.style.backgroundColor = bg;
-  if (sgr.bold) span.style.fontWeight = 'bold';
-  if (sgr.italic) span.style.fontStyle = 'italic';
-  if (sgr.underline) span.style.textDecoration = 'underline';
+  // T11: one style write per span, not one per property.
+  let css = '';
+  if (fg !== null) css += 'color:' + fg + ';';
+  if (bg !== null) css += 'background-color:' + bg + ';';
+  if (sgr.bold) css += 'font-weight:bold;';
+  if (sgr.italic) css += 'font-style:italic;';
+  if (sgr.underline) css += 'text-decoration:underline;';
+  if (css) span.style.cssText = css;
   // sgr.hyperlink handled in renderRow (T21).
 }
 
@@ -955,13 +970,27 @@ function safeHref(raw) {
   } catch (e) { return null; }
 }
 
+// T11: true when applySgr would set nothing on the element.
+function sgrIsPlain(sgr) {
+  return !sgr || (sgr.fg === undefined && sgr.bg === undefined && !sgr.reverse &&
+                  !sgr.bold && !sgr.italic && !sgr.underline);
+}
+
+// T11: a run with no visible styling needs no element of its own. The server
+// already merges runs with identical SGR, so what is left to save is the
+// element per unstyled run (usually the whole trailing pad of every row), and
+// adjacent unstyled runs that differed only in a hyperlink safeHref refused.
+// Those become one text node -- fewer boxes to style, lay out and paint.
 function renderRow(runs) {
   const div = document.createElement('div');
   div.className = 'grid-row';
+  let plain = '';
   for (const run of runs) {
     // T21: cells inside an OSC 8 link become anchors instead of spans.
-    let el;
     const href = run.sgr && run.sgr.hyperlink ? safeHref(run.sgr.hyperlink) : null;
+    if (!href && sgrIsPlain(run.sgr)) { plain += run.text; continue; }
+    if (plain) { div.appendChild(document.createTextNode(plain)); plain = ''; }
+    let el;
     if (href) {
       el = document.createElement('a');
       el.href = href;
@@ -974,6 +1003,7 @@ function renderRow(runs) {
     applySgr(el, run.sgr);
     div.appendChild(el);
   }
+  if (plain) div.appendChild(document.createTextNode(plain));
   return div;
 }
 
@@ -1019,8 +1049,13 @@ function makeGridTerm() {
     scrollScheduled: false,
     // T30 substitute: rAF-coalesced frame queue. Multiple frames arriving
     // within one paint window merge to a single applyGridFrame call.
+    // T11: a snapshot rides the same rAF. It supersedes every frame queued
+    // before it; frames queued after it apply after it, in that callback.
     pendingFrames: [],
+    pendingSnapshot: null,
     frameRafScheduled: false,
+    // T11: last cursor style written, so an unmoved cursor costs no write.
+    cursorCss: '',
   };
 
   wrap.addEventListener('scroll', () => {
@@ -1072,22 +1107,80 @@ function probeCell(container) {
   return { w: r.width, h: r.height };
 }
 
+// T11: cell metrics are probed once and cached on the grid. A probe is a
+// forced layout, and it used to run on every snapshot and (via the cursor)
+// every frame. The inputs that can change a cell are the font size (the
+// setting), the font itself (a late-resolving system font) and the device
+// pixel ratio (zoom, display change); each of those invalidates the cache.
+// Both numbers come from one probe, so the renderer, the cursor and
+// gridCellFromEvent always agree. A probe on a hidden wrap measures 0 and is
+// NOT cached -- the next visible call measures for real.
+function probeGridMetrics(grid) {
+  if (grid.charWidth > 0 && grid.rowHeight > 0) return true;
+  const cell = document.createElement('span');
+  cell.style.cssText = 'position:absolute;visibility:hidden;font:inherit;line-height:inherit;white-space:pre';
+  cell.textContent = 'X';
+  const row = document.createElement('div');
+  row.className = 'grid-row';
+  row.style.cssText = 'position:absolute;visibility:hidden';
+  row.appendChild(document.createTextNode('X'));
+  grid.wrap.appendChild(cell);
+  grid.wrap.appendChild(row);
+  const w = cell.getBoundingClientRect().width;
+  const h = row.getBoundingClientRect().height;
+  grid.wrap.removeChild(cell);
+  grid.wrap.removeChild(row);
+  if (w > 0 && h > 0) {
+    grid.charWidth = w;
+    grid.rowHeight = h;
+    return true;
+  }
+  return false;
+}
+
 function measureCharWidth(grid) {
-  if (grid.charWidth > 0) return grid.charWidth;
-  grid.charWidth = probeCell(grid.wrap).w;
+  probeGridMetrics(grid);
   return grid.charWidth;
 }
 
 function ensureRowHeight(grid) {
-  if (grid.rowHeight > 0) return grid.rowHeight;
-  const probe = document.createElement('div');
-  probe.className = 'grid-row';
-  probe.appendChild(document.createTextNode('X'));
-  grid.wrap.appendChild(probe);
-  const h = probe.getBoundingClientRect().height || GRID_ROW_HEIGHT_FALLBACK;
-  grid.wrap.removeChild(probe);
-  grid.rowHeight = h;
-  return h;
+  return probeGridMetrics(grid) ? grid.rowHeight : GRID_ROW_HEIGHT_FALLBACK;
+}
+
+function invalidateGridMetrics() {
+  Object.keys(gridTerms).forEach(id => {
+    gridTerms[id].charWidth = 0;
+    gridTerms[id].rowHeight = 0;
+  });
+}
+
+// Font or pixel grid changed under the grid: drop the cache and re-window
+// (row height may differ), then let doResize tell the server if the cell
+// count moved.
+function remeasureGrids() {
+  invalidateGridMetrics();
+  scheduleOnce(() => {
+    Object.keys(gridTerms).forEach(id => renderGridWindow(gridTerms[id]));
+    doResize();
+  });
+}
+
+// DPR changes (browser zoom, moving to another display) re-rasterise the
+// font on a different pixel grid. The query is pinned to one ratio, so it
+// re-arms itself on each change.
+function watchDevicePixelRatio() {
+  if (!window.matchMedia) return;
+  const mq = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+  if (!mq.addEventListener) return;
+  mq.addEventListener('change', function onChange() {
+    mq.removeEventListener('change', onChange);
+    remeasureGrids();
+    watchDevicePixelRatio();
+  });
+}
+watchDevicePixelRatio();
+if (document.fonts && document.fonts.addEventListener) {
+  document.fonts.addEventListener('loadingdone', remeasureGrids);
 }
 
 // ─── T22: mouse reporting ────────────────────────────────────────
@@ -1248,11 +1341,16 @@ function renderGridWindow(grid) {
     updateGridCursor(grid);
     return;
   }
+  // Reads first: every caller runs this at the top of a frame, before its
+  // own writes, so these come off the layout the browser already has.
   const rowH = ensureRowHeight(grid);
-  const total = grid.allRows.length;
-  const scrollTop = grid.wrap.scrollTop;
-  const clientH = grid.wrap.clientHeight;
+  mountGridWindow(grid, rowH, grid.wrap.scrollTop, grid.wrap.clientHeight);
+}
 
+// T11: writes only. The window is computed from numbers the caller already
+// read, so mounting never reads layout back after mutating it.
+function mountGridWindow(grid, rowH, scrollTop, clientH) {
+  const total = grid.allRows.length;
   const firstVisible = Math.floor(scrollTop / rowH);
   const lastVisible = Math.ceil((scrollTop + clientH) / rowH);
   const mountStart = Math.max(0, firstVisible - GRID_OVERSCAN);
@@ -1282,15 +1380,27 @@ function renderGridWindow(grid) {
   updateGridCursor(grid);
 }
 
+// T11: the cursor is placed by transform from the cached cell metrics, not by
+// reading the row's offsetTop -- that read came straight after replaceWith
+// and forced a synchronous layout on almost every frame. Rows are a flat
+// stack of fixed-height boxes (.grid-row height is 1.286em, the probed
+// rowHeight), so row index * rowHeight IS the row's offsetTop; the same model
+// the spacers, scroll anchoring and gridCellFromEvent use. Unmoved cursor, no
+// write. The blink is an opacity animation in style.css, so neither the move
+// nor the blink needs layout or paint.
 function updateGridCursor(grid) {
   const c = grid.cursor;
-  if (!c || !c.visible) { grid.cursorEl.style.display = 'none'; return; }
-  const rowEl = grid.rowEls.get(c.row);
-  if (!rowEl) { grid.cursorEl.style.display = 'none'; return; }
-  const charW = measureCharWidth(grid);
-  if (!charW) { grid.cursorEl.style.display = 'none'; return; }
-  grid.cursorEl.style.cssText =
-    `display:block;top:${rowEl.offsetTop}px;left:${c.col * charW}px;height:${rowEl.offsetHeight}px;`;
+  const rowH = grid.rowHeight, charW = grid.charWidth;
+  let css = 'display:none';
+  if (c && c.visible && rowH > 0 && charW > 0) {
+    const idx = grid.rowIndexByServerRow.get(c.row);
+    if (idx !== undefined && idx >= grid.mountedStart && idx < grid.mountedStart + grid.mountedCount) {
+      css = `display:block;height:${rowH}px;transform:translate3d(${c.col * charW}px,${idx * rowH}px,0)`;
+    }
+  }
+  if (css === grid.cursorCss) return;
+  grid.cursorCss = css;
+  grid.cursorEl.style.cssText = css;
 }
 
 // The useful part of a working directory is its tail, but CSS left-truncation
@@ -1309,40 +1419,44 @@ function shortDir(dir) {
 // reader is looking at something and must not be moved.
 const GRID_STICK_PX = 8;
 
-function gridAtBottom(grid) {
-  const w = grid.wrap;
-  if (!w || !w.scrollHeight) return true;
-  return (w.scrollHeight - w.scrollTop - w.clientHeight) <= GRID_STICK_PX;
-}
-
 function applyGridSnapshot(grid, snap) {
   // A snapshot must not move the reader. Snapshots arrive on every tab return
   // and every session switch, so unconditionally scrolling to the bottom threw
   // the scroll position away several times an hour -- measured at +7,230px on
-  // an 11" iPad. Capture the anchor BEFORE anything is reset (rowHeight is
-  // zeroed below), and restore it by server row ID: row indices shift when
-  // scrollback rolls, IDs do not.
-  const wasAtBottom = gridAtBottom(grid);
+  // an 11" iPad. Capture the anchor BEFORE anything is reset, and restore it
+  // by server row ID: row indices shift when scrollback rolls, IDs do not.
+  //
+  // T11: every layout read happens here, before the first write. Snapshots are
+  // applied at the top of a frame (queueGridSnapshot), so these reads come off
+  // the layout the browser already has. The bottom and the anchor are then
+  // COMPUTED from row count * rowHeight rather than read back from
+  // scrollHeight after mutating -- that read-after-write, plus the per-snapshot
+  // cell probes, cost ~4 forced layouts per snapshot.
+  grid.pendingSnapshot = null;
+  // Snapshots fully reset state; any frames still queued from before this
+  // snapshot are stale and would re-apply changes already covered.
+  grid.pendingFrames.length = 0;
+  const w = grid.wrap;
+  const scrollTop = w.scrollTop, clientH = w.clientHeight, scrollH = w.scrollHeight;
+  const wasAtBottom = !scrollH || (scrollH - scrollTop - clientH) <= GRID_STICK_PX;
   const oldRowH = grid.rowHeight || 0;
   let anchorRow = null, anchorOffset = 0;
   if (!wasAtBottom && oldRowH > 0 && grid.allRows.length) {
     const topIdx = Math.min(grid.allRows.length - 1,
-      Math.max(0, Math.floor(grid.wrap.scrollTop / oldRowH)));
+      Math.max(0, Math.floor(scrollTop / oldRowH)));
     anchorRow = grid.allRows[topIdx].row;
-    anchorOffset = grid.wrap.scrollTop - topIdx * oldRowH;
+    anchorOffset = scrollTop - topIdx * oldRowH;
   }
+  // Cached: re-probes only after a font, font-size or DPR change, or when the
+  // last probe ran on a hidden wrap. Still ahead of every write below.
+  const rowH = ensureRowHeight(grid);
 
   grid.cols = snap.cols;
   grid.rows = snap.rows;
   grid.cursor = snap.cursor;
   // T22: a snapshot is the full truth about the pane, mouse mode included --
   // it is how a client that connects mid-session learns the app is listening.
-  if (snap.mouse) { grid.mouse = snap.mouse; applyGridMouseMode(grid); }
-  grid.charWidth = 0;  // cols may have changed; remeasure on next cursor update
-  grid.rowHeight = 0;  // remeasure too -- font may differ post-resize
-  // Snapshots fully reset state; any frames still queued from before this
-  // snapshot are stale and would re-apply changes already covered.
-  grid.pendingFrames.length = 0;
+  if (snap.mouse) { grid.mouse = snap.mouse; applyGridMouseMode(grid); syncFocusReport(); }
 
   // Build full row list. Server row indices: scrollback < 0, viewport 0..rows-1.
   const sb = snap.scrollback.slice(-GRID_MAX_ROWS);
@@ -1352,30 +1466,29 @@ function applyGridSnapshot(grid, snap) {
     grid.rowIndexByServerRow.set(grid.allRows[i].row, i);
   }
 
-  unmountAllGridRows(grid);
-  // Pre-set scrollHeight so we can scroll to bottom before computing the
-  // window. Park all virtual height in topSpacer; renderGridWindow rewrites
-  // both spacers once it knows the mounted range.
-  ensureRowHeight(grid);
-  const totalH = grid.allRows.length * grid.rowHeight;
-  grid.topSpacer.style.height = totalH + 'px';
-  grid.bottomSpacer.style.height = '0px';
-  grid.mountedStart = 0;
-  grid.mountedCount = 0;
-  if (anchorRow === null) {
-    grid.wrap.scrollTop = grid.wrap.scrollHeight;
-  } else {
+  // Rows are fixed-height, so the content height is exact and the bottom is
+  // totalH - clientH -- no scrollHeight read needed.
+  const maxTop = Math.max(0, grid.allRows.length * rowH - clientH);
+  let top = maxTop;
+  if (anchorRow !== null) {
     const idx = grid.rowIndexByServerRow.get(anchorRow);
     // undefined means the anchored row has aged out of scrollback entirely --
     // there is no position left to hold, so following the output is correct.
-    grid.wrap.scrollTop = idx === undefined
-      ? grid.wrap.scrollHeight
-      : (idx * grid.rowHeight) + anchorOffset;
+    if (idx !== undefined) top = Math.min(maxTop, Math.max(0, idx * rowH + anchorOffset));
   }
-  renderGridWindow(grid);
+
+  unmountAllGridRows(grid);
+  grid.mountedStart = 0;
+  grid.mountedCount = 0;
+  mountGridWindow(grid, rowH, top, clientH);
+  // Last, and only if it moves: the one write that needs the new layout.
+  if (Math.abs(scrollTop - top) >= 1) w.scrollTop = top;
 }
 
 function applyGridFrame(grid, frame) {
+  // No-op while the metrics are cached; if a font change dropped them, the
+  // probe runs here, ahead of every write.
+  probeGridMetrics(grid);
   grid.cursor = frame.cursor;
   for (const rc of frame.changes) {
     const idx = grid.rowIndexByServerRow.get(rc.row);
@@ -1399,17 +1512,36 @@ function applyGridFrame(grid, frame) {
 // (claude-code token output emits frames faster than rAF can paint). Merge
 // rule: latest-wins per row index; latest cursor wins; seq tracks the most
 // recent merged frame.
+//
+// T11: snapshots go through the same rAF. Arrival order is preserved: a
+// snapshot discards every frame queued before it (it already contains them),
+// and frames that arrive after it -- before the rAF fires -- apply on top of
+// it in the same callback. A later snapshot replaces an earlier pending one.
 function queueGridFrame(grid, frame) {
   grid.pendingFrames.push(frame);
+  scheduleGridFlush(grid);
+}
+
+function queueGridSnapshot(grid, snap) {
+  grid.pendingSnapshot = snap;
+  grid.pendingFrames.length = 0;
+  scheduleGridFlush(grid);
+}
+
+function scheduleGridFlush(grid) {
   if (grid.frameRafScheduled) return;
   grid.frameRafScheduled = true;
-  requestAnimationFrame(() => {
-    grid.frameRafScheduled = false;
-    if (!grid.pendingFrames.length) return;
-    const merged = mergeFrames(grid.pendingFrames);
-    grid.pendingFrames.length = 0;
-    applyGridFrame(grid, merged);
-  });
+  requestAnimationFrame(() => flushGrid(grid));
+}
+
+function flushGrid(grid) {
+  grid.frameRafScheduled = false;
+  const snap = grid.pendingSnapshot;
+  const frames = grid.pendingFrames;
+  grid.pendingSnapshot = null;
+  grid.pendingFrames = [];
+  if (snap) applyGridSnapshot(grid, snap);
+  if (frames.length) applyGridFrame(grid, mergeFrames(frames));
 }
 
 function mergeFrames(frames) {
@@ -1431,7 +1563,7 @@ function mergeFrames(frames) {
 function makeTerm() {
   const term = new Terminal({
     fontSize: 13,
-    fontFamily: "'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace",
+    fontFamily: termPalette().fontMono,
     lineHeight: 1.286,
     theme: getTermTheme(),
     scrollback: 10000,
@@ -1479,7 +1611,10 @@ function switchTo(id) {
     // GPU-accelerated rendering: WebGL -> Canvas -> DOM fallback
     try {
       const webgl = new WebglAddon.WebglAddon();
-      webgl.onContextLost(() => {
+      // T11: the addon's event is onContextLoss. The old onContextLost call
+      // threw a TypeError here, so WebGL never engaged and every client ran
+      // on Canvas. Canvas remains the fallback on a real context loss.
+      webgl.onContextLoss(() => {
         webgl.dispose();
         try { term.loadAddon(new CanvasAddon.CanvasAddon()); } catch (e2) { console.warn('Canvas fallback failed:', e2.message); }
       });
@@ -1520,7 +1655,8 @@ function switchTo(id) {
       // fonts.ready resolves, which corrects to the real char width.
       setTimeout(() => doResize(), 50);
       if (document.fonts && document.fonts.ready) {
-        document.fonts.ready.then(() => doResize());
+        // T11: metrics are cached now, so drop what the first pass measured.
+        document.fonts.ready.then(() => remeasureGrids());
       }
     }
   }
@@ -1528,6 +1664,7 @@ function switchTo(id) {
   emptyState.style.display = 'none';
   if (ws && ws.readyState === 1) queueSend({ type: 'connect', session: id, renderer: RENDERER_MODE });
   updateHdr(); renderTabs();
+  syncFocusReport();   // T08: out for the session left, in for this one
 }
 
 function closeSession(id) {
@@ -1577,12 +1714,18 @@ sname.addEventListener('keydown', e => { if (e.key === 'Enter') sname.blur(); })
 
 // ── T13: layout mode ─────────────────────────────────────────────
 // One source of truth for "is this a tablet-or-wider viewport", shared by
-// the CSS breakpoints (820px), the persistent tab strip below, the swipe
-// gating (T15) and the keyboard/font defaults (T12/T14). Kept as a
-// matchMedia object rather than an innerWidth read so the transition fires
-// an event -- an iPad rotating portrait->landscape crosses the boundary
-// without a reload.
-const WIDE_LAYOUT_QUERY = '(min-width: 820px)';
+// the side pane below, the swipe gating (T15) and the keyboard/font defaults
+// (T12/T14). The bounds are the ones in style.css's tablet media queries (see
+// the comment there for why portrait starts lower): 820px wide in any
+// orientation, or 600px wide in portrait. test/ipad-webkit.py fails if these
+// queries and the CSS ever disagree. Kept as matchMedia objects rather than
+// an innerWidth read so the transition fires an event -- an iPad rotating
+// portrait->landscape crosses the boundary without a reload.
+const TABLET_MIN_PX = 820;
+const TABLET_PORTRAIT_MIN_PX = 600;
+// Portrait tablet: the side pane is a modal slide-over (T07).
+const PANE_MODAL_QUERY = `(min-width: ${TABLET_PORTRAIT_MIN_PX}px) and (orientation: portrait)`;
+const WIDE_LAYOUT_QUERY = `(min-width: ${TABLET_MIN_PX}px), ${PANE_MODAL_QUERY}`;
 const wideMQ = window.matchMedia(WIDE_LAYOUT_QUERY);
 
 function isWideLayout() { return wideMQ.matches; }
@@ -1592,6 +1735,7 @@ function onLayoutChange() {
   applyHwKeyboard();    // T12: the default (on for tablets) tracks the boundary
   applyFontSize();      // T14: so does the default font size
   syncSwipeHandlers();  // T15: swipe nav is bound only at narrow widths
+  if (isWideLayout()) closeSwitcher();  // T07: the phone overlay has no place here
   renderTabs();
 }
 
@@ -1617,8 +1761,9 @@ function renderTabs() {
   pill.classList.toggle('needs-input', anyAttn);
   countBtn.classList.toggle('has-attn', anyAttn);
 
-  // Update switcher if open
+  // Update switcher if open (phone), and the side pane (tablet, T07)
   renderSwitcher();
+  renderSidepane();
 }
 
 function toggleSwitcher() {
@@ -1638,13 +1783,12 @@ function closeSwitcher() {
 $('tab-pill').addEventListener('click', () => scrollBottom());
 $('tab-count-btn').addEventListener('click', () => toggleSwitcher());
 
+// The PHONE switcher overlay only. In the tablet layout the sessions live in the side
+// pane (T07, renderSidepane below), which is keyed and diffed; this overlay is
+// rebuilt only while it is open on a phone, where it is small and transient.
 function renderSwitcher() {
   const sw = $('tab-switcher');
-  // T13: at tablet width the strip is always on screen (CSS pins it inline
-  // inside #tabs), so it must stay populated even without the .open class
-  // the phone overlay uses.
-  const persistent = isWideLayout();
-  if (!persistent && !sw.classList.contains('open')) return;
+  if (isWideLayout() || !sw.classList.contains('open')) return;
   sw.innerHTML = '';
   sessionList.forEach(s => {
     const item = document.createElement('div');
@@ -1678,19 +1822,298 @@ function renderSwitcher() {
     empty.textContent = 'No sessions';
     sw.appendChild(empty);
   }
-  if (persistent) {
-    // The phone reaches "new session" by pulling up on the count button or
-    // swiping past the last tab; neither exists in the tablet layout, so the
-    // strip carries the affordance itself.
-    const add = document.createElement('div');
-    add.className = 'switcher-item switcher-new';
-    add.textContent = '+';
-    add.setAttribute('role', 'button');
-    add.setAttribute('aria-label', 'New session');
-    add.onclick = () => newSession();
-    sw.appendChild(add);
-  }
 }
+
+// -- T07: sessions side pane (herdr's Agents list) --------------------
+// One row per session: state glyph, name, cwd basename, git branch (+ the
+// worktree/repo name where it adds something), and the agent's terminal title. Status is herdr's (D7, session.agent from T06);
+// sessions without a feed (dtach) fall back to the server's attention, and
+// with neither the state is 'unknown' -- never a guessed idle.
+//
+// Rows are keyed by session id and PATCHED: an existing row's nodes are
+// reused, only changed text/attributes are written, and a reorder moves only
+// the rows outside the longest already-ordered run. No innerHTML anywhere.
+//
+// Hooks for T08 (shortcuts): selectSession(id), nextNeedsAttention(),
+// openSidepane()/closeSidepane()/toggleSidepane().
+const SP_RANK = { blocked: 0, done: 1, working: 2, idle: 3, unknown: 4 };
+const SP_STATUS_TEXT = {
+  blocked: 'Needs input', done: 'Done, not yet viewed', working: 'Working',
+  idle: 'Idle', unknown: 'Status unknown',
+};
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const sidepane = $('sidepane'), spList = $('sp-list'), spScrim = $('sp-scrim');
+const spToggle = $('sp-toggle');
+const spRows = new Map();   // session id -> row record (DOM nodes + last written values)
+const paneModalMQ = window.matchMedia(PANE_MODAL_QUERY);
+
+function sessionStatus(s) {
+  const st = s.agent && s.agent.status;
+  if (Object.prototype.hasOwnProperty.call(SP_RANK, st)) return st;
+  if (s.agent) return 'unknown';
+  if (s.attention === 'permission' || s.attention === 'question') return 'blocked';
+  if (s.attention === 'ready') return 'done';
+  return 'unknown';
+}
+
+// Priority = herdr's attention queue: blocked, done, working, idle, unknown;
+// ties keep the server's order (a stable sort on the original index).
+function prioritySorted(list) {
+  return list.map((s, i) => [s, i])
+    .sort((a, b) => (SP_RANK[sessionStatus(a[0])] - SP_RANK[sessionStatus(b[0])]) || (a[1] - b[1]))
+    .map(x => x[0]);
+}
+
+// The pane is always in priority order; there is no alternate sort (a mode
+// an older build persisted in localStorage is ignored).
+function sidepaneOrder(list) {
+  return prioritySorted(list);
+}
+
+function baseName(p) {
+  if (!p) return '';
+  const parts = String(p).split(/[\\/]+/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : String(p);
+}
+
+// Worktree label: a linked worktree's checkout name, else the repo name --
+// the first that says something neither the cwd folder nor the branch does.
+function worktreeLabel(wt, cwdBase, branch) {
+  if (!wt) return '';
+  const names = [wt.linked && wt.path ? baseName(wt.path) : '', wt.repo || ''];
+  return names.find(n => n && n !== cwdBase && n !== branch) || '';
+}
+
+// The git branch: the server reads it from the cwd's .git files (herdr
+// reports none) -- on the agent view for herdr, on the session for dtach.
+function sessionBranch(s) {
+  const b = s.agent ? s.agent.branch : s.branch;
+  return typeof b === 'string' ? b : '';
+}
+
+function svgUse(href) {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('focusable', 'false');
+  const use = document.createElementNS(SVG_NS, 'use');
+  use.setAttribute('href', href);
+  svg.appendChild(use);
+  return { svg, use };
+}
+
+function spText(el, v) { if (el.textContent !== v) el.textContent = v; }
+function spAttr(el, name, v) {
+  if (v === null || v === undefined) { if (el.hasAttribute(name)) el.removeAttribute(name); }
+  else if (el.getAttribute(name) !== v) el.setAttribute(name, v);
+}
+
+function makeSidepaneRow(id) {
+  const li = document.createElement('li');
+  li.className = 'sp-row';
+  li.dataset.id = String(id);
+  const main = document.createElement('button');
+  main.type = 'button';
+  main.className = 'sp-main';
+  const state = document.createElement('span');
+  state.className = 'sp-state';
+  const glyph = svgUse('#s-unknown');
+  state.appendChild(glyph.svg);
+  const unseen = document.createElement('span');
+  unseen.className = 'sp-unseen';
+  state.appendChild(unseen);
+  const text = document.createElement('span');
+  text.className = 'sp-text';
+  const name = document.createElement('span');
+  name.className = 'sp-name';
+  const meta = document.createElement('span');
+  meta.className = 'sp-meta';
+  const cwd = document.createElement('span');
+  cwd.className = 'sp-cwd';
+  const branch = document.createElement('span');
+  branch.className = 'sp-branch';
+  branch.hidden = true;
+  branch.appendChild(svgUse('#i-branch').svg);
+  const branchText = document.createElement('span');
+  branch.appendChild(branchText);
+  const wt = document.createElement('span');
+  wt.className = 'sp-wt';
+  wt.hidden = true;
+  meta.append(cwd, branch, wt);
+  const title = document.createElement('span');
+  title.className = 'sp-title';
+  text.append(name, meta, title);
+  main.append(state, text);
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'sp-close';
+  close.appendChild(svgUse('#i-xmark').svg);
+  li.append(main, close);
+  main.addEventListener('click', () => selectSession(id));
+  close.addEventListener('click', e => { e.stopPropagation(); closeSession(id); });
+  return { li, main, use: glyph.use, name, cwd, branch, branchText, wt, title, close };
+}
+
+function updateSidepaneRow(r, s) {
+  const status = sessionStatus(s);
+  const a = s.agent || null;
+  const cwdBase = baseName((a && a.cwd) || s.dir);
+  const branch = sessionBranch(s);
+  const wt = worktreeLabel(a && a.worktree, cwdBase, branch);
+  const title = (a && (a.title || a.agent)) || '';
+  const active = s.id === activeSession;
+  spAttr(r.li, 'data-status', status);
+  spAttr(r.use, 'href', '#s-' + status);
+  r.li.classList.toggle('active', active);
+  spAttr(r.main, 'aria-current', active ? 'true' : null);
+  spText(r.name, s.name);
+  spText(r.cwd, cwdBase);
+  spText(r.branchText, branch);
+  if (r.branch.hidden !== !branch) r.branch.hidden = !branch;
+  spText(r.wt, wt);
+  if (r.wt.hidden !== !wt) r.wt.hidden = !wt;
+  spText(r.title, title);
+  spAttr(r.main, 'aria-label', s.name + ', ' + SP_STATUS_TEXT[status]
+    + (cwdBase ? ', in ' + cwdBase : '') + (branch ? ', branch ' + branch : '')
+    + (wt ? ', worktree ' + wt : '')
+    + (title ? ', ' + title : '') + (active ? ', current' : ''));
+  spAttr(r.close, 'aria-label', 'Close ' + s.name);
+}
+
+// Longest increasing subsequence of `seq` (indices into seq): the rows that
+// are already in the right relative order and need not move.
+function lisIndices(seq) {
+  const tails = [], prev = new Array(seq.length);
+  for (let i = 0; i < seq.length; i++) {
+    let lo = 0, hi = tails.length;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (seq[tails[m]] < seq[i]) lo = m + 1; else hi = m; }
+    prev[i] = lo > 0 ? tails[lo - 1] : -1;
+    tails[lo] = i;
+  }
+  const keep = new Set();
+  for (let k = tails.length ? tails[tails.length - 1] : -1; k >= 0; k = prev[k]) keep.add(k);
+  return keep;
+}
+
+function renderSidepane() {
+  const order = sidepaneOrder(sessionList);
+  const wanted = new Set(order.map(s => s.id));
+  for (const [id, r] of spRows) {
+    if (!wanted.has(id)) { r.li.remove(); spRows.delete(id); }
+  }
+  const domPos = new Map();
+  [...spList.children].forEach((el, i) => domPos.set(el, i));
+  const rows = order.map(s => {
+    let r = spRows.get(s.id);
+    if (!r) { r = makeSidepaneRow(s.id); spRows.set(s.id, r); }
+    updateSidepaneRow(r, s);
+    return r;
+  });
+  // Only rows already in the list can stay put; new ones get position -1.
+  const seq = rows.map(r => (domPos.has(r.li) ? domPos.get(r.li) : -1));
+  const placed = rows.map((r, i) => i).filter(i => seq[i] >= 0);
+  const keepIdx = lisIndices(placed.map(i => seq[i]));
+  const keep = new Set([...keepIdx].map(k => placed[k]));
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (keep.has(i)) continue;
+    const next = i + 1 < rows.length ? rows[i + 1].li : null;
+    spList.insertBefore(rows[i].li, next);
+  }
+  const empty = $('sp-empty');
+  if (empty.hidden !== order.length > 0) empty.hidden = order.length > 0;
+}
+
+// Pick a session from the pane (or, later, a shortcut). Closes the portrait
+// sheet and hands keyboard focus back to the terminal.
+function selectSession(id) {
+  if (!sessionList.some(s => s.id === id)) return false;
+  const ae = document.activeElement;
+  if (ae && ae !== document.body && sidepane.contains(ae)) ae.blur();
+  if (sidepaneOpen()) {
+    // Start the slide-out before the switch: mounting a session is main-
+    // thread work, and the transition cannot begin until a frame commits.
+    closeSidepane();
+    requestAnimationFrame(() => setTimeout(() => { if (id !== activeSession) switchTo(id); }, 0));
+    return true;
+  }
+  if (id !== activeSession) switchTo(id);
+  return true;
+}
+
+// The next session needing the operator (blocked, then an unseen finish),
+// cycling from the active one. Returns false when nothing needs attention.
+function nextNeedsAttention() {
+  const queue = prioritySorted(sessionList).filter(s => {
+    const st = sessionStatus(s);
+    return st === 'blocked' || st === 'done';
+  });
+  if (!queue.length) return false;
+  const i = queue.findIndex(s => s.id === activeSession);
+  const next = queue[(i + 1) % queue.length];
+  return next.id === activeSession ? false : selectSession(next.id);
+}
+
+// Portrait: the pane is a modal slide-over. Landscape: pinned, never "open".
+function sidepaneIsModal() { return paneModalMQ.matches; }
+function sidepaneOpen() { return sidepane.classList.contains('open'); }
+
+function openSidepane() {
+  if (!sidepaneIsModal() || sidepaneOpen()) return;
+  closeSettings();
+  renderSidepane();
+  sidepane.classList.add('open');
+  spScrim.classList.add('open');
+  spToggle.setAttribute('aria-expanded', 'true');
+  spToggle.setAttribute('aria-label', 'Hide sessions');
+  // Focus the sheet itself (tabindex -1, no ring): screen readers land in it,
+  // and the next Tab reaches the rows.
+  try { sidepane.focus({ preventScroll: true }); } catch (e) { /* focus is best-effort */ }
+}
+
+function closeSidepane() {
+  if (!sidepaneOpen()) return;
+  const hadFocus = sidepane.contains(document.activeElement);
+  sidepane.classList.remove('open');
+  spScrim.classList.remove('open');
+  spToggle.setAttribute('aria-expanded', 'false');
+  spToggle.setAttribute('aria-label', 'Show sessions');
+  if (hadFocus) document.activeElement.blur();
+}
+
+function toggleSidepane() { sidepaneOpen() ? closeSidepane() : openSidepane(); }
+
+function syncSidepaneMode() {
+  if (!sidepaneIsModal()) closeSidepane();
+  renderSidepane();
+}
+paneModalMQ.addEventListener('change', syncSidepaneMode);
+
+spToggle.addEventListener('click', e => { e.preventDefault(); toggleSidepane(); });
+spScrim.addEventListener('click', () => closeSidepane());
+$('new-btn').addEventListener('click', () => { closeSidepane(); newSession(); });
+
+// Swipe in from the left edge opens the portrait sheet; a leftward swipe on
+// the open sheet closes it. Passive listeners: they never block a scroll.
+const SP_EDGE_PX = 24, SP_SWIPE_PX = 48;
+let spSwipe = null;
+document.addEventListener('touchstart', e => {
+  spSwipe = null;
+  if (!sidepaneIsModal() || e.touches.length !== 1) return;
+  const t = e.touches[0];
+  if (!sidepaneOpen() && t.clientX <= SP_EDGE_PX) spSwipe = { x: t.clientX, y: t.clientY, opening: true };
+  else if (sidepaneOpen() && e.target.closest && e.target.closest('#sidepane')) {
+    spSwipe = { x: t.clientX, y: t.clientY, opening: false };
+  }
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (!spSwipe || e.touches.length !== 1) return;
+  const t = e.touches[0];
+  const dx = t.clientX - spSwipe.x, dy = t.clientY - spSwipe.y;
+  if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { spSwipe = null; return; }
+  if (spSwipe.opening && dx > SP_SWIPE_PX) { spSwipe = null; openSidepane(); }
+  else if (!spSwipe.opening && dx < -SP_SWIPE_PX) { spSwipe = null; closeSidepane(); }
+}, { passive: true });
+document.addEventListener('touchend', () => { spSwipe = null; }, { passive: true });
+document.addEventListener('touchcancel', () => { spSwipe = null; }, { passive: true });
 
 function newSession() {
   if (!ws || ws.readyState !== 1) return;
@@ -1867,10 +2290,12 @@ function onSwipeMove(e) {
   // New session pull indicator (swipe left past last tab)
   if (dx < -20 && idx === sessionList.length - 1) {
     const pull = Math.min(Math.abs(dx), 200);
-    newHint.style.width = pull + 'px';
+    // T09: revealed by transform (compositor only), never by width. The
+    // hint is 200px wide and rests at translateX(100%), off the right edge.
+    newHint.style.transform = `translateX(${200 - pull}px)`;
     newHint.classList.toggle('ready', pull >= NEW_SESSION_THRESHOLD);
   } else {
-    newHint.style.width = '0';
+    newHint.style.transform = '';
     newHint.classList.remove('ready');
   }
 }
@@ -1878,7 +2303,7 @@ function onSwipeMove(e) {
 function endSwipe() {
   hintL.classList.remove('flash');
   hintR.classList.remove('flash');
-  newHint.style.width = '0';
+  newHint.style.transform = '';
   newHint.classList.remove('ready');
   if (!swipeActive) return;
   swipeActive = false;
@@ -1981,7 +2406,7 @@ function snapBack(activeWrap) {
 // costs iOS a hit-test on every frame of a system gesture.
 //
 // The code stays. A phone is still a supported client, and rotating an
-// iPad or resizing a desktop window across 820px re-binds it live.
+// iPad or resizing a desktop window across the tablet bound re-binds it live.
 let swipeHandlersBound = false;
 
 function swipeNavigationActive() { return swipeHandlersBound; }
@@ -2044,8 +2469,8 @@ function sendMsg() {
   autoGrow();
   updateSendBtn();
   userScrolled = false; // auto-follow new output after sending
-  msgInput.style.borderColor = 'var(--intent-ok)';
-  setTimeout(() => { msgInput.style.borderColor = ''; }, 300);
+  msgInput.classList.add('sent');
+  setTimeout(() => { msgInput.classList.remove('sent'); }, 300);
 }
 
 function editLast() {
@@ -2074,8 +2499,9 @@ imgBtn.addEventListener('click', (e) => {
 imgInput.addEventListener('change', async () => {
   const file = imgInput.files[0];
   if (!file) return;
-  imgBtn.textContent = '...';
-  imgBtn.disabled = true;
+  imgBtn.classList.remove('err');
+  imgBtn.classList.add('busy');
+  imgBtn.setAttribute('aria-busy', 'true');
   try {
     const res = await fetch('/api/upload', {
       method: 'POST',
@@ -2091,15 +2517,14 @@ imgInput.addEventListener('change', async () => {
     imgName.textContent = data.filename;
     imgPreview.classList.add('show');
     imgBtn.classList.add('has-img');
-    imgBtn.textContent = 'Img';
   } catch (e) {
     console.error('Upload failed:', e);
-    showStatus('Upload failed: ' + (e.message || 'unknown error'), 'var(--intent-danger)');
-    imgBtn.style.borderColor = 'var(--intent-danger)';
-    imgBtn.style.color = 'var(--intent-danger)';
-    setTimeout(() => { imgBtn.textContent = 'Img'; imgBtn.style.borderColor = ''; imgBtn.style.color = ''; }, 3000);
+    showStatus('Upload failed: ' + (e.message || 'unknown error'), 'var(--intent-danger-text)');
+    imgBtn.classList.add('err');
+    setTimeout(() => { imgBtn.classList.remove('err'); }, 3000);
   }
-  imgBtn.disabled = false;
+  imgBtn.classList.remove('busy');
+  imgBtn.removeAttribute('aria-busy');
   imgInput.value = '';
 });
 
@@ -2110,7 +2535,12 @@ imgClear.addEventListener('click', () => {
 });
 
 function updateSendBtn() {
-  $('send').textContent = msgInput.value.trim() ? 'Send' : 'Enter';
+  // T09: the button is a glyph (return when empty, arrow.up with text); the
+  // accessible name carries what the old text label said.
+  const has = !!msgInput.value.trim();
+  const btn = $('send');
+  btn.classList.toggle('has-text', has);
+  btn.setAttribute('aria-label', has ? 'Send message' : 'Send Enter');
 }
 
 let lastMsgHeight = 0;
@@ -2128,7 +2558,8 @@ function autoGrow() {
   if (len === lastMsgHeight) return;
   lastMsgHeight = len;
   msgInput.style.height = '0';
-  msgInput.style.height = Math.min(msgInput.scrollHeight, 64) + 'px';
+  // CSS max-height caps it per layout (64px phone, 132px tablet).
+  msgInput.style.height = Math.min(msgInput.scrollHeight, 132) + 'px';
 }
 
 function qsend(k) {
@@ -2346,7 +2777,7 @@ msgInput.addEventListener('blur', () => { lastMsgHeight = -1; autoGrow(); });
 //
 // This forwards keystrokes straight to the PTY whenever a terminal is on
 // screen and no form field has focus. The compose box stays for long or
-// multi-line prompts: Cmd-K focuses it, Esc leaves it, a tap on the
+// multi-line prompts: Cmd-J focuses it (T08; was Cmd-K), Esc leaves it, a tap on the
 // terminal leaves it.
 //
 // ATOMICITY (CLAUDE.md): text and Enter must reach the PTY as a SINGLE
@@ -2380,7 +2811,7 @@ function applyHwKeyboard() {
   document.body.classList.toggle('hwkb', on);
   const box = $('set-hwkb');
   if (box) box.checked = on;
-  msgInput.placeholder = on ? 'Compose (Cmd-K)...' : 'Type a message...';
+  msgInput.placeholder = on ? 'Compose (Cmd-J)' : 'Type a message...';
 }
 
 // ── T14: terminal font size ─────────────────────────────────────────
@@ -2419,10 +2850,7 @@ function applyFontSize() {
     try { terms[id].options.fontSize = px; } catch (e) { clientLog('font xterm: ' + e.message); }
   });
   // Grid path: both cached metrics are now stale.
-  Object.keys(gridTerms).forEach(id => {
-    gridTerms[id].charWidth = 0;
-    gridTerms[id].rowHeight = 0;
-  });
+  invalidateGridMetrics();
   const val = $('set-font-val'); if (val) val.textContent = px;
   const slider = $('set-font'); if (slider) slider.value = px;
   // Re-window on the next frame (row height changed), then tell the server.
@@ -2713,6 +3141,7 @@ $('srv-update')?.addEventListener('click', async () => {
 });
 
 $('settings-btn').addEventListener('click', e => { e.preventDefault(); toggleSettings(); });
+$('set-done').addEventListener('click', () => { closeSettings(); $('settings-btn').focus(); });
 $('set-hwkb').addEventListener('change', e => setHwKeyboard(e.target.checked));
 $('set-font').addEventListener('input', e => setFontSize(e.target.value));
 document.addEventListener('click', e => {
@@ -2806,7 +3235,14 @@ function terminalHasKeyboardFocus() {
   if (activeSession === null) return false;
   if (!appIsVisible()) return false;
   if (settingsOpen()) return false;
-  return !isTypingTarget(document.activeElement);
+  if (kbOverlayOpen()) return false;   // T08: switcher / key list are modal
+  // T07: the portrait sheet is modal, and a pane control reached by keyboard
+  // (focus-visible) keeps its keys -- Enter/Space must activate the row, not
+  // reach the PTY. A pointer pick hands focus back (selectSession blurs).
+  if (sidepaneOpen()) return false;
+  const ae = document.activeElement;
+  if (ae && ae.closest && ae.closest('#chrome-col') && ae.matches(':focus-visible')) return false;
+  return !isTypingTarget(ae);
 }
 
 function focusCompose() {
@@ -2818,11 +3254,15 @@ function focusCompose() {
 // ── Cmd-based app shortcuts ──
 // Cmd chords never reach the PTY: on iPadOS they are the app-level verbs.
 // Anything not claimed here falls through to the browser (Cmd-R, Cmd-Tab).
+// Safari's own chords (Cmd-T/W/L/R/Q/Tab/Space) are deliberately never
+// claimed. T08 (D8): Cmd-K is the session switcher; the compose box moved to
+// Cmd-J.
 function handleAppShortcut(e) {
   if (!e.metaKey || e.ctrlKey) return false;
   if (!appIsVisible()) return false;
   const k = e.key;
-  if (k === 'k' || k === 'K') { e.preventDefault(); focusCompose(); return true; }
+  if (!e.shiftKey && (k === 'k' || k === 'K')) { e.preventDefault(); openSwitcher(); return true; }
+  if (!e.shiftKey && (k === 'j' || k === 'J')) { e.preventDefault(); focusCompose(); return true; }
   if (k === '/') { e.preventDefault(); toggleSettings(); return true; }
   if (!e.shiftKey && k >= '1' && k <= '9') {
     const idx = Number(k) - 1;
@@ -2843,10 +3283,19 @@ function onGlobalKeyDown(e) {
   // some locales) delivers keyCode 229 until the composition commits.
   // Forwarding those would send the pre-edit buffer twice.
   if (e.isComposing || e.keyCode === 229) return;
+  // T08: an open overlay owns every key (its own listener runs first).
+  if (kbOverlayOpen()) return;
   if (e.key === 'Escape' && settingsOpen()) { e.preventDefault(); closeSettings(); return; }
+  if (e.key === 'Escape' && sidepaneOpen()) { e.preventDefault(); closeSidepane(); return; }
+  // T08: a bare modifier is not the key after the prefix -- '?' arrives as
+  // Shift, then '?'.
+  if (kbPrefixArmed && KB_MODIFIER_KEYS.has(e.key)) return;
+  if (kbPrefixArmed && (e.metaKey || !terminalHasKeyboardFocus())) kbDisarmPrefix();
   if (handleAppShortcut(e)) return;
   if (!terminalHasKeyboardFocus()) return;
   if (e.metaKey) return;
+  if (kbPrefixArmed) { e.preventDefault(); kbDisarmPrefix(); kbHandlePrefixed(e); return; }
+  if (kbIsPrefixChord(e)) { e.preventDefault(); kbFlush(); kbArmPrefix(); return; }
   const seq = keyToSequence(e);
   if (seq === null || seq === undefined) return;
   e.preventDefault();
@@ -2868,6 +3317,415 @@ document.addEventListener('paste', e => {
   kbFlush(text);
 });
 
+// == T08: prefix keys, switcher, key list, focus reporting ===============
+// D8: shortcuts mirror herdr's defaults. herdr's OWN prefix is also ctrl+b
+// (herdr --default-config; herdr-config.toml does not rebind it), so the web
+// must not steal it. ctrl+b arms a short prefix state here and HOLDS the
+// byte. The next key is either one the web handles -- n/p/1-9/a/?/s, all
+// session-level -- or it is forwarded as ctrl+b + that key in ONE write, so
+// herdr receives exactly the chord a real terminal would have sent and its
+// own bindings (v split, minus split, h/j/k/l focus, z zoom, ...) keep
+// working. ctrl+b ctrl+b sends one literal ctrl+b.
+//
+// Shadowed on purpose: herdr's n/p/1-9 switch herdr TABS, and every session
+// here is one herdr tab, so they would do nothing; the web binds the same
+// letters to sessions. herdr's ? (help) and s (settings) are replaced by the
+// key list below and the sessions pane.
+const KB_PREFIX_BYTE = '\x02';
+const KB_PREFIX_MS = 1500;
+const KB_FLASH_MS = 1600;
+const KB_MODIFIER_KEYS = new Set(['Shift', 'Control', 'Alt', 'Meta', 'CapsLock', 'Fn', 'OS']);
+// var, not let: the prefix/overlay/focus state is read from paths
+// (switchTo, the message handler) that must never hit a TDZ.
+var kbPrefixArmed = false;
+var kbPrefixTimer = 0;
+var kbChipTimer = 0;
+const kbChip = $('kb-chip');
+
+function kbIsPrefixChord(e) {
+  return e.ctrlKey && !e.altKey && !e.metaKey && (e.key === 'b' || e.key === 'B');
+}
+
+function kbChipShow(text, sticky) {
+  clearTimeout(kbChipTimer);
+  kbChip.textContent = text;
+  kbChip.hidden = false;
+  kbChipTimer = sticky ? 0 : setTimeout(kbChipHide, KB_FLASH_MS);
+}
+function kbChipHide() { clearTimeout(kbChipTimer); kbChipTimer = 0; kbChip.hidden = true; }
+
+function kbArmPrefix() {
+  kbPrefixArmed = true;
+  clearTimeout(kbPrefixTimer);
+  kbPrefixTimer = setTimeout(kbDisarmPrefix, KB_PREFIX_MS);
+  kbChipShow('ctrl+b   n p 1-9 a ? s  --  any other key goes to herdr', true);
+}
+
+// Timing out sends nothing: herdr never saw the prefix, so it is not waiting.
+function kbDisarmPrefix() {
+  kbPrefixArmed = false;
+  clearTimeout(kbPrefixTimer);
+  kbPrefixTimer = 0;
+  if (!kbChipTimer) kbChipHide();
+}
+
+// The one place a held prefix is released to the pane: prefix + key, atomic.
+function kbPrefixPassthrough(seq) { kbFlush(KB_PREFIX_BYTE + seq); }
+
+function kbSessionOrder() { return sidepaneOrder(sessionList); }
+
+function kbStepSession(dir) {
+  const order = kbSessionOrder();
+  if (!order.length) return false;
+  const i = order.findIndex(s => s.id === activeSession);
+  const next = i < 0 ? order[dir > 0 ? 0 : order.length - 1]
+                     : order[(i + dir + order.length) % order.length];
+  return selectSession(next.id);
+}
+
+function kbHandlePrefixed(e) {
+  if (kbIsPrefixChord(e)) { kbFlush(KB_PREFIX_BYTE); return; }
+  const k = e.key;
+  if (k === 'Escape') return;   // cancel: nothing was sent, nothing to undo
+  if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+    if (k === 'n' || k === 'p') { kbStepSession(k === 'n' ? 1 : -1); return; }
+    if (k.length === 1 && k >= '1' && k <= '9') {
+      const s = kbSessionOrder()[Number(k) - 1];
+      if (s) selectSession(s.id); else kbChipShow('No session ' + k);
+      return;
+    }
+    if (k === 'a') { if (!nextNeedsAttention()) kbChipShow('Nothing needs attention'); return; }
+    if (k === '?') { openHelp(); return; }
+    if (k === 's') {
+      if (sidepaneIsModal()) toggleSidepane();
+      else kbChipShow(isWideLayout() ? 'Sessions are pinned in landscape' : 'No sessions pane at this width');
+      return;
+    }
+  }
+  const seq = keyToSequence(e);
+  if (seq === null || seq === undefined) return;   // nothing herdr could receive
+  kbPrefixPassthrough(seq);
+}
+
+// -- Overlays: Cmd-K switcher and the ctrl+b ? key list --
+// Glass sheets over the terminal (D3: chrome, never content). role=dialog +
+// aria-modal, focus trapped while open, and focus handed back to the
+// terminal's input on close: the page itself in hardware-keyboard mode, the
+// compose box when that is where the operator was.
+var kbOverlay = null;   // { el, kind, input, prevFocus }
+const kbSwitcherEl = $('kb-switcher'), kbHelpEl = $('kb-help');
+const kswInput = $('ksw-input'), kswList = $('ksw-list'), kswEmpty = $('ksw-empty');
+const khelpInput = $('khelp-input'), khelpList = $('khelp-list'), khelpEmpty = $('khelp-empty');
+var kswItems = [];      // [{ s, li }] in display order
+var kswIndex = -1;
+
+function kbOverlayOpen() { return !!kbOverlay; }
+
+function kbOpenOverlay(kind) {
+  const el = kind === 'switcher' ? kbSwitcherEl : kbHelpEl;
+  const input = kind === 'switcher' ? kswInput : khelpInput;
+  const prev = kbOverlay ? kbOverlay.prevFocus : document.activeElement;
+  if (kbOverlay) kbCloseOverlay(false);
+  kbDisarmPrefix();
+  closeSettings();
+  closeSidepane();
+  kbOverlay = { el, kind, input, prevFocus: prev };
+  input.value = '';
+  el.hidden = false;
+  try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); }
+}
+
+function kbCloseOverlay(restore) {
+  const o = kbOverlay;
+  if (!o) return;
+  kbOverlay = null;
+  o.el.hidden = true;
+  if (restore !== false) kbRestoreTerminalFocus(o.prevFocus);
+}
+
+function kbRestoreTerminalFocus(prev) {
+  const ae = document.activeElement;
+  if (ae && ae !== document.body && ae.blur) ae.blur();
+  if (prev === msgInput) focusCompose();
+}
+
+function kbFocusables(el) {
+  return [...el.querySelectorAll('input, button')].filter(x => !x.disabled && x.offsetParent !== null);
+}
+
+function kbOverlayKeyDown(e) {
+  if (!kbOverlay || e.isComposing || e.keyCode === 229) return;
+  const k = e.key;
+  if (k === 'Escape') { e.preventDefault(); kbCloseOverlay(); return; }
+  if (k === 'Tab') {
+    // Trap: cycle among the sheet's own controls.
+    e.preventDefault();
+    const f = kbFocusables(kbOverlay.el);
+    if (!f.length) return;
+    const i = f.indexOf(document.activeElement);
+    f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+    return;
+  }
+  if (e.metaKey && !e.ctrlKey && (k === 'k' || k === 'K')) {
+    e.preventDefault();
+    if (kbOverlay.kind === 'switcher') kbCloseOverlay(); else openSwitcher();
+    return;
+  }
+  if (kbOverlay.kind !== 'switcher') return;
+  if (k === 'ArrowDown' || k === 'ArrowUp') {
+    e.preventDefault();
+    if (kswItems.length) kswSetIndex((kswIndex + (k === 'ArrowDown' ? 1 : -1) + kswItems.length) % kswItems.length);
+    return;
+  }
+  if (k === 'Enter') {
+    e.preventDefault();
+    if (kswIndex >= 0 && kswItems[kswIndex]) kswPick(kswItems[kswIndex].s.id);
+  }
+}
+
+// -- switcher --
+function kswHaystack(s) {
+  const a = s.agent || null;
+  const cwd = (a && a.cwd) || s.dir || '';
+  const cwdBase = baseName(cwd);
+  return [s.name, cwd, cwdBase, worktreeLabel(a && a.worktree, cwdBase),
+          (a && (a.title || a.agent)) || ''].join(' ').toLowerCase();
+}
+
+function kswRender() {
+  const terms = kswInput.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const hits = kbSessionOrder().filter(s => {
+    const h = kswHaystack(s);
+    return terms.every(t => h.includes(t));
+  });
+  kswList.textContent = '';
+  kswIndex = -1;
+  kswItems = hits.map(s => {
+    const status = sessionStatus(s);
+    const a = s.agent || null;
+    const cwdBase = baseName((a && a.cwd) || s.dir);
+    const title = (a && (a.title || a.agent)) || '';
+    const li = document.createElement('li');
+    li.className = 'kb-opt';
+    li.id = 'ksw-opt-' + s.id;
+    li.dataset.id = String(s.id);
+    li.dataset.status = status;
+    li.setAttribute('role', 'option');
+    li.setAttribute('aria-selected', 'false');
+    const state = document.createElement('span');
+    state.className = 'sp-state';
+    state.appendChild(svgUse('#s-' + status).svg);
+    const unseen = document.createElement('span');
+    unseen.className = 'sp-unseen';
+    state.appendChild(unseen);
+    const text = document.createElement('span');
+    text.className = 'kb-opt-text';
+    const name = document.createElement('span');
+    name.className = 'kb-opt-name';
+    name.textContent = s.name;
+    const meta = document.createElement('span');
+    meta.className = 'kb-opt-meta';
+    meta.textContent = cwdBase + (title ? '  -  ' + title : '');
+    text.append(name, meta);
+    li.append(state, text);
+    if (s.id === activeSession) {
+      const cur = document.createElement('span');
+      cur.className = 'kb-opt-cur';
+      cur.textContent = 'Current';
+      li.appendChild(cur);
+    }
+    li.setAttribute('aria-label', s.name + ', ' + SP_STATUS_TEXT[status]
+      + (cwdBase ? ', in ' + cwdBase : '') + (title ? ', ' + title : '')
+      + (s.id === activeSession ? ', current' : ''));
+    li.addEventListener('click', () => kswPick(s.id));
+    kswList.appendChild(li);
+    return { s, li };
+  });
+  kswEmpty.hidden = kswItems.length > 0;
+  // With no query the first pick is somewhere else to go; with one, the best hit.
+  let start = 0;
+  if (!terms.length && kswItems.length > 1 && kswItems[0].s.id === activeSession) start = 1;
+  kswSetIndex(kswItems.length ? start : -1);
+}
+
+function kswSetIndex(i) {
+  if (kswIndex >= 0 && kswItems[kswIndex]) kswItems[kswIndex].li.setAttribute('aria-selected', 'false');
+  kswIndex = i;
+  if (i >= 0 && kswItems[i]) {
+    kswItems[i].li.setAttribute('aria-selected', 'true');
+    kswInput.setAttribute('aria-activedescendant', kswItems[i].li.id);
+    kswItems[i].li.scrollIntoView({ block: 'nearest' });
+  } else {
+    kswInput.removeAttribute('aria-activedescendant');
+  }
+}
+
+// A pick lands on the terminal, whatever had focus before the switcher.
+function kswPick(id) {
+  kbCloseOverlay(false);
+  kbRestoreTerminalFocus(null);
+  selectSession(id);
+}
+
+function openSwitcher() {
+  if (!appIsVisible()) return;
+  kbOpenOverlay('switcher');
+  kswRender();
+}
+
+// -- key list (ctrl+b ?) --
+// Web keys first, then the herdr keys that pass through untouched (herdr's
+// default keymap). Filterable by key or description.
+const KB_HELP = [
+  { group: 'This app', rows: [
+    ['Cmd-K', 'Switch session: search by name, folder or title'],
+    ['Cmd-J', 'Compose box for long or multi-line prompts (Esc returns)'],
+    ['Cmd-/', 'Settings'],
+    ['Cmd-1 ... Cmd-9', 'Session by creation order'],
+    ['Cmd-Shift-Left / Right', 'Previous / next session'],
+    ['ctrl+b n', 'Next session (sessions-pane order)'],
+    ['ctrl+b p', 'Previous session'],
+    ['ctrl+b 1 ... 9', 'Session by its position in the sessions pane'],
+    ['ctrl+b a', 'Next session needing you: blocked first, then finished and unseen'],
+    ['ctrl+b ?', 'This list'],
+    ['ctrl+b s', 'Show or hide the sessions pane (portrait)'],
+    ['ctrl+b ctrl+b', 'Send one literal ctrl+b to the terminal'],
+  ] },
+  { group: 'herdr (passed through)', rows: [
+    ['ctrl+b v', 'Split pane vertically'],
+    ['ctrl+b minus', 'Split pane horizontally'],
+    ['ctrl+b h / j / k / l', 'Focus pane left / down / up / right'],
+    ['ctrl+b tab', 'Next pane (shift+tab: previous)'],
+    ['ctrl+b x', 'Close pane'],
+    ['ctrl+b z', 'Zoom pane'],
+    ['ctrl+b r', 'Resize mode'],
+    ['ctrl+b e', 'Edit scrollback'],
+    ['ctrl+b shift+p', 'Rename pane'],
+    ['ctrl+b c', 'New herdr tab'],
+    ['ctrl+b shift+t', 'Rename herdr tab'],
+    ['ctrl+b shift+x', 'Close herdr tab'],
+    ['ctrl+b b', 'Toggle herdr sidebar'],
+    ['ctrl+b w', 'Workspace picker'],
+    ['ctrl+b g', 'Go to'],
+    ['ctrl+b o', 'Open notification target'],
+    ['ctrl+b shift+n', 'New workspace'],
+    ['ctrl+b shift+g', 'New worktree'],
+    ['ctrl+b shift+w', 'Rename workspace'],
+    ['ctrl+b shift+d', 'Close workspace'],
+    ['ctrl+b shift+r', 'Reload herdr config'],
+    ['ctrl+b q', 'Detach the herdr client'],
+  ] },
+];
+const KB_HELP_NOTE = "herdr's own ctrl+b n / p / 1-9 (tabs), ? and s are answered by this app: "
+  + 'each session here is one herdr tab.';
+
+var khelpRows = null;   // [{ li, head, text }]
+var khelpNote = null;
+
+function khelpBuild() {
+  if (khelpRows) return;
+  khelpRows = [];
+  for (const g of KB_HELP) {
+    const head = document.createElement('li');
+    head.className = 'kb-group';
+    head.textContent = g.group;
+    khelpList.appendChild(head);
+    for (const [keys, desc] of g.rows) {
+      const li = document.createElement('li');
+      li.className = 'kb-row';
+      const kbd = document.createElement('kbd');
+      kbd.textContent = keys;
+      const d = document.createElement('span');
+      d.textContent = desc;
+      li.append(kbd, d);
+      khelpList.appendChild(li);
+      khelpRows.push({ li, head, text: (keys + ' ' + desc + ' ' + g.group).toLowerCase() });
+    }
+  }
+  khelpNote = document.createElement('li');
+  khelpNote.className = 'kb-note';
+  khelpNote.textContent = KB_HELP_NOTE;
+  khelpList.appendChild(khelpNote);
+}
+
+function khelpRender() {
+  const terms = khelpInput.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const shownHeads = new Set();
+  let n = 0;
+  for (const r of khelpRows) {
+    const show = terms.every(t => r.text.includes(t));
+    r.li.hidden = !show;
+    if (show) { n++; shownHeads.add(r.head); }
+  }
+  for (const r of khelpRows) r.head.hidden = !shownHeads.has(r.head);
+  khelpNote.hidden = terms.length > 0;
+  khelpEmpty.hidden = n > 0;
+}
+
+function openHelp() {
+  if (!appIsVisible()) return;
+  khelpBuild();
+  kbOpenOverlay('help');
+  khelpRender();
+}
+
+kswInput.addEventListener('input', kswRender);
+khelpInput.addEventListener('input', khelpRender);
+for (const el of [kbSwitcherEl, kbHelpEl]) {
+  el.addEventListener('keydown', kbOverlayKeyDown);
+  el.querySelectorAll('[data-kb-close]').forEach(b => b.addEventListener('click', () => kbCloseOverlay()));
+}
+// Trap focus that arrives from outside (a pointer, an assistive technology).
+document.addEventListener('focusin', e => {
+  if (kbOverlay && !kbOverlay.el.contains(e.target)) kbOverlay.input.focus();
+});
+
+// -- Focus reporting (CSI ?1004h) --
+// Consistent with mouse reporting (T22): the server reads the mode off the
+// headless mirror, pushes each transition in the same mouse-mode message
+// (mouse.focus), and writes the bytes itself -- it re-checks the mode, so a
+// report racing a ?1004l is dropped there. The client only says which
+// session is focused, and only while that session's app asked to be told.
+// Focused = the page is visible AND the window has focus AND it is the
+// session on screen; switching sessions is out for one and in for the other.
+var kbWinFocused = typeof document.hasFocus === 'function' ? document.hasFocus() : true;
+var kbFocusSent = new Map();   // session id -> last report sent (true = in)
+
+function kbFocusTarget() {
+  if (document.visibilityState !== 'visible' || !kbWinFocused) return null;
+  return activeSession;
+}
+
+function syncFocusReport() {
+  if (RENDERER_MODE !== 'grid' || !ws || ws.readyState !== 1) return;
+  const target = kbFocusTarget();
+  for (const id of Object.keys(gridTerms)) {
+    const sid = Number(id);
+    const grid = gridTerms[id];
+    const on = !!(grid && grid.mouse && grid.mouse.focus);
+    if (!on) { kbFocusSent.delete(sid); continue; }
+    const want = sid === target;
+    const last = kbFocusSent.get(sid);
+    // In when it becomes focused (or the mode just turned on while it was);
+    // out only to a session that was last told in.
+    if (want ? last !== true : last === true) {
+      kbFocusSent.set(sid, want);
+      queueSend({ type: 'focus', session: sid, focused: want });
+    }
+  }
+}
+
+window.addEventListener('focus', () => { kbWinFocused = true; syncFocusReport(); });
+window.addEventListener('blur', () => { kbWinFocused = false; syncFocusReport(); });
+document.addEventListener('visibilitychange', () => syncFocusReport());
+// A key or a touch is proof the window has focus, whatever hasFocus() said at
+// load -- so a missed initial 'focus' event cannot leave a pane never told.
+for (const t of ['keydown', 'pointerdown']) {
+  document.addEventListener(t, () => {
+    if (!kbWinFocused) { kbWinFocused = true; syncFocusReport(); }
+  }, { capture: true, passive: true });
+}
+
 applyHwKeyboard();
 applyFontSize();
 
@@ -2876,11 +3734,12 @@ applyFontSize();
 // the settings readout all compute columns the same way.
 function computeGridDims(grid) {
   if (!grid || grid.wrap.clientWidth === 0) return null;
-  const cell = probeCell(grid.wrap);
-  if (cell.w <= 0 || cell.h <= 0) return null;
+  // T11: the renderer's own cached cell, so the cols/rows the server is told
+  // are computed from the same numbers the rows, cursor and mouse use.
+  if (!probeGridMetrics(grid)) return null;
   return {
-    cols: Math.max(10, Math.floor(grid.wrap.clientWidth / cell.w)),
-    rows: Math.max(5, Math.floor(grid.wrap.clientHeight / cell.h)),
+    cols: Math.max(10, Math.floor(grid.wrap.clientWidth / grid.charWidth)),
+    rows: Math.max(5, Math.floor(grid.wrap.clientHeight / grid.rowHeight)),
   };
 }
 
@@ -2977,7 +3836,7 @@ if (window.visualViewport) {
 // ── iOS Prevention ──
 // Prevent bounce scroll on non-scrollable areas
 document.addEventListener('touchmove', e => {
-  if (!e.target.closest('#term-area, #qbar, #msg, #input-bar, #img-btn, .xterm-viewport, #tab-switcher, #autocomplete, .switcher-item')) e.preventDefault();
+  if (!e.target.closest('#term-area, #qbar, #msg, #input-bar, #img-btn, .xterm-viewport, #tab-switcher, #autocomplete, .switcher-item, #sp-list')) e.preventDefault();
 }, { passive: false });
 
 // Prevent ALL double-tap zoom (comprehensive)
@@ -3004,6 +3863,12 @@ sendBtn.addEventListener('click', e => {
   e.preventDefault();
   sendMsg();
 });
+// T09: a POINTER press on Send must not take focus from the compose box.
+// mousedown's default action is to move focus; in hardware-keyboard mode
+// losing it collapses the bar (:focus-within), so the layout moved under the
+// pointer between mousedown and mouseup and the click was lost. Same guard
+// the autocomplete rows use. Touch goes through touchend above.
+sendBtn.addEventListener('mousedown', e => { e.preventDefault(); });
 
 // ── Pull-up on tab count = new session ──
 (function() {
@@ -3022,7 +3887,7 @@ sendBtn.addEventListener('click', e => {
       pulling = true;
       countText.textContent = '+';
       btn.style.borderColor = 'var(--accent)';
-      btn.style.color = 'var(--accent-light)';
+      btn.style.color = 'var(--accent-text)';
     } else if (dy <= THRESHOLD && pulling) {
       pulling = false;
       countText.textContent = originalText;
@@ -3043,33 +3908,6 @@ sendBtn.addEventListener('click', e => {
     btn.style.color = '';
   });
 })();
-
-// ── Light/Dark Mode Toggle ──
-function updateThemeChar() {
-  const isLight = document.documentElement.classList.contains('light');
-  // Moon crescent in dark mode, sun in light mode
-  $('theme-char').innerHTML = isLight ? '&#9788;' : '&#9790;';
-}
-
-function toggleTheme() {
-  const isLight = document.documentElement.classList.toggle('light');
-  localStorage.setItem('cm-theme', isLight ? 'light' : 'dark');
-  updateThemeChar();
-  const theme = getTermTheme();
-  Object.keys(terms).forEach(id => { terms[id].options.theme = theme; });
-  let meta = document.querySelector('meta[name="theme-color"]');
-  if (!meta) { meta = document.createElement('meta'); meta.name = 'theme-color'; document.head.appendChild(meta); }
-  meta.content = isLight ? '#f6f7f9' : '#111418';
-}
-
-// T04a: was onclick="toggleTheme()" on #theme-toggle.
-$('theme-toggle').addEventListener('click', () => toggleTheme());
-
-// Restore saved theme
-if (localStorage.getItem('cm-theme') === 'light') {
-  document.documentElement.classList.add('light');
-}
-updateThemeChar();
 
 // Wake lock
 if ('wakeLock' in navigator) {

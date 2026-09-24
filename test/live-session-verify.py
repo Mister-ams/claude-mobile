@@ -1,7 +1,7 @@
 """
 Live end-to-end verification against a RUNNING claude-mobile server.
 
-test/ipad-emulator.py drives a static server with synthetic frames -- it never
+test/ipad-webkit.py drives a static server with synthetic frames -- it never
 touches a session backend, so it cannot tell you whether dtach or herdr
 actually works. This does the opposite: it authenticates for real, creates a
 real session, waits for Claude to paint in it, and measures what the client

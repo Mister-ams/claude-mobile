@@ -10,11 +10,13 @@
        attached). -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <!-- D1: light only. Matches --term-bg, the colour the status bar sits over. -->
+  <meta name="theme-color" content="#FBFBFD">
   <meta name="apple-mobile-web-app-title" content="Claude">
   <title>Claude Mobile</title>
   <link rel="stylesheet" href="/vendor/xterm.min.css" />
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/style.css?v=4.0.0" />
 <!-- CSS extracted to public/style.css -->
 </head>
 <body>
@@ -32,8 +34,9 @@
     <button class="auth-primary" id="passkey-btn"
             aria-label="Login with Face ID">Login with Face ID</button>
 
+    <!-- The instruction line is #auth-label alone; app.js sets it per mode.
+         A second static line here duplicated it on TOTP-only / fallback. -->
     <div id="totp-section">
-      <p class="sub">Enter verification code</p>
       <input type="tel" id="totp-input" class="totp-input" maxlength="6" placeholder="000000"
              autocapitalize="off" autocomplete="one-time-code" aria-label="TOTP verification code">
       <button class="auth-btn" id="auth-submit-btn">Verify</button>
@@ -48,47 +51,106 @@
   </div>
 </div>
 
-<div id="app">
-  <div id="header">
-    <div>
-      <div style="display:flex;align-items:center">
-        <span class="dot" id="dot"></span>
-        <input type="text" class="sess-name" id="sname" value="No session"
-               autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false"
-               aria-label="Session name">
-      </div>
-      <div class="sess-dir" id="sdir"></div>
-    </div>
-    <button id="settings-btn" aria-label="Settings" aria-expanded="false" aria-controls="settings-panel">&#9881;</button>
-    <!-- T12: client settings. Wired with addEventListener in app.js rather
-         than inline onclick so the panel survives the T04 CSP tightening
-         that drops 'unsafe-inline' from script-src. -->
-    <div id="settings-panel" role="group" aria-label="Client settings">
-      <div class="set-row">
-        <label for="set-hwkb">Hardware keyboard</label>
-        <input type="checkbox" id="set-hwkb">
-      </div>
-      <p class="set-note">Keys go straight to the terminal unless the compose box has focus. Cmd-K composes, Esc returns.</p>
-      <div class="set-row">
-        <label for="set-font">Terminal font</label>
-        <span class="set-val"><span id="set-font-val">13</span>px</span>
-      </div>
-      <input type="range" id="set-font" min="10" max="24" step="1" aria-label="Terminal font size">
-      <p class="set-note" id="set-cols"></p>
+<!-- Icons (D4): self-drawn inline SVG in the SF Symbols style, referenced by
+     <use href="#...">. Status glyphs differ in SHAPE as well as colour, so the
+     side pane never relies on colour alone. -->
+<svg id="icon-sprite" aria-hidden="true" focusable="false" width="0" height="0" style="position:absolute">
+  <symbol id="i-sidebar" viewBox="0 0 20 20"><rect x="2.5" y="4" width="15" height="12" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M7.5 4v12" stroke="currentColor" stroke-width="1.6"/><path d="M4.4 7h1.4M4.4 9.5h1.4M4.4 12h1.4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 20 20"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 20 20"><path d="M16.2 8.5 L18.3 9.0 L18.3 11.0 L16.2 11.5 L15.5 13.3 L16.6 15.2 L15.2 16.6 L13.3 15.5 L11.5 16.2 L11.0 18.3 L9.0 18.3 L8.5 16.2 L6.7 15.5 L4.8 16.6 L3.4 15.2 L4.5 13.3 L3.8 11.5 L1.7 11.0 L1.7 9.0 L3.8 8.5 L4.5 6.7 L3.4 4.8 L4.8 3.4 L6.7 4.5 L8.5 3.8 L9.0 1.7 L11.0 1.7 L11.5 3.8 L13.3 4.5 L15.2 3.4 L16.6 4.8 L15.5 6.7 Z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><circle cx="10" cy="10" r="2.6" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
+  <symbol id="i-xmark" viewBox="0 0 20 20"><path d="M5 5l10 10M15 5L5 15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 20 20"><path d="M10 16.5V4M4.8 9.2 10 4l5.2 5.2" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-return" viewBox="0 0 20 20"><path d="M15.5 4.5v5.5a2.5 2.5 0 0 1-2.5 2.5H4.8M8.3 9 4.8 12.5 8.3 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-photo" viewBox="0 0 20 20"><rect x="2.5" y="4.5" width="15" height="11" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="7" cy="8.5" r="1.4" fill="currentColor"/><path d="M3 14.2l4-3.7 3 2.7 2.6-2.4 4.4 3.9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="i-branch" viewBox="0 0 20 20"><circle cx="6" cy="4.5" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="6" cy="15.5" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="14" cy="6.5" r="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 6.5v7M14 8.5c0 3-8 2-8 5" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <!-- status: blocked = exclamation disc, working = spinning arc, done = check
+       disc, idle = small dot, unknown = hollow ring. Cut-outs are even-odd
+       holes, so one currentColor paints each glyph. -->
+  <symbol id="s-blocked" viewBox="0 0 20 20"><path fill="currentColor" fill-rule="evenodd" d="M10 1a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M9 4.8h2v7.4H9z M10 13.4a1.3 1.3 0 1 0 0 2.6a1.3 1.3 0 1 0 0-2.6z"/></symbol>
+  <symbol id="s-working" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-opacity="0.25" stroke-width="2.4"/><path d="M10 3a7 7 0 0 1 7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+  <symbol id="s-done" viewBox="0 0 20 20"><path fill="currentColor" fill-rule="evenodd" d="M10 1a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M5.4 10.2l1.4-1.4 2.2 2.2 4.4-4.4 1.4 1.4-5.8 5.8z"/></symbol>
+  <symbol id="s-idle" viewBox="0 0 20 20"><circle cx="10" cy="10" r="4.5" fill="currentColor"/></symbol>
+  <symbol id="s-unknown" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+</svg>
 
-      <div class="set-sep" role="separator"></div>
+<div id="app">
+  <!-- T07: the chrome column. In landscape it is ONE floating glass panel
+       pinned left (the toolbar on top, the session list below); in portrait
+       it is display:contents, so #header is the top toolbar and #sidepane a
+       slide-over sheet. One DOM, placed by style.css. -->
+  <div id="chrome-col">
+    <div id="header">
+      <button type="button" id="sp-toggle" class="tb-btn" aria-label="Show sessions"
+              aria-expanded="false" aria-controls="sidepane"><svg class="ico" aria-hidden="true"><use href="#i-sidebar"/></svg></button>
+      <div id="app-title">Claude</div>
+      <div id="hdr-id">
+        <div class="hdr-sess">
+          <span class="dot" id="dot"></span>
+          <input type="text" class="sess-name" id="sname" value="No session"
+                 autocapitalize="words" autocomplete="off" autocorrect="off" spellcheck="false"
+                 aria-label="Session name">
+        </div>
+        <div class="sess-dir" id="sdir"></div>
+      </div>
+      <button type="button" id="new-btn" class="tb-btn" aria-label="New session"><svg class="ico" aria-hidden="true"><use href="#i-plus"/></svg></button>
+      <button id="settings-btn" class="tb-btn" aria-label="Settings" aria-expanded="false" aria-controls="settings-panel"><svg class="ico" aria-hidden="true"><use href="#i-gear"/></svg></button>
+    </div>
+
+    <!-- T07: sessions side pane (herdr's Agents list). Rows are keyed by
+         session id and updated in place by app.js renderSidepane(). -->
+    <aside id="sidepane" aria-label="Sessions" tabindex="-1">
+      <div id="sp-head">
+        <h2 id="sp-heading">Sessions</h2>
+      </div>
+      <ul id="sp-list" aria-labelledby="sp-heading"></ul>
+      <p id="sp-empty">No sessions</p>
+    </aside>
+  </div>
+  <div id="sp-scrim" aria-hidden="true"></div>
+
+  <!-- T12: client settings; T09: a grouped-list glass sheet at #app level
+       (not inside #header, so its backdrop samples the terminal). Wired with
+       addEventListener in app.js -- no inline on* (CSP). -->
+  <div id="settings-panel" role="dialog" aria-labelledby="set-title">
+    <div class="set-head">
+      <h2 id="set-title" class="set-title">Settings</h2>
+      <button type="button" id="set-done" class="set-done">Done</button>
+    </div>
+    <div class="set-group">
       <div class="set-row">
-        <label>Server</label>
+        <label class="set-label" for="set-hwkb">Hardware keyboard</label>
+        <span class="switch"><input type="checkbox" role="switch" id="set-hwkb"><span class="switch-track" aria-hidden="true"></span></span>
+      </div>
+    </div>
+    <p class="set-note">Keys go straight to the terminal unless the compose box has focus. Cmd-J composes, Esc returns. Cmd-K switches session; ctrl+b ? lists every key.</p>
+
+    <h3 class="set-grouphead" id="set-font-head">Terminal text</h3>
+    <div class="set-group" role="group" aria-labelledby="set-font-head">
+      <div class="set-row">
+        <span class="set-label">Size</span>
+        <span class="set-val"><span id="set-font-val">13</span> px</span>
+      </div>
+      <div class="set-row set-slider">
+        <span class="a-sm" aria-hidden="true">A</span>
+        <input type="range" id="set-font" min="10" max="24" step="1" aria-label="Terminal font size">
+        <span class="a-lg" aria-hidden="true">A</span>
+      </div>
+    </div>
+    <p class="set-note" id="set-cols"></p>
+
+    <h3 class="set-grouphead" id="set-srv-head">Server</h3>
+    <div class="set-group" role="group" aria-labelledby="set-srv-head">
+      <div class="set-row">
+        <span class="set-label">Version</span>
         <span class="set-val" id="srv-version">&mdash;</span>
       </div>
-      <p class="set-note" id="srv-note">Checking...</p>
-      <div class="srv-actions">
-        <button type="button" id="srv-restart" class="srv-btn">Restart</button>
-        <button type="button" id="srv-update" class="srv-btn" disabled>Update</button>
-      </div>
-      <p class="set-note" id="srv-result"></p>
+      <button type="button" id="srv-update" class="set-row set-action srv-btn" disabled>Update</button>
+      <button type="button" id="srv-restart" class="set-row set-action destructive srv-btn">Restart</button>
     </div>
+    <p class="set-note" id="srv-note">Checking...</p>
+    <p class="set-note" id="srv-result"></p>
   </div>
+
 
   <div id="term-area">
     <div id="scroll-zones">
@@ -124,18 +186,18 @@
     <div id="input-bar">
       <input type="file" id="img-input" accept="image/*,image/heic"
              style="position:absolute;width:0;height:0;opacity:0;overflow:hidden">
-      <label id="img-btn" for="img-input" role="button" aria-label="Attach image">Img</label>
+      <label id="img-btn" for="img-input" role="button" aria-label="Attach image"><svg class="ico" aria-hidden="true"><use href="#i-photo"/></svg></label>
       <textarea id="msg" rows="1" placeholder="Type a message..."
                 autocomplete="off" autocorrect="off" autocapitalize="none"
                 spellcheck="false" inputmode="text" data-gramm="false"
                 aria-label="Message input"></textarea>
-      <button id="send" aria-label="Send message">Enter</button>
+      <!-- T09: a filled circle; return glyph when empty (sends Enter), arrow.up with text. -->
+      <button type="button" id="send" aria-label="Send Enter"><svg class="ico ico-return" aria-hidden="true"><use href="#i-return"/></svg><svg class="ico ico-send" aria-hidden="true"><use href="#i-arrow-up"/></svg></button>
     </div>
   </div>
 
   <div id="tabs">
     <div id="tab-switcher"></div>
-    <button id="theme-toggle" aria-label="Toggle theme"><span id="theme-char">&#9790;</span></button>
     <div id="tab-pill" role="button" aria-label="Scroll to bottom">
       <span class="pill-notify"></span>
       <span class="pill-name">No session</span>
@@ -148,10 +210,46 @@
   <div id="new-session-hint"><span>+</span></div>
 </div>
 
+<!-- T08: keyboard layer. The chip shows the armed ctrl+b prefix (and short
+     notices); the two overlays are glass sheets over the terminal. Hidden
+     until app.js opens them; handlers bound there (no inline on*). -->
+<div id="kb-chip" class="kb-chip" role="status" aria-live="polite" hidden></div>
+
+<div id="kb-switcher" class="kb-overlay" hidden>
+  <div class="kb-scrim" data-kb-close></div>
+  <div class="kb-sheet" role="dialog" aria-modal="true" aria-labelledby="ksw-title">
+    <div class="kb-head">
+      <h2 id="ksw-title" class="kb-title">Switch session</h2>
+      <button type="button" class="kb-close" data-kb-close aria-label="Close"><svg class="ico" aria-hidden="true"><use href="#i-xmark"/></svg></button>
+    </div>
+    <input type="text" id="ksw-input" class="kb-search" role="combobox"
+           aria-expanded="true" aria-controls="ksw-list" aria-autocomplete="list"
+           aria-label="Search sessions" placeholder="Search sessions"
+           autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+    <ul id="ksw-list" class="kb-list" role="listbox" aria-label="Sessions"></ul>
+    <p id="ksw-empty" class="kb-empty" hidden>No matching session</p>
+  </div>
+</div>
+
+<div id="kb-help" class="kb-overlay" hidden>
+  <div class="kb-scrim" data-kb-close></div>
+  <div class="kb-sheet" role="dialog" aria-modal="true" aria-labelledby="khelp-title">
+    <div class="kb-head">
+      <h2 id="khelp-title" class="kb-title">Keyboard shortcuts</h2>
+      <button type="button" class="kb-close" data-kb-close aria-label="Close"><svg class="ico" aria-hidden="true"><use href="#i-xmark"/></svg></button>
+    </div>
+    <input type="text" id="khelp-input" class="kb-search"
+           aria-label="Filter shortcuts" aria-controls="khelp-list" placeholder="Filter shortcuts"
+           autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+    <ul id="khelp-list" class="kb-list kb-keys" aria-label="Shortcuts"></ul>
+    <p id="khelp-empty" class="kb-empty" hidden>No matching shortcut</p>
+  </div>
+</div>
+
 <script src="/vendor/xterm.min.js"></script>
 <script src="/vendor/addon-fit.min.js"></script>
 <script src="/vendor/addon-webgl.min.js"></script>
 <script src="/vendor/addon-canvas.min.js"></script>
-<script src="/app.js?v=3.6.0"></script>
+<script src="/app.js?v=4.0.0"></script>
 </body>
 </html>
